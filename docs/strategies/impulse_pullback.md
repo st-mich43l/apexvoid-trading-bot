@@ -1,6 +1,5 @@
 # Impulse Pullback Strategy V2
 
-> **Quality review (2026-10-14): OBSERVE_ONLY** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence WEAK. Scope: already observe-only on every instrument; keep, and retire at the next audit unless observed outcomes improve. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 **Contract.** Ported from the Python scalp lane's `discover_impulse_pullback`: 4 ATR displacement with 0.5 body dominance, a corrective pullback (below 0.7 of the impulse body, 25-75% retracement, confirmed extreme), an unmitigated M5 zone or nearby key level whose closed-bar role agrees, location in the dealing range, an M1 confirmation at the reference, the structural stop and the corridor target. XAU only. The real XAU capture contains no Python decision, so parity is proven on seeded synthetic captures only; XAU stays observe-only.
 
@@ -14,10 +13,9 @@ TradePlan is published.
 
 ## Status and execution
 
-- **Certification**: `OBSERVE_ONLY` ([matrix](README.md#certification)).
-- **Symbols**: all instruments.
-- **Execution**: Observe-only everywhere: net -49 pips over 11 live trades (XAU -29, GBPJPY -9, USDJPY -11) and it is not a port of the Python scalp-lane `discover_impulse_pullback`. It is analysed and published, never traded.
+- **Certification**: parity proven on synthetic M1 captures only ([catalog](README.md#catalog)).
+- **Symbols**: XAU.
+- **Execution**: live on XAU since the owner rule of 2026-10-14 (no observe-only on any instrument). Before that it was observe-only: net -49 pips over 11 live trades of the earlier simplified thesis.
 - **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by quality,
-  confluence, structural quality and freshness trades and the rest are
-  suppressed ([execution](../execution.md#same-thesis-arbitration)).
+  thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
+  (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).

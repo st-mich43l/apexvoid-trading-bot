@@ -22,6 +22,21 @@ For every closed bar of a live symbol, Algo Bot:
    winners in order and falling back only when a winner is terminally rejected.
 5. The executor re-checks exposure and submits.
 
+```mermaid
+flowchart TD
+  BAR[closed bar on a live symbol] --> LOAD["load live Go opportunities<br/>(terminal Kafka events withdraw them)"]
+  LOAD --> ADM{"admission<br/>enabled · not contained · fresh ·<br/>confluence floor · quote and spread<br/>inside the entry contract"}
+  ADM -- fail --> RO["route outcome + reason code<br/>(terminal failures retire the setup)"]
+  ADM -- pass --> ARB["same-thesis arbitration<br/>one winner per thesis"]
+  ARB --> RES{"reserve entry corridor<br/>autotrade:entry_overlap:{SYMBOL}"}
+  RES -- overlap --> REJ[entry_zone_overlap_same_direction]
+  RES -- "Redis unavailable" --> WAIT[intent waits]
+  RES -- reserved --> EXP{"exposure<br/>opposite policy · same-direction groups"}
+  EXP -- refused --> REJ2[rejected or retained]
+  EXP -- ok --> PUB["XADD execution:trade_plans<br/>at most one plan per symbol per cycle"]
+  PUB --> FENCE["executor: claim, size,<br/>OppositeExposureFence, submit"]
+```
+
 ### Same-thesis arbitration
 
 Strategies stay independent, so several can fire on one idea in the same cycle.
@@ -36,9 +51,11 @@ The winner is chosen by a fixed hierarchy, with no strategy favouritism:
 2. freshness of the confirmation;
 3. intent id, as the deterministic tie-break.
 
-With `actionability.scanner_gates.quality_ranking: false` (the committed setting) no quality score is part of the order. Setting it
-to `true` restores the earlier order: strategy quality (Go `quality.overall`), confluence, structural/source quality, then
-freshness and id. See `docs/strategies/arbitration-impact-report.md`.
+With `actionability.scanner_gates.quality_ranking: false` (the committed setting) no quality score is part of the order. A
+2026-10-15 offline replay found no measurable difference in outcome between the quality order and an order that uses no score,
+and no relation between the score and the outcome; the cost of dropping it is more held direction conflicts, not lost edge.
+Setting it to `true` restores the earlier order: strategy quality (Go `quality.overall`), confluence, structural/source quality,
+then freshness and id.
 
 Opposite directions never share a thesis. When BUY and SELL intents are both
 executable, the pair is held (`opposite_direction_conflict`) unless exactly one
@@ -75,6 +92,37 @@ it never publishes unreserved.
 - The executor claims each plan once and persists state, so a process restart
   resumes work instead of resubmitting.
 
+## Waiting for the entry
+
+A confirmed opportunity whose quote is outside its executable entry zone is not
+dropped. It waits, and fills when price returns, for as long as the opportunity
+is live in Go's book.
+
+```mermaid
+stateDiagram-v2
+  [*] --> immediate_confirmation: confirmed, quote in zone
+  [*] --> waiting_retest: confirmed, quote outside zone
+  immediate_confirmation --> published: still in zone
+  immediate_confirmation --> waiting_retest: quote left before publication
+  waiting_retest --> in_zone_waiting_m1: quote returns to the zone
+  in_zone_waiting_m1 --> trigger_ready: zone presence or fresh M1 reclaim
+  trigger_ready --> published: plan published
+  trigger_ready --> trigger_price_left_zone: quote left before publication
+  trigger_price_left_zone --> in_zone_waiting_m1: back in zone
+  trigger_ready --> waiting_retest: trigger went stale outside the zone
+  waiting_retest --> invalidated: structure_invalidated_before_entry
+  waiting_retest --> expired: opportunity expired or withdrawn
+  published --> [*]
+  invalidated --> [*]
+  expired --> [*]
+```
+
+`structure_invalidated_before_entry` fires only when the quote passes the
+opportunity's stop level (`structure_swing`). A zone that price closed through
+without reaching the stop does not end the wait; only Go's invalidation, its
+expiry (24 h for the zone strategies) or a withdrawn id does
+([lifecycle](analysis-engine.md#opportunity-lifecycle)).
+
 ## Exposure
 
 Opposite-direction exposure is decided per instrument from `instruments.yml`
@@ -92,8 +140,29 @@ Algo Bot (`evaluate_opposite_exposure`) and the executor (`OppositeExposureFence
 run before the first broker mutation of a plan, against tracked plan state plus
 real broker positions and pending orders) enforce the same rule independently.
 Same-direction stacking is a separate rule: every instrument admits one group per
-direction at a time (`exposure.same_direction.max_groups: 1`, atomic reservation;
-unknown exposure fails closed).
+direction at a time (`exposure.same_direction.max_groups: 1`; `app/autotrade/group_exposure.py`).
+Principle: one failing structural thesis must not silently become several correlated
+account losses. It came from the 12-13 October 2026 USDJPY incident (four same-thesis
+SELLs open together and stopped together) and the XAU record before it (groups that
+entered on top of an open same-direction group averaged -0.39R against -0.09R alone).
+
+```mermaid
+flowchart TD
+  IN[incoming plan] --> SNAP{"executor snapshot fresh<br/>and every group's risk known?"}
+  SNAP -- no --> UNK["exposure_unknown<br/>(intent retained, retried)"]
+  SNAP -- yes --> DUP{"same thesis or structure id<br/>as a live group?"}
+  DUP -- yes --> R1[refused: duplicate thesis]
+  DUP -- no --> CNT{"live groups this symbol + direction<br/>< max_groups (1)?"}
+  CNT -- no --> R2[refused: same_direction_group_limit]
+  CNT -- yes --> LUA["atomic Lua reservation<br/>(released on any failure, TTL 600 s)"]
+  LUA --> OK[plan may publish]
+```
+
+A group counts from pending until fully closed, including after TP1 or break-even.
+An XAU scale-in ladder is one group. Unknown is never zero: a stale snapshot, an
+unreadable runtime state or a recovering group refuses with `exposure_unknown` and
+the intent is retried. Manual `/algo` groups count as exposure but are never refused.
+Rollback: remove the `same_direction` block from the instrument packs.
 
 ## Expiry and cancellation
 
@@ -101,6 +170,26 @@ A plan past its entry validity expires in the executor; one whose opportunity is
 invalidated or expires gets a durable cancel intent from Algo Bot
 (`execution:plan_cancel:{plan_id}`, a tombstone written even before the plan
 exists). The executor honours either before submitting anything:
+
+```mermaid
+stateDiagram-v2
+  [*] --> published: Algo Bot XADD
+  published --> received: executor reads after cursor
+  received --> armed: validated, claimed, persisted
+  received --> rejected: malformed or unsupported
+  armed --> submitted: legs sent
+  armed --> cancelled: cancel intent before submit
+  armed --> expired: entry validity passed
+  submitted --> filled: a leg fills
+  submitted --> cancelled: cancel intent, no fill
+  submitted --> expired: validity passed, no fill
+  filled --> managing: stop, TP, BE management
+  managing --> completed: no exposure left
+  rejected --> [*]
+  cancelled --> [*]
+  expired --> [*]
+  completed --> [*]
+```
 
 | Stage | Result |
 |---|---|
@@ -120,7 +209,7 @@ otherwise the leg is written off as already gone.
   edge of the zone, either at market when the quote is inside the entry contract
   or as a resting limit, and the second leg (20%) rests one `scale_step_atr`
   (0.1 ATR) deeper, capped at the far edge. The structure stop is held to the
-  50-60 pip envelope, targets are 1R/2R/3R/4R closing 40/20/20/20 with
+  50-70 pip envelope, targets are 1R/2R/3R/4R closing 40/20/20/20 with
   break-even after 1R, and unfilled legs are cancelled after TP. The optional
   XAU risk leg (0.02/0.05 lots by equity, 15 pips inside the stop) is declared
   by the planner in `entry.risk_leg` (the Auto Algo root card does not print it);
@@ -132,14 +221,13 @@ otherwise the leg is written off as already gone.
   `contracts/autotrade/xau-ladder-spec.json` pins the manual entry prices and
   the risk leg in both languages.
 - **The card price is the order price.** Every price on a card (entry zone,
-  stop, targets, risk leg) is what the plan holds and the executor places. Range
-  Edge and Breakout Retest therefore enter only with the quote inside the card's
-  zone (plus the contract tolerance); past the edge they wait for a retest and
-  never chase at the quote. Impulse Pullback keeps its bounded
-  momentum chase.
+  stop, targets, risk leg) is what the plan holds and the executor places. A
+  setup enters only with the quote inside the card's zone (plus the contract
+  tolerance); past the edge it waits for a retest and never chases at the quote.
+  Impulse Pullback keeps its bounded momentum chase.
 - **FX** takes one precise entry per plan with 1R/2R targets closing 50/50 and
   break-even after 1R; the stop envelope is per pair (EURUSD 12-20 pips,
-  GBPJPY 22-35, USDJPY 18-28).
+  GBPUSD 15-25, GBPJPY 22-35, USDJPY 18-28).
 - **Scalps** (`impulse_pullback`) keep their own M1 stop book and ladder; XAU-only.
 
 ## Operator controls

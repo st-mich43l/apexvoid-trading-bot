@@ -13,7 +13,7 @@
 // (breakoutretest, orderblock, fvg, keylevel, supply,
 // demand, trendline, impulsepullback) are architectural slots, not
 // directories created by this task — see
-// docs/architecture/analysis-engine.md's "Independent strategy
+// docs/analysis-engine.md's "Independent strategy
 // architecture" section. They are created once the market-structure
 // specification (the next task after this one) is approved and a
 // strategy is actually ported or written.

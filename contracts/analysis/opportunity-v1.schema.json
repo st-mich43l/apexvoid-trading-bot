@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apexvoid.internal/contracts/analysis/opportunity-v1.schema.json",
   "title": "analysis.opportunity.v1",
-  "description": "Transport-ready as of the Kafka transport task (docs/adr/007-shared-cross-service-contracts.md; publisher: internal/transport/kafka/producer.go). Published by analysis-engine when a Strategy.Evaluate call produces a Candidate; consumed by algo-bot's target analysis_client package (docs/architecture/algo-bot.md, not built yet). Field shape mirrors analysis-engine/internal/opportunity.Candidate exactly (docs/architecture/analysis-engine.md) — this schema and that Go struct must be kept in sync by hand until a schema-to-struct generator exists (none does yet). Never contains a lot size, account balance, or risk multiplier — see docs/adr/002-analysis-vs-orchestration-boundary.md: an opportunity is a technical fact, not a trading decision. This is the PAYLOAD only — wrapped inside contracts/common/event-envelope-v1.schema.json's `payload` field; the envelope's own config_version/config_fingerprint carry \"which configuration generated this,\" so algorithm_version below is scoped to the market-structure/liquidity algorithm identity specifically (source task §29's \"algorithm version\"), not configuration in general. No strategy is implemented yet (Analysis Engine V2 task) — this contract publishes no real events today; it exists ready for the first strategy task.",
+  "description": "Transport-ready as of the Kafka transport task (docs/adr/007-shared-cross-service-contracts.md; publisher: internal/transport/kafka/producer.go). Published by analysis-engine when a Strategy.Evaluate call produces a Candidate; consumed by algo-bot's target analysis_client package (docs/architecture.md, not built yet). Field shape mirrors analysis-engine/internal/opportunity.Candidate exactly (docs/analysis-engine.md) — this schema and that Go struct must be kept in sync by hand until a schema-to-struct generator exists (none does yet). Never contains a lot size, account balance, or risk multiplier — see docs/architecture.md: an opportunity is a technical fact, not a trading decision. This is the PAYLOAD only — wrapped inside contracts/common/event-envelope-v1.schema.json's `payload` field; the envelope's own config_version/config_fingerprint carry \"which configuration generated this,\" so algorithm_version below is scoped to the market-structure/liquidity algorithm identity specifically (source task §29's \"algorithm version\"), not configuration in general. No strategy is implemented yet (Analysis Engine V2 task) — this contract publishes no real events today; it exists ready for the first strategy task.",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "strategy", "symbol", "direction", "entry", "invalidation", "targets", "evidence", "quality", "algorithm_version", "created_at", "expires_at"],
@@ -30,7 +30,7 @@
     "direction": { "type": "string", "enum": ["BUY", "SELL"] },
     "entry": {
       "type": "object",
-      "description": "opportunity.EntryZone — deliberately not internal/zone's richer Zone type; see docs/architecture/analysis-engine.md's naming note.",
+      "description": "opportunity.EntryZone — deliberately not internal/zone's richer Zone type; see docs/analysis-engine.md's naming note.",
       "additionalProperties": false,
       "required": ["low", "high"],
       "properties": {

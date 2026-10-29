@@ -1,6 +1,5 @@
 # Key Level
 
-> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance CONFLICTING, evidence MODERATE. Scope: all instruments; quality score to be treated as non-discriminating until reconstructed. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 ## Strategy ID / version
 
@@ -103,14 +102,13 @@ frozen detector with `frozen_session_context` set. On the 17-capture replay: 5,4
 
 ## Status and execution
 
-- **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
+- **Certification**: `LEGACY_PARITY_PROVEN` ([catalog](README.md#catalog)).
 - **Symbols**: all instruments.
 - **Execution**: Trades on every instrument. XAU stop is held to the 50-60 pip envelope and scales in; FX takes one entry.
 - **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by quality,
-  confluence, structural quality and freshness trades and the rest are
-  suppressed ([execution](../execution.md#same-thesis-arbitration)).
+  thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
+  (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).
 
 ## Q3 validation
 
-The 5,444 -> 4,174 drop of Q2 removed an unconditional credit, not measurably worse opportunities: the removed set is not worse than the retained one against matched random entries, in either window, with intervals that include zero (FX flips sign), and HTF alignment, now the practical admission criterion, has never shown a positive relation to outcomes. Nothing restores the artificial confluence. Q3 only stops a session-level sweep on the reaction's own candle from earning the session point a second time (4,174 -> 4,165). Details: [q3-quality-validation.md](q3-quality-validation.md).
+The 5,444 -> 4,174 drop of Q2 removed an unconditional credit, not measurably worse opportunities: the removed set is not worse than the retained one against matched random entries, in either window, with intervals that include zero (FX flips sign), and HTF alignment, now the practical admission criterion, has never shown a positive relation to outcomes. Nothing restores the artificial confluence. Q3 only stops a session-level sweep on the reaction's own candle from earning the session point a second time (4,174 -> 4,165). Details: [quality](../analysis-engine.md#acceptance-and-quality).
