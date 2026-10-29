@@ -20,7 +20,7 @@ flowchart TD
 |---|---|
 | [architecture](architecture.md) | who owns which decision; a closed bar from cTrader to the broker |
 | [analysis-engine](analysis-engine.md) | how the Go engine turns bars into opportunities; zone validity; acceptance and quality |
-| [strategies](strategies/README.md) | the twelve strategies, the shared confirmation spine, cross-strategy rules |
+| [strategies](strategies/README.md) | the fifteen strategies, the shared confirmation spine, cross-strategy rules |
 | [execution](execution.md) | how Algo Bot admits, arbitrates and publishes; exposure; TradePlan lifecycle |
 | [redis-contract](redis-contract.md) | every Redis key, its writer and its readers |
 | [transport/kafka](transport/kafka.md) | the opportunity event topics and delivery guarantees |

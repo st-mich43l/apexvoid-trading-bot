@@ -69,6 +69,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	applyIFVGGeometry(settings)
 	applyConfluenceZoneGeometry(settings)
 	applyLegacyStopBudget(settings)
+	applyTradingDay(settings)
 	if err := applyScalpLane(settings, doc); err != nil {
 		return err
 	}
@@ -182,6 +183,8 @@ func applyConfluenceZoneGeometry(settings *Settings) {
 // (never tightened) and marks the others as inside the budget or below the floor.
 var legacyStopBudgetStrategies = map[strategy.StrategyID]bool{
 	"key_level": true, "supply": true, "demand": true, "order_block": true, "fvg": true, "flip_zone": true, "trendline": true,
+	// The XAU scalp strategies publish a structural stop of their own, so they refuse one above the instrument cap the same way.
+	"round_number": true, "asia_range": true, "shock_retest": true,
 }
 
 // applyLegacyStopBudget gives the legacy-family strategies the resolved instrument stop envelope and the pip size to measure it in, the same mechanism
@@ -247,6 +250,22 @@ func WithoutKeyLevelSweepRequirement(settings *Settings) {
 				params[k] = v
 			}
 		}
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// applyTradingDay gives Round Number the session calendar's daily rollover hour, so "one episode per handle per side per trading day" rolls over
+// where the session levels do. It is idempotent.
+func applyTradingDay(settings *Settings) {
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "round_number" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+1)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["trading_day_rollover_utc_hour"] = float64(settings.Session.DailyRolloverUTCHour)
 		settings.Strategies[i].Parameters = params
 	}
 }
@@ -394,6 +413,8 @@ var legacyDetectorStrategies = map[string]bool{
 	"break_retest": true, "key_level": true,
 	// The technique publishers (technique_detectors.py) qualify through the same contract.
 	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true, "flip_zone": true, "trendline": true,
+	// The XAU scalp strategies read the shared confluence rubric and instrument scale the same way CRT does.
+	"round_number": true, "asia_range": true, "shock_retest": true,
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the

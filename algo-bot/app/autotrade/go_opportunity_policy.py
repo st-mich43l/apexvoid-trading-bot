@@ -125,6 +125,11 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "fvg": ScopeProfile("fvg", "FVG", "fvg", None, frozenset({"M5"}), "go_m5_fvg", requires_reaction=True, evidence_prefixes=("m5_fvg_",)),
   "ifvg": ScopeProfile("ifvg", "iFVG", "ifvg", None, frozenset({"M5"}), "go_m5_ifvg", requires_reaction=True, evidence_prefixes=("m5_ifvg_",)),
   "crt": ScopeProfile("crt", "CRT", "crt", None, frozenset({"M5"}), "go_h1_m5_crt", requires_reaction=True, evidence_prefixes=("h1_impulse_range", "m5_range_sweep_reclaim")),
+  # XAU scalp strategies: each publishes a confirmed reaction (a stop run or an accepted break at a round handle, at the Asia range edge, or the
+  # first retest after a volatility shock) with the stop beyond its own structural extreme.
+  "round_number": ScopeProfile("round_number", "Round Number", "round_number", None, frozenset({"M5"}), "go_m5_round_number", requires_reaction=True, evidence_prefixes=("m5_round_number_",)),
+  "asia_range": ScopeProfile("asia_range", "Asia Range", "asia_range", None, frozenset({"M5"}), "go_m5_asia_range", requires_reaction=True, evidence_prefixes=("m5_asia_range_", "m15_asia_range_")),
+  "shock_retest": ScopeProfile("shock_retest", "Shock Retest", "shock_retest", None, frozenset({"M5"}), "go_m5_shock_retest", requires_reaction=True, evidence_prefixes=("m5_volatility_shock", "m5_shock_")),
   "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", requires_reaction=True, evidence_prefixes=("m5_flip_",)),
   "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_",)),
   "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),

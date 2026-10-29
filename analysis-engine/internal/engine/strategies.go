@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/asiarange"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/breakretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/confluencezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/crt"
@@ -12,6 +13,8 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulsepullback"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/orderblock"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/roundnumber"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/shockretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/supply"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 )
@@ -44,4 +47,7 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	confluencezone.ID:    confluencezone.New,
 	breakretest.ID:       breakretest.New,
 	impulsepullback.ID:   impulsepullback.New,
+	roundnumber.ID:       roundnumber.New,
+	asiarange.ID:         asiarange.New,
+	shockretest.ID:       shockretest.New,
 }

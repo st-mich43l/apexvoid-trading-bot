@@ -37,6 +37,9 @@ var strategyStopEnvelope = map[opportunity.StrategyID]stopEnvelopeKind{
 	"trendline":        stopEnvelopeReactionRoom,
 	"break_retest":     stopEnvelopeTrend,
 	"impulse_pullback": stopEnvelopeM1Scalp,
+	"round_number":     stopEnvelopeTrend,
+	"asia_range":       stopEnvelopeTrend,
+	"shock_retest":     stopEnvelopeTrend,
 }
 
 // computeStopEnvelope mirrors algo-bot's stop_bounds_for_reaction_room
