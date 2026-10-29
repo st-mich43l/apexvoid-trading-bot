@@ -86,6 +86,9 @@ var knownIDs = []StrategyID{
 	"trendline",
 	"break_retest",
 	"impulse_pullback",
+	"round_number",
+	"asia_range",
+	"shock_retest",
 }
 
 // ValidateConfigs fails closed for unknown, duplicate, malformed, or missing
