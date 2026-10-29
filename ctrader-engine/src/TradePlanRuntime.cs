@@ -651,7 +651,6 @@ public sealed partial class TradePlanRuntime(
     "Momentum Chase Scalp",
     "Range Box Scalp",
     "One-Sided Range Reaction",
-    "Fade Scalp",
     "Chop Zone Reaction",
   };
 

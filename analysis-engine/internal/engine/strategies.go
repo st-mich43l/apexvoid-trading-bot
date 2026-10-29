@@ -6,7 +6,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/confluencezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/crt"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/demand"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/fadescalp"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/flipzone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/fvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
@@ -44,6 +43,5 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	crt.ID:               crt.New,
 	confluencezone.ID:    confluencezone.New,
 	breakretest.ID:       breakretest.New,
-	fadescalp.ID:         fadescalp.New,
 	impulsepullback.ID:   impulsepullback.New,
 }

@@ -28,13 +28,6 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	settings.InstrumentStopMinPips = stopMinPips
 	settings.InstrumentStopMaxPips = stopMaxPips
 	settings.InstrumentStopEnvelopeConfigured = true
-	scalpMin, scalpMax, scalpOK, err := doc.ScalpStopEnvelopeFor(symbol)
-	if err != nil {
-		return fmt.Errorf("loading scalp stop envelope for %s: %w", symbol, err)
-	}
-	settings.InstrumentScalpStopMinPips = scalpMin
-	settings.InstrumentScalpStopMaxPips = scalpMax
-	settings.InstrumentScalpStopConfigured = scalpOK
 	settings.TechniqueZones.Technique.PipSize = geometry.PipSize
 	// MAD's sweep tolerance floor is one pip of the instrument (the frozen
 	// classifier received the symbol's own pip size), not the global default.
@@ -398,7 +391,7 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 // legacyDetectorStrategies are the strategies whose decision is the frozen
 // detector contract's and which therefore share its thresholds.
 var legacyDetectorStrategies = map[string]bool{
-	"fade_scalp": true, "break_retest": true, "key_level": true,
+	"break_retest": true, "key_level": true,
 	// The technique publishers (technique_detectors.py) qualify through the same contract.
 	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true, "flip_zone": true, "trendline": true,
 }

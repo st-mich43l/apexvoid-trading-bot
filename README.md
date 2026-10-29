@@ -120,7 +120,6 @@ only observes it.
 | `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v5) | `LEGACY_PARITY_PROVEN` (decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
 | `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v6) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions; invalidation anchored beyond the reaction extreme since v5; instrument stop cap applied since v6, see [legacy-stop-budget](docs/strategies/legacy-stop-budget.md)) | live |
 | `break_retest` | Broken trendline or key level, same-side retest and hold | M5 | `strategies.break_retest` (v2) | `LEGACY_PARITY_PROVEN` | live |
-| `fade_scalp` | Equal-level sweep, failed continuation, reversion to the local mean | M5 | `strategies.fade_scalp` (v3) | `GO_NATIVE_VALIDATED` | live |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference, M1 confirmation (XAU only) | M1 (M5 impulse) | `strategies.impulse_pullback` (v3) | `LEGACY_PARITY_PROVEN` on synthetic data only | observe-only on every instrument |
 
 Configuration keys live in [`config/analysis.yml`](config/analysis.yml). An instrument
