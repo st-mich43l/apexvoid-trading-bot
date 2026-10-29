@@ -40,7 +40,7 @@ func fvgSettings(params map[string]any) Settings {
 var definitionOn = map[string]any{"confirmed_minimum_gap_atr": 0.5, "confirmed_minimum_displacement_body_atr": 0.5, "confirmed_minimum_displacement_body_ratio": 0.5}
 
 func TestAHigherFrameGapIsJudgedOnThatFramesOwnATRAndTheRefusalIsLedgered(t *testing.T) {
-	ledger := &fvgRefusalLedger{}
+	ledger := &zoneRefusalLedger{}
 	m15 := higherTimeframeInstanceSource(gapFrame(3.0), market.M15, fvgSettings(definitionOn), ledger)() // 1.0 is 0.33 of an ATR of 3.0
 	h1 := higherTimeframeInstanceSource(gapFrame(1.5), market.H1, fvgSettings(definitionOn), ledger)()   // 1.0 is 0.67 of an ATR of 1.5
 	if len(m15) != 0 {
@@ -50,7 +50,7 @@ func TestAHigherFrameGapIsJudgedOnThatFramesOwnATRAndTheRefusalIsLedgered(t *tes
 		t.Fatalf("the same gap on a frame whose ATR makes it 0.67 passes and is stamped with its frame: %+v", h1)
 	}
 	got := ledger.drain()
-	if len(got) != 1 || got[fvgRefusalKey{market.M15, techniquezone.FVGRefusedGapSmall}] != 1 {
+	if len(got) != 1 || got[zoneRefusalKey{"fvg", market.M15, techniquezone.FVGRefusedGapSmall}] != 1 {
 		t.Fatalf("one gap_small refusal on M15, none for H1: %v", got)
 	}
 	if ledger.drain() != nil {
@@ -59,7 +59,7 @@ func TestAHigherFrameGapIsJudgedOnThatFramesOwnATRAndTheRefusalIsLedgered(t *tes
 }
 
 func TestWithoutTheKeysTheDefinitionIsOffAndNothingIsLedgered(t *testing.T) {
-	ledger := &fvgRefusalLedger{}
+	ledger := &zoneRefusalLedger{}
 	got := higherTimeframeInstanceSource(gapFrame(3.0), market.M15, fvgSettings(map[string]any{"minimum_gap_atr": 0.5}), ledger)()
 	if len(got) != 1 || ledger.drain() != nil {
 		t.Fatalf("with no definition keys the gap is offered as before: %+v", got)
@@ -68,7 +68,7 @@ func TestWithoutTheKeysTheDefinitionIsOffAndNothingIsLedgered(t *testing.T) {
 
 func TestTheDefinitionIsInjectedForTheStrategySourcesOnlyAndNotIntoTheSharedSettings(t *testing.T) {
 	settings := fvgSettings(definitionOn)
-	got := fvgDefinitionTechnique(settings)
+	got := zoneDefinitionTechnique(settings)
 	if got.FVGMinGapATR != 0.5 || got.FVGMinDisplacementBodyATR != 0.5 || got.FVGMinDisplacementBodyRatio != 0.5 {
 		t.Fatalf("the strategy sources must judge with the definition: %+v", got)
 	}
@@ -92,7 +92,7 @@ func TestWithoutFVGDefinitionRemovesOnlyThoseKeysAndNeverMutatesTheCallersMap(t 
 }
 
 func TestANilLedgerRecordsNothing(t *testing.T) {
-	var ledger *fvgRefusalLedger
+	var ledger *zoneRefusalLedger
 	if ledger.recorder(market.M15) != nil || ledger.drain() != nil {
 		t.Fatal("a nil ledger must be inert")
 	}

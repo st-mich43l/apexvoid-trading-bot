@@ -52,7 +52,7 @@ type SymbolWorker struct {
 	legacyFrames map[market.Timeframe]legacyFrameCache
 	legacyWeekly legacyWeeklyCache
 	// fvgRefusals is the ledger of the fair value gaps the confirmed path refused in the evaluation being built (see fvgRefusalLedger).
-	fvgRefusals *fvgRefusalLedger
+	refusals *zoneRefusalLedger
 
 	// techniqueZoneAt/state cache the parity-tested technique population by
 	// its latest primary closed bar. Other timeframe events reuse it.
@@ -202,9 +202,13 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	for _, refused := range evaluation.UnsweptRefused {
 		w.telemetry.Count(telemetry.CounterStrategyKeyLevelUnsweptRefused, symbolLabel, tfLabel, int64(refused))
 	}
-	// The gaps the confirmed path refused by the fair value gap definition, by the structure timeframe they were found on and the reason.
-	for refusal, n := range w.fvgRefusals.drain() {
-		w.telemetry.CountReason(telemetry.CounterFVGDefinitionRefused, symbolLabel, string(refusal.timeframe), refusal.reason, n)
+	// The zones the confirmed path refused by the fair value gap and order block definitions, by the structure timeframe they were found on and the reason.
+	for refusal, n := range w.refusals.drain() {
+		counter := telemetry.CounterFVGDefinitionRefused
+		if refusal.technique == "order_block" {
+			counter = telemetry.CounterOBDefinitionRefused
+		}
+		w.telemetry.CountReason(counter, symbolLabel, string(refusal.timeframe), refusal.reason, n)
 	}
 
 	doneOpp := w.telemetry.Time(telemetry.PhaseOpportunity, symbolLabel, tfLabel)
@@ -217,6 +221,17 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		event.Timeframe, event.Candle.Close, event.Candle.Time,
 	) {
 		w.observeTransition(invalidated, symbolLabel, tfLabel, event.PublishesOpportunity())
+	}
+	// A published zone whose structure was closed through by this bar (on the structure's own timeframe) is withdrawn on the spot, so a block that already
+	// broke can never be filled later (docs/strategies/order-block-definition.md, rule C).
+	for _, withdrawn := range w.state.Opportunities.InvalidateByStructureClose(
+		event.Timeframe, event.Candle.Close, event.Candle.Time, w.structureBreakBuffer(event.Timeframe, atrSeries),
+	) {
+		w.telemetry.CountReason(telemetry.CounterOpportunityStructureClosedThrough, symbolLabel, string(withdrawn.Record.Candidate.Structure.Timeframe), string(withdrawn.Record.Candidate.Strategy), 1)
+		if w.settings.OnWithdrawn != nil {
+			w.settings.OnWithdrawn(withdrawn.Record.Candidate, event.Candle.Time)
+		}
+		w.observeTransition(withdrawn, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
 	var enriched []opportunity.Candidate
 	for i := range evaluation.Candidates {
@@ -355,7 +370,7 @@ func (w *SymbolWorker) rebuildContext() {
 // source of the prior-week levels) are unchanged; the cheap multi-timeframe
 // zone scoring is recomputed from the staged frames.
 func (w *SymbolWorker) attachLegacyRead() {
-	w.fvgRefusals = &fvgRefusalLedger{}
+	w.refusals = &zoneRefusalLedger{}
 	if w.legacyFrames == nil {
 		w.legacyFrames = make(map[market.Timeframe]legacyFrameCache)
 	}
@@ -396,12 +411,12 @@ func (w *SymbolWorker) attachLegacyRead() {
 	}
 	frames := legacyread.Complete(staged)
 	if exec := frames[w.settings.PrimaryTimeframe]; exec != nil {
-		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings, w.fvgRefusals)
+		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings, w.refusals)
 		exec.StructuralInstancesAsOf = structuralInstanceSource(exec, w.settings)
 	}
 	for tf, frame := range frames {
 		if tf != w.settings.PrimaryTimeframe {
-			frame.Techniques = higherTimeframeInstanceSource(frame, tf, w.settings, w.fvgRefusals)
+			frame.Techniques = higherTimeframeInstanceSource(frame, tf, w.settings, w.refusals)
 		}
 		w.state.Context.Timeframes[tf].Legacy = frame
 	}

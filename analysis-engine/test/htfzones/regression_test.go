@@ -69,7 +69,7 @@ func replayCases(t *testing.T, doc *config.Document, name string, cases []realCa
 		index[b.Time] = i
 	}
 	out := map[int64]map[string]*found{}
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutFVGDefinition: true, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutFVGDefinition: true, WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
 		for _, c := range e.Candidates {
 			if c.Reaction == nil {
 				continue

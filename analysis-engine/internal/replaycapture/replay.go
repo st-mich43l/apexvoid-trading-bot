@@ -57,6 +57,11 @@ type Options struct {
 	// WithoutFVGDefinition replays the fvg strategy without the confirmed-path gap definition (engine.WithoutFVGDefinition). Every WithoutStopBudget replay
 	// implies it: the frozen Python publisher accepted any gap of one pip. The measurement test sets it on its own to compare the definition off and on.
 	WithoutFVGDefinition bool
+	// WithoutOBDefinition replays the order_block strategy without the confirmed-path close-break rule and the touch limit (engine.WithoutOBDefinition).
+	// Every WithoutStopBudget replay implies it.
+	WithoutOBDefinition bool
+	// OnWithdrawn receives every live zone opportunity the engine withdrew because its structure was closed through (engine.Settings.OnWithdrawn).
+	OnWithdrawn func(candidate opportunity.Candidate, at int64)
 	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
 	// docs/strategies/htf-zone-structure.md uses it to see which higher-timeframe zones the production window drops while they are still live.
 	LegacyWindowBars map[market.Timeframe]int
@@ -92,7 +97,11 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	if opts.WithoutStopBudget || opts.WithoutFVGDefinition {
 		engine.WithoutFVGDefinition(&settings)
 	}
+	if opts.WithoutStopBudget || opts.WithoutOBDefinition {
+		engine.WithoutOBDefinition(&settings)
+	}
 	settings.OnEvaluation = opts.OnEvaluation
+	settings.OnWithdrawn = opts.OnWithdrawn
 	for _, id := range opts.DisabledStrategies {
 		found := false
 		for i := range settings.Strategies {

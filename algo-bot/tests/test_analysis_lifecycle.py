@@ -277,6 +277,20 @@ async def test_invalidation_withdraws_match_setup_and_tombstones_the_plan(h, rea
 
 
 @pytest.mark.asyncio
+async def test_a_closed_through_structure_withdraws_the_match_and_tombstones_the_plan_it_must_never_fill(h, real_redis_client):
+  # order_block v6 (docs/strategies/order-block-definition.md): Go withdraws a live block whose structure a close went through, with its own reason code.
+  # Python must treat it like every other invalidation: the match and setup are terminal and the queued plan is cancelled, so a withdrawn id is never filled
+  # (production 28 Oct 2026: a SELL block sat 17 h in waiting_retest and filled into the news spike).
+  await h.activate()
+  await deliver(h, make_event(h.clock.now))
+  assert await deliver(h, terminal(h, reason="STRUCTURE_CLOSED_THROUGH"), topic=InvalidationTopic) == "match_withdrawn"
+  assert await matches(real_redis_client) == []
+  assert (await load_setup(real_redis_client, "go_opp_golden_supply_xau")).state == INVALIDATED
+  intent = await read_plan_cancel(real_redis_client, "v8:go_opp_golden_supply_xau")
+  assert intent["source"] == "opportunity_invalidated" and intent["reason"] == "structure_closed_through"
+
+
+@pytest.mark.asyncio
 async def test_expiry_is_recorded_as_expiry_and_expires_the_setup(h, real_redis_client):
   await h.activate()
   await deliver(h, make_event(h.clock.now))
