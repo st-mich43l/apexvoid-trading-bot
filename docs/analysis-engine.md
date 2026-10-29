@@ -17,7 +17,7 @@ flowchart TD
   ATR --> STATE["structure · zone V2 · liquidity<br/>trendline · key levels · session · fib"]
   STATE --> CTX["rebuild MarketContext<br/>+ legacyread frames M5/M15/H1<br/>(scored technique zones)"]
   CTX --> EVAL["strategy registry: every enabled strategy<br/>that depends on this timeframe"]
-  EVAL --> INV["Book.InvalidateByClose<br/>(close beyond a live candidate's invalidation)"]
+  EVAL --> INV["Book.InvalidateByClose<br/>(close beyond a live candidate's invalidation)<br/>Book.InvalidateByStructureClose<br/>(order_block: close of the structure's own timeframe<br/>beyond its far edge)"]
   INV --> ENR["per candidate: provenance, first observation,<br/>geometry normalize, defended-level block,<br/>technical context, stop envelope"]
   ENR --> OBS["Book.Observe<br/>CREATED → ACTIVE → DUPLICATE"]
   OBS --> EXP[Book.Expire]
@@ -31,7 +31,9 @@ flowchart TD
 
 Invalidation runs before the new observations, so a setup whose confirmed close
 already broke its threshold cannot be re-observed on that bar. A close only
-invalidates candidates observed on the same timeframe.
+invalidates candidates observed on the same timeframe, except an `order_block`
+structure, which only a close of the structure's OWN timeframe (M5, M15 or H1)
+can withdraw ([order-block-definition](strategies/order-block-definition.md)).
 
 ## Packages
 
@@ -100,8 +102,10 @@ flowchart TD
   PX -- no --> X1
   PX -- yes --> W{"width ≤ max ATR,<br/>OB body ≥ 0.6 + BOS,<br/>FVG definition"}
   W -- fail --> X1
-  W -- pass --> PUB["TechniqueSource.publish"]
-  PUB --> TC{"maximum_zone_touches<br/>(supply/demand: 2)"}
+  W -- pass --> OBD{"order_block v6: any close of this frame<br/>beyond the far edge by > buffer × ATR at that bar?<br/>(no reclaim forgiveness)"}
+  OBD -- yes --> X1
+  OBD -- no --> PUB["TechniqueSource.publish"]
+  PUB --> TC{"maximum_zone_touches<br/>(supply/demand/order_block: 2)"}
   TC -- exceeded --> X2[not published]
   TC -- ok --> EV{"EntryValid<br/>price ≤ maximum_entry_atr (2.0) from zone"}
   EV -- no --> X2
@@ -113,8 +117,11 @@ flowchart TD
   CAND --> OUT[opportunity.Candidate]
 ```
 
-A zone that closed beyond its far edge but was reclaimed inside the sweep window
-is still live: the reclaim counts as a liquidity sweep. The tolerance is measured
+A supply/demand zone that closed beyond its far edge but was reclaimed inside the
+sweep window is still live: the reclaim counts as a liquidity sweep. **An order block
+no longer is** (v6): any close of its own frame beyond the far edge by more than
+`confirmed_break_buffer_atr` of that bar's ATR retires it, reclaimed or not; only a
+wick that closes back inside is the sweep. The tolerance is measured
 in the frame's median ATR over the 400-bar window, not the ATR of the breach bar.
 
 ## Opportunity lifecycle
@@ -124,8 +131,8 @@ stateDiagram-v2
   [*] --> CREATED: first valid observation
   CREATED --> ACTIVE: observed again
   ACTIVE --> ACTIVE: DUPLICATE (no event)
-  CREATED --> INVALIDATED: close beyond invalidation price
-  ACTIVE --> INVALIDATED: close beyond invalidation price
+  CREATED --> INVALIDATED: close beyond invalidation price<br/>or order_block structure closed through
+  ACTIVE --> INVALIDATED: close beyond invalidation price<br/>or order_block structure closed through
   CREATED --> EXPIRED: past expires_at
   ACTIVE --> EXPIRED: past expires_at
   INVALIDATED --> [*]
@@ -134,8 +141,9 @@ stateDiagram-v2
 
 Only CREATED, INVALIDATED and EXPIRED are published. A strategy that stops
 emitting a candidate does not end it: a published opportunity lives until a
-close beyond its own invalidation price (the stop level, not the structure edge)
-or until `expires_at` (formation time + the strategy's `expiry_hours`, 24 h for
+close beyond its own invalidation price (the stop level, not the structure edge),
+for an `order_block` a close of its structure's timeframe beyond the structural
+far edge (`STRUCTURE_CLOSED_THROUGH`), or until `expires_at` (formation time + the strategy's `expiry_hours`, 24 h for
 the zone strategies). Algo Bot executes only opportunities that are live in this
 book.
 

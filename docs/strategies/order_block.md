@@ -48,10 +48,15 @@ the 400-bar window:
 | Price at the block | M5 frame only; M15/H1 blocks skip it and let M5 `EntryValid` decide |
 | Width | at most 3.0 ATR |
 | Origin candle | body at least 0.6 of its range, with a qualifying BOS/CHoCH |
+| Closed through (v6) | ANY close of the block's frame after its candle beyond the far edge by more than `confirmed_break_buffer_atr` (0.1) x the ATR at that bar; no reclaim forgiveness |
+| Touches (v6) | more than `maximum_zone_touches` (2) |
 
-These values live in `techniquezone.ProductionTechniqueSettings()`, not in
-`config/analysis.yml`. A break that is reclaimed inside 6 bars counts as a
-liquidity sweep and the block stays live.
+The first five rows live in `techniquezone.ProductionTechniqueSettings()`, not in
+`config/analysis.yml`. For an order block the "reclaimed inside 6 bars counts as a
+liquidity sweep" forgiveness of the Invalidated row no longer applies: the v6 rule
+is judged on top of it and retires the block on the close (a wick that closes back
+inside still is the sweep). The last two rows are strategy-scoped keys under
+`strategies.order_block`.
 
 ## Confirmation, stop and target
 
