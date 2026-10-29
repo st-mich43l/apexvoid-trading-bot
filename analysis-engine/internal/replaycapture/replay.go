@@ -54,6 +54,9 @@ type Options struct {
 	// WithoutStopBudget replay implies it: the frozen Python publisher had neither the stop budget nor the sweep rule. The measurement test sets it on
 	// its own to see the budgeted engine with and without the rule.
 	WithoutKeyLevelSweep bool
+	// WithoutFVGDefinition replays the fvg strategy without the confirmed-path gap definition (engine.WithoutFVGDefinition). Every WithoutStopBudget replay
+	// implies it: the frozen Python publisher accepted any gap of one pip. The measurement test sets it on its own to compare the definition off and on.
+	WithoutFVGDefinition bool
 	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
 	// docs/strategies/htf-zone-structure.md uses it to see which higher-timeframe zones the production window drops while they are still live.
 	LegacyWindowBars map[market.Timeframe]int
@@ -85,6 +88,9 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	}
 	if opts.WithoutStopBudget || opts.WithoutKeyLevelSweep {
 		engine.WithoutKeyLevelSweepRequirement(&settings)
+	}
+	if opts.WithoutStopBudget || opts.WithoutFVGDefinition {
+		engine.WithoutFVGDefinition(&settings)
 	}
 	settings.OnEvaluation = opts.OnEvaluation
 	for _, id := range opts.DisabledStrategies {

@@ -184,7 +184,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueSupplyDemand, market.Sell, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_supply_zone_confirmed", ConfirmedEvidence: "m5_supply_zone_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_supply_zone_confirmed", ConfirmedEvidence: "m5_supply_zone_rejection_confirmed",
 		InvalidationLabel: "supply_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{
