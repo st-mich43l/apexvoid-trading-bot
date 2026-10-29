@@ -35,6 +35,9 @@ const (
 	ReasonOppositeDisplacement       ReasonCode = "OPPOSITE_DISPLACEMENT"
 	ReasonSessionExpired             ReasonCode = "SESSION_EXPIRED"
 	ReasonInvalidationPriceTraded    ReasonCode = "INVALIDATION_PRICE_TRADED_THROUGH"
+	// ReasonStructureClosedThrough is the terminal reason of a live zone opportunity whose structure was closed through: a close of the structure's own
+	// timeframe went beyond its far edge by more than the strategy's break buffer (Book.InvalidateByStructureClose).
+	ReasonStructureClosedThrough ReasonCode = "STRUCTURE_CLOSED_THROUGH"
 )
 
 // Terminal records the one technical terminal transition for a Record.
@@ -189,6 +192,51 @@ func (b *Book) InvalidateByClose(timeframe market.Timeframe, close float64, at i
 		if err != nil {
 			// The checks above establish the lifecycle preconditions. Keep the
 			// method defensive if a future caller changes Book mutation order.
+			continue
+		}
+		if transition.Kind == TransitionInvalidated {
+			transitions = append(transitions, transition)
+		}
+	}
+	return transitions
+}
+
+// InvalidateByStructureClose retires every live opportunity whose published structure (Candidate.Structure) was closed through by the bar that just closed on
+// THE STRUCTURE'S OWN timeframe: a close beyond the structural far edge (a BUY's low, a SELL's high) by more than buffer(strategy) price units withdraws it
+// with ReasonStructureClosedThrough. It is independent of InvalidateByClose, which watches the candidate's own invalidation price on the timeframe that
+// observed it: an M5 reaction on an H1 block is retired by an H1 close, not by an M5 one. buffer returns the strategy's break buffer in price units and
+// false for a strategy that has no such rule (its opportunities are never retired here). A wick that does not close beyond the edge is not enough. The
+// opportunities are returned in deterministic ID order.
+func (b *Book) InvalidateByStructureClose(timeframe market.Timeframe, close float64, at int64, buffer func(StrategyID) (float64, bool)) []Transition {
+	if b == nil || timeframe == "" || !finite(close) || at < 0 || buffer == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(b.records))
+	for id := range b.records {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	transitions := make([]Transition, 0)
+	for _, id := range ids {
+		record := b.records[id]
+		if record.State != StateCreated && record.State != StateActive {
+			continue
+		}
+		candidate := record.Candidate
+		if candidate.Structure == nil || candidate.Structure.Timeframe != timeframe {
+			continue
+		}
+		margin, ok := buffer(candidate.Strategy)
+		if !ok || !finite(margin) || margin < 0 {
+			continue
+		}
+		through := (candidate.Direction == market.Buy && close < candidate.Structure.Low-margin) ||
+			(candidate.Direction == market.Sell && close > candidate.Structure.High+margin)
+		if !through {
+			continue
+		}
+		transition, err := b.Invalidate(id, ReasonStructureClosedThrough, at)
+		if err != nil {
 			continue
 		}
 		if transition.Kind == TransitionInvalidated {

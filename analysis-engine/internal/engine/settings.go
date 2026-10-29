@@ -113,6 +113,9 @@ type Settings struct {
 	// can neither change nor suppress a candidate. Production leaves it nil;
 	// replay and detector-parity tooling use it to see per-bar detections.
 	OnEvaluation func(Evaluation)
+	// OnWithdrawn, when set, receives every live zone opportunity withdrawn because a close of its structure's own timeframe went beyond the structural
+	// far edge (opportunity.ReasonStructureClosedThrough), with the open time of the closing bar. Observation only, like OnEvaluation.
+	OnWithdrawn func(candidate opportunity.Candidate, at int64)
 }
 
 // Evaluation is the per-bar strategy output delivered to Settings.OnEvaluation.

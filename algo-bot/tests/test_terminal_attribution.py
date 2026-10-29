@@ -71,6 +71,7 @@ def _identity(outcome: dict) -> tuple:
 @pytest.mark.parametrize("reason,status,code", [
   ("ZONE_INVALIDATED", "blocked", "go_zone_invalidated"),
   ("SETUP_EXPIRED", "expired", "go_setup_expired"),
+  ("STRUCTURE_CLOSED_THROUGH", "blocked", "go_structure_closed_through"),
 ])
 async def test_go_terminal_preserves_the_strategy_direction_and_structure(h, reason, status, code):
   await h.activate()

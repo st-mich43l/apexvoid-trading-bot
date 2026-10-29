@@ -73,7 +73,7 @@ func TestRealCapturedSetupsNowStopBeyondTheReactionExtreme(t *testing.T) {
 				index[b.Time] = i
 			}
 			found := map[int]int{}
-			_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+			_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
 				frame := e.Context.Timeframes[market.M5]
 				if frame == nil || frame.Legacy == nil {
 					return

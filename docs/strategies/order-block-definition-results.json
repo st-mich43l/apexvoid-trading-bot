@@ -1,0 +1,1630 @@
+{
+ "captures": [
+  "obwindow-eurusd-20261029.json",
+  "obwindow-xau-20261029.json",
+  "replay-eurusd-production-capture-20261006.json",
+  "replay-eurusd-production-capture-20261013.json",
+  "replay-eurusd-production-capture-20261014.json",
+  "replay-eurusd-production-capture-20261022.json",
+  "replay-gbpjpy-production-capture-20261006.json",
+  "replay-gbpjpy-production-capture-20261013.json",
+  "replay-gbpjpy-production-capture-20261014.json",
+  "replay-gbpjpy-production-capture-20261022.json",
+  "replay-gbpusd-production-capture-20261005.json",
+  "replay-gbpusd-production-capture-20261013.json",
+  "replay-gbpusd-production-capture-20261014.json",
+  "replay-gbpusd-production-capture-20261022.json",
+  "replay-usdjpy-production-capture-20261005.json",
+  "replay-usdjpy-production-capture-20261013.json",
+  "replay-usdjpy-production-capture-20261014.json",
+  "replay-usdjpy-production-capture-20261022.json",
+  "replay-xau-production-capture-20260921.json",
+  "replay-xau-production-capture-20261012.json",
+  "replay-xau-production-capture-20261013.json",
+  "replay-xau-production-capture-20261014.json",
+  "replay-xau-production-capture-20261022.json"
+ ],
+ "note": "A definition fix: the sample cannot validate expectancy.",
+ "reasons": "ob_closed_through is re-derived from the capture's own bars independently of the engine; touches = zone_touches above the limit; other_selection = absent for a reason the two rules do not explain (the single-best selection moved)",
+ "references": [
+  {
+   "name": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h)",
+   "symbol": "XAU",
+   "structural_id": "technique:order_block:sell:1793122200",
+   "filled_at": 1793216968,
+   "result": "-48 pips",
+   "must_publish": false
+  },
+  {
+   "name": "XAU BUY 28 Oct 23:51",
+   "symbol": "XAU",
+   "structural_id": "technique:order_block:buy:1793216100",
+   "filled_at": 1793231465,
+   "result": "-30 pips",
+   "must_publish": false
+  },
+  {
+   "name": "XAU SELL 29 Oct 01:47",
+   "symbol": "XAU",
+   "structural_id": "technique:order_block:sell:1793231400",
+   "filled_at": 1793238424,
+   "result": "-51 pips",
+   "must_publish": false
+  },
+  {
+   "name": "EURUSD BUY 28 Oct 18:31",
+   "symbol": "EURUSD",
+   "structural_id": "technique:order_block:buy:1793202300",
+   "filled_at": 1793212264,
+   "result": "+24 pips",
+   "must_publish": true
+  }
+ ],
+ "unchanged_by_the_definition": {
+  "confirmation_type_of_frozen_candidates": {
+   "FX": {
+    "engulfing": 149,
+    "rejection_choch": 13,
+    "strong_reclaim": 378,
+    "sweep_reclaim": 407,
+    "wick_rejection": 223
+   },
+   "XAU": {
+    "engulfing": 11,
+    "rejection_choch": 1,
+    "strong_reclaim": 44,
+    "sweep_reclaim": 66,
+    "wick_rejection": 23
+   }
+  },
+  "entry_distance_atr_of_frozen_candidates": {
+   "max": 1.73,
+   "p50": 0,
+   "p90": 0.45
+  },
+  "other_strategies_identical_in_every_variant": true
+ },
+ "unit": "one confirmed order_block opportunity per id (first sight across overlapping captures), engine as configured except the order block definition, which each variant sets; baseline = buffer 0 / touches off (order_block v5)",
+ "variants": [
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 0,
+    "maximum_zone_touches": 0
+   },
+   "name": "buffer 0.00 / touches off",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 113,
+      "baseline_published": 113,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 227,
+      "baseline_published": 227,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 63,
+      "baseline_published": 63,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 186,
+      "baseline_published": 186,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 133,
+      "baseline_published": 133,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 166,
+      "baseline_published": 166,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 23,
+      "baseline_published": 23,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 108,
+      "baseline_published": 108,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 136,
+      "baseline_published": 136,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 4,
+      "baseline_published": 4,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 32,
+      "baseline_published": 32,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 109,
+      "baseline_published": 109,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    }
+   },
+   "totals": {
+    "published": 1315,
+    "baseline_published": 1315,
+    "refused": 0,
+    "refused_by_reason": {},
+    "retired_by_rule_c": 0,
+    "newly_reachable": 0
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30 and still live at the fill 28 19:49",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "published 28 23:45 and still live at the fill 28 23:51",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "published 29 01:40 and still live at the fill 29 01:47",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "published 28 18:25 and still live at the fill 28 18:31",
+     "live_at_fill": true,
+     "pass": true
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": false,
+   "the_eurusd_winner_still_publishes": true
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 0,
+    "maximum_zone_touches": 2
+   },
+   "name": "buffer 0.00 / touches 2",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 95,
+      "baseline_published": 113,
+      "refused": 18,
+      "refused_by_reason": {
+       "touches": 18
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 122,
+      "baseline_published": 227,
+      "refused": 105,
+      "refused_by_reason": {
+       "touches": 105
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 1
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 58,
+      "baseline_published": 63,
+      "refused": 5,
+      "refused_by_reason": {
+       "touches": 5
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 91,
+      "baseline_published": 186,
+      "refused": 95,
+      "refused_by_reason": {
+       "touches": 95
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 99,
+      "baseline_published": 133,
+      "refused": 34,
+      "refused_by_reason": {
+       "touches": 34
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 92,
+      "baseline_published": 166,
+      "refused": 74,
+      "refused_by_reason": {
+       "touches": 74
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 3
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 23,
+      "baseline_published": 23,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 86,
+      "baseline_published": 108,
+      "refused": 22,
+      "refused_by_reason": {
+       "touches": 22
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 68,
+      "baseline_published": 136,
+      "refused": 68,
+      "refused_by_reason": {
+       "touches": 68
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 4,
+      "baseline_published": 4,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 20,
+      "baseline_published": 32,
+      "refused": 12,
+      "refused_by_reason": {
+       "touches": 12
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 44,
+      "baseline_published": 109,
+      "refused": 65,
+      "refused_by_reason": {
+       "touches": 65
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 2
+     }
+    }
+   },
+   "totals": {
+    "published": 817,
+    "baseline_published": 1315,
+    "refused": 498,
+    "refused_by_reason": {
+     "touches": 498
+    },
+    "retired_by_rule_c": 0,
+    "newly_reachable": 6
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30 and still live at the fill 28 19:49",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "published 28 23:45 and still live at the fill 28 23:51",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "published 29 01:40 and still live at the fill 29 01:47",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "published 28 18:25 and still live at the fill 28 18:31",
+     "live_at_fill": true,
+     "pass": true
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": false,
+   "the_eurusd_winner_still_publishes": true
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 0.1,
+    "maximum_zone_touches": 0
+   },
+   "name": "buffer 0.10 / touches off",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 84,
+      "baseline_published": 113,
+      "refused": 29,
+      "refused_by_reason": {
+       "ob_closed_through": 29
+      },
+      "retired_by_rule_c": 35,
+      "newly_reachable": 2
+     },
+     "M5": {
+      "published": 78,
+      "baseline_published": 227,
+      "refused": 149,
+      "refused_by_reason": {
+       "ob_closed_through": 149
+      },
+      "retired_by_rule_c": 30,
+      "newly_reachable": 1
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 25,
+      "baseline_published": 63,
+      "refused": 38,
+      "refused_by_reason": {
+       "ob_closed_through": 38
+      },
+      "retired_by_rule_c": 5,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 62,
+      "baseline_published": 186,
+      "refused": 124,
+      "refused_by_reason": {
+       "ob_closed_through": 124
+      },
+      "retired_by_rule_c": 45,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 105,
+      "baseline_published": 133,
+      "refused": 28,
+      "refused_by_reason": {
+       "ob_closed_through": 28
+      },
+      "retired_by_rule_c": 41,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 50,
+      "baseline_published": 166,
+      "refused": 116,
+      "refused_by_reason": {
+       "ob_closed_through": 116
+      },
+      "retired_by_rule_c": 32,
+      "newly_reachable": 3
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 10,
+      "baseline_published": 23,
+      "refused": 13,
+      "refused_by_reason": {
+       "ob_closed_through": 13
+      },
+      "retired_by_rule_c": 2,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 53,
+      "baseline_published": 108,
+      "refused": 55,
+      "refused_by_reason": {
+       "ob_closed_through": 55
+      },
+      "retired_by_rule_c": 14,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 67,
+      "baseline_published": 136,
+      "refused": 69,
+      "refused_by_reason": {
+       "ob_closed_through": 69
+      },
+      "retired_by_rule_c": 29,
+      "newly_reachable": 1
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 2,
+      "baseline_published": 4,
+      "refused": 2,
+      "refused_by_reason": {
+       "ob_closed_through": 2
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 17,
+      "baseline_published": 32,
+      "refused": 15,
+      "refused_by_reason": {
+       "ob_closed_through": 15
+      },
+      "retired_by_rule_c": 10,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 41,
+      "baseline_published": 109,
+      "refused": 68,
+      "refused_by_reason": {
+       "ob_closed_through": 68
+      },
+      "retired_by_rule_c": 16,
+      "newly_reachable": 2
+     }
+    }
+   },
+   "totals": {
+    "published": 609,
+    "baseline_published": 1315,
+    "refused": 706,
+    "refused_by_reason": {
+     "ob_closed_through": 706
+    },
+    "retired_by_rule_c": 265,
+    "newly_reachable": 9
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30, withdrawn 28 00:00 before the fill 28 19:49",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": false
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": true,
+   "the_eurusd_winner_still_publishes": false
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 0.1,
+    "maximum_zone_touches": 2
+   },
+   "name": "buffer 0.10 / touches 2",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 66,
+      "baseline_published": 113,
+      "refused": 47,
+      "refused_by_reason": {
+       "ob_closed_through": 29,
+       "touches": 18
+      },
+      "retired_by_rule_c": 26,
+      "newly_reachable": 2
+     },
+     "M5": {
+      "published": 52,
+      "baseline_published": 227,
+      "refused": 175,
+      "refused_by_reason": {
+       "ob_closed_through": 149,
+       "touches": 26
+      },
+      "retired_by_rule_c": 21,
+      "newly_reachable": 2
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 25,
+      "baseline_published": 63,
+      "refused": 38,
+      "refused_by_reason": {
+       "ob_closed_through": 38
+      },
+      "retired_by_rule_c": 5,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 49,
+      "baseline_published": 186,
+      "refused": 137,
+      "refused_by_reason": {
+       "ob_closed_through": 124,
+       "touches": 13
+      },
+      "retired_by_rule_c": 35,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 84,
+      "baseline_published": 133,
+      "refused": 49,
+      "refused_by_reason": {
+       "ob_closed_through": 28,
+       "touches": 21
+      },
+      "retired_by_rule_c": 26,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 39,
+      "baseline_published": 166,
+      "refused": 127,
+      "refused_by_reason": {
+       "ob_closed_through": 116,
+       "touches": 11
+      },
+      "retired_by_rule_c": 24,
+      "newly_reachable": 2
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 10,
+      "baseline_published": 23,
+      "refused": 13,
+      "refused_by_reason": {
+       "ob_closed_through": 13
+      },
+      "retired_by_rule_c": 2,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 46,
+      "baseline_published": 108,
+      "refused": 62,
+      "refused_by_reason": {
+       "ob_closed_through": 55,
+       "touches": 7
+      },
+      "retired_by_rule_c": 14,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 45,
+      "baseline_published": 136,
+      "refused": 91,
+      "refused_by_reason": {
+       "ob_closed_through": 69,
+       "touches": 22
+      },
+      "retired_by_rule_c": 22,
+      "newly_reachable": 0
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 2,
+      "baseline_published": 4,
+      "refused": 2,
+      "refused_by_reason": {
+       "ob_closed_through": 2
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 14,
+      "baseline_published": 32,
+      "refused": 18,
+      "refused_by_reason": {
+       "ob_closed_through": 15,
+       "touches": 3
+      },
+      "retired_by_rule_c": 9,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 26,
+      "baseline_published": 109,
+      "refused": 83,
+      "refused_by_reason": {
+       "ob_closed_through": 68,
+       "touches": 15
+      },
+      "retired_by_rule_c": 10,
+      "newly_reachable": 2
+     }
+    }
+   },
+   "totals": {
+    "published": 473,
+    "baseline_published": 1315,
+    "refused": 842,
+    "refused_by_reason": {
+     "ob_closed_through": 706,
+     "touches": 136
+    },
+    "retired_by_rule_c": 200,
+    "newly_reachable": 8
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30, withdrawn 28 00:00 before the fill 28 19:49",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": false
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": true,
+   "the_eurusd_winner_still_publishes": false
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 0.25,
+    "maximum_zone_touches": 0
+   },
+   "name": "buffer 0.25 / touches off",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 98,
+      "baseline_published": 113,
+      "refused": 15,
+      "refused_by_reason": {
+       "ob_closed_through": 15
+      },
+      "retired_by_rule_c": 42,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 95,
+      "baseline_published": 227,
+      "refused": 132,
+      "refused_by_reason": {
+       "ob_closed_through": 132
+      },
+      "retired_by_rule_c": 35,
+      "newly_reachable": 1
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 27,
+      "baseline_published": 63,
+      "refused": 36,
+      "refused_by_reason": {
+       "ob_closed_through": 36
+      },
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 85,
+      "baseline_published": 186,
+      "refused": 101,
+      "refused_by_reason": {
+       "ob_closed_through": 101
+      },
+      "retired_by_rule_c": 48,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 114,
+      "baseline_published": 133,
+      "refused": 19,
+      "refused_by_reason": {
+       "ob_closed_through": 19
+      },
+      "retired_by_rule_c": 41,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 78,
+      "baseline_published": 166,
+      "refused": 88,
+      "refused_by_reason": {
+       "ob_closed_through": 88
+      },
+      "retired_by_rule_c": 57,
+      "newly_reachable": 2
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 23,
+      "baseline_published": 23,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 1,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 66,
+      "baseline_published": 108,
+      "refused": 42,
+      "refused_by_reason": {
+       "ob_closed_through": 42
+      },
+      "retired_by_rule_c": 14,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 73,
+      "baseline_published": 136,
+      "refused": 63,
+      "refused_by_reason": {
+       "ob_closed_through": 63
+      },
+      "retired_by_rule_c": 28,
+      "newly_reachable": 1
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 2,
+      "baseline_published": 4,
+      "refused": 2,
+      "refused_by_reason": {
+       "ob_closed_through": 2
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 27,
+      "baseline_published": 32,
+      "refused": 5,
+      "refused_by_reason": {
+       "ob_closed_through": 5
+      },
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 53,
+      "baseline_published": 109,
+      "refused": 56,
+      "refused_by_reason": {
+       "ob_closed_through": 56
+      },
+      "retired_by_rule_c": 21,
+      "newly_reachable": 2
+     }
+    }
+   },
+   "totals": {
+    "published": 756,
+    "baseline_published": 1315,
+    "refused": 559,
+    "refused_by_reason": {
+     "ob_closed_through": 559
+    },
+    "retired_by_rule_c": 305,
+    "newly_reachable": 6
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30, withdrawn 28 00:00 before the fill 28 19:49",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": false
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": true,
+   "the_eurusd_winner_still_publishes": false
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 0.25,
+    "maximum_zone_touches": 2
+   },
+   "name": "buffer 0.25 / touches 2",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 80,
+      "baseline_published": 113,
+      "refused": 33,
+      "refused_by_reason": {
+       "ob_closed_through": 15,
+       "touches": 18
+      },
+      "retired_by_rule_c": 35,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 59,
+      "baseline_published": 227,
+      "refused": 168,
+      "refused_by_reason": {
+       "ob_closed_through": 132,
+       "touches": 36
+      },
+      "retired_by_rule_c": 25,
+      "newly_reachable": 2
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 27,
+      "baseline_published": 63,
+      "refused": 36,
+      "refused_by_reason": {
+       "ob_closed_through": 36
+      },
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 66,
+      "baseline_published": 186,
+      "refused": 120,
+      "refused_by_reason": {
+       "ob_closed_through": 101,
+       "touches": 19
+      },
+      "retired_by_rule_c": 42,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 90,
+      "baseline_published": 133,
+      "refused": 43,
+      "refused_by_reason": {
+       "ob_closed_through": 19,
+       "touches": 24
+      },
+      "retired_by_rule_c": 26,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 45,
+      "baseline_published": 166,
+      "refused": 121,
+      "refused_by_reason": {
+       "ob_closed_through": 88,
+       "touches": 33
+      },
+      "retired_by_rule_c": 28,
+      "newly_reachable": 2
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 23,
+      "baseline_published": 23,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 1,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 58,
+      "baseline_published": 108,
+      "refused": 50,
+      "refused_by_reason": {
+       "ob_closed_through": 42,
+       "touches": 8
+      },
+      "retired_by_rule_c": 13,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 47,
+      "baseline_published": 136,
+      "refused": 89,
+      "refused_by_reason": {
+       "ob_closed_through": 63,
+       "touches": 26
+      },
+      "retired_by_rule_c": 20,
+      "newly_reachable": 0
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 2,
+      "baseline_published": 4,
+      "refused": 2,
+      "refused_by_reason": {
+       "ob_closed_through": 2
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 20,
+      "baseline_published": 32,
+      "refused": 12,
+      "refused_by_reason": {
+       "ob_closed_through": 5,
+       "touches": 7
+      },
+      "retired_by_rule_c": 5,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 28,
+      "baseline_published": 109,
+      "refused": 81,
+      "refused_by_reason": {
+       "ob_closed_through": 56,
+       "touches": 25
+      },
+      "retired_by_rule_c": 10,
+      "newly_reachable": 3
+     }
+    }
+   },
+   "totals": {
+    "published": 560,
+    "baseline_published": 1315,
+    "refused": 755,
+    "refused_by_reason": {
+     "ob_closed_through": 559,
+     "touches": 196
+    },
+    "retired_by_rule_c": 217,
+    "newly_reachable": 7
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30, withdrawn 28 00:00 before the fill 28 19:49",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": false
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": true,
+   "the_eurusd_winner_still_publishes": false
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 1,
+    "maximum_zone_touches": 0
+   },
+   "name": "buffer 1.00 / touches off",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 103,
+      "baseline_published": 113,
+      "refused": 10,
+      "refused_by_reason": {
+       "ob_closed_through": 10
+      },
+      "retired_by_rule_c": 8,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 167,
+      "baseline_published": 227,
+      "refused": 60,
+      "refused_by_reason": {
+       "ob_closed_through": 60
+      },
+      "retired_by_rule_c": 25,
+      "newly_reachable": 2
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 55,
+      "baseline_published": 63,
+      "refused": 8,
+      "refused_by_reason": {
+       "ob_closed_through": 8
+      },
+      "retired_by_rule_c": 5,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 126,
+      "baseline_published": 186,
+      "refused": 60,
+      "refused_by_reason": {
+       "ob_closed_through": 60
+      },
+      "retired_by_rule_c": 16,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 127,
+      "baseline_published": 133,
+      "refused": 6,
+      "refused_by_reason": {
+       "ob_closed_through": 6
+      },
+      "retired_by_rule_c": 1,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 139,
+      "baseline_published": 166,
+      "refused": 27,
+      "refused_by_reason": {
+       "ob_closed_through": 27
+      },
+      "retired_by_rule_c": 16,
+      "newly_reachable": 0
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 23,
+      "baseline_published": 23,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 95,
+      "baseline_published": 108,
+      "refused": 13,
+      "refused_by_reason": {
+       "ob_closed_through": 13
+      },
+      "retired_by_rule_c": 7,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 117,
+      "baseline_published": 136,
+      "refused": 19,
+      "refused_by_reason": {
+       "ob_closed_through": 19
+      },
+      "retired_by_rule_c": 9,
+      "newly_reachable": 0
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 4,
+      "baseline_published": 4,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 29,
+      "baseline_published": 32,
+      "refused": 3,
+      "refused_by_reason": {
+       "ob_closed_through": 3
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 89,
+      "baseline_published": 109,
+      "refused": 20,
+      "refused_by_reason": {
+       "ob_closed_through": 20
+      },
+      "retired_by_rule_c": 4,
+      "newly_reachable": 0
+     }
+    }
+   },
+   "totals": {
+    "published": 1089,
+    "baseline_published": 1315,
+    "refused": 226,
+    "refused_by_reason": {
+     "ob_closed_through": 226
+    },
+    "retired_by_rule_c": 91,
+    "newly_reachable": 2
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30 and still live at the fill 28 19:49",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "published 28 23:45 and still live at the fill 28 23:51",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "published 28 18:25 and still live at the fill 28 18:31",
+     "live_at_fill": true,
+     "pass": true
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": false,
+   "the_eurusd_winner_still_publishes": true
+  },
+  {
+   "variant": {
+    "confirmed_break_buffer_atr": 1,
+    "maximum_zone_touches": 2
+   },
+   "name": "buffer 1.00 / touches 2",
+   "by_symbol_and_structure_timeframe": {
+    "EURUSD": {
+     "M15": {
+      "published": 85,
+      "baseline_published": 113,
+      "refused": 28,
+      "refused_by_reason": {
+       "ob_closed_through": 10,
+       "touches": 18
+      },
+      "retired_by_rule_c": 8,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 94,
+      "baseline_published": 227,
+      "refused": 133,
+      "refused_by_reason": {
+       "ob_closed_through": 60,
+       "touches": 73
+      },
+      "retired_by_rule_c": 15,
+      "newly_reachable": 1
+     }
+    },
+    "GBPJPY": {
+     "H1": {
+      "published": 14,
+      "baseline_published": 14,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 55,
+      "baseline_published": 63,
+      "refused": 8,
+      "refused_by_reason": {
+       "ob_closed_through": 8
+      },
+      "retired_by_rule_c": 5,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 78,
+      "baseline_published": 186,
+      "refused": 108,
+      "refused_by_reason": {
+       "ob_closed_through": 60,
+       "touches": 48
+      },
+      "retired_by_rule_c": 11,
+      "newly_reachable": 0
+     }
+    },
+    "GBPUSD": {
+     "H1": {
+      "published": 1,
+      "baseline_published": 1,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 93,
+      "baseline_published": 133,
+      "refused": 40,
+      "refused_by_reason": {
+       "ob_closed_through": 6,
+       "touches": 34
+      },
+      "retired_by_rule_c": 1,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 79,
+      "baseline_published": 166,
+      "refused": 87,
+      "refused_by_reason": {
+       "ob_closed_through": 27,
+       "touches": 60
+      },
+      "retired_by_rule_c": 8,
+      "newly_reachable": 3
+     }
+    },
+    "USDJPY": {
+     "H1": {
+      "published": 23,
+      "baseline_published": 23,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 75,
+      "baseline_published": 108,
+      "refused": 33,
+      "refused_by_reason": {
+       "ob_closed_through": 13,
+       "touches": 20
+      },
+      "retired_by_rule_c": 5,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 64,
+      "baseline_published": 136,
+      "refused": 72,
+      "refused_by_reason": {
+       "ob_closed_through": 19,
+       "touches": 53
+      },
+      "retired_by_rule_c": 6,
+      "newly_reachable": 0
+     }
+    },
+    "XAU": {
+     "H1": {
+      "published": 4,
+      "baseline_published": 4,
+      "refused": 0,
+      "refused_by_reason": {},
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M15": {
+      "published": 20,
+      "baseline_published": 32,
+      "refused": 12,
+      "refused_by_reason": {
+       "ob_closed_through": 3,
+       "touches": 9
+      },
+      "retired_by_rule_c": 0,
+      "newly_reachable": 0
+     },
+     "M5": {
+      "published": 41,
+      "baseline_published": 109,
+      "refused": 68,
+      "refused_by_reason": {
+       "ob_closed_through": 20,
+       "touches": 48
+      },
+      "retired_by_rule_c": 3,
+      "newly_reachable": 2
+     }
+    }
+   },
+   "totals": {
+    "published": 726,
+    "baseline_published": 1315,
+    "refused": 589,
+    "refused_by_reason": {
+     "ob_closed_through": 226,
+     "touches": 363
+    },
+    "retired_by_rule_c": 62,
+    "newly_reachable": 6
+   },
+   "reference_trades": [
+    {
+     "reference": "XAU SELL 28 Oct 19:49 (published 01:20, waited 17 h) -48 pips",
+     "fate": "published 27 19:30 and still live at the fill 28 19:49",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU BUY 28 Oct 23:51 -30 pips",
+     "fate": "published 28 23:45 and still live at the fill 28 23:51",
+     "live_at_fill": true,
+     "pass": false
+    },
+    {
+     "reference": "XAU SELL 29 Oct 01:47 -51 pips",
+     "fate": "never published before the fill",
+     "live_at_fill": false,
+     "pass": true
+    },
+    {
+     "reference": "EURUSD BUY 28 Oct 18:31 +24 pips",
+     "fate": "published 28 18:25 and still live at the fill 28 18:31",
+     "live_at_fill": true,
+     "pass": true
+    }
+   ],
+   "all_reference_criteria_pass": false,
+   "the_three_losers_are_refused_or_retired_before_their_fill": false,
+   "the_eurusd_winner_still_publishes": true
+  }
+ ]
+}

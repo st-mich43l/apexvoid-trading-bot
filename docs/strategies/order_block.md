@@ -1,8 +1,10 @@
 # Order Block
 
-`order_block` `v5`, package `analysis-engine/internal/strategy/orderblock`.
+`order_block` `v6`, package `analysis-engine/internal/strategy/orderblock`.
 Structure on M5, M15 and H1 (`higher_timeframes: [M15, H1]`); confirmation and
 execution on M5. Trades on every instrument.
+
+**Definition (v6, 2026-10-29).** A confirmed block is dead once any close of its own frame after its candle goes beyond its far edge by more than `confirmed_break_buffer_atr` of that frame's ATR (no reclaim forgiveness: a wick that closes back inside is still the sweep), at most `maximum_zone_touches` (2) touches are allowed, and a live opportunity is withdrawn by the first close of its structure's timeframe beyond the structural far edge (`STRUCTURE_CLOSED_THROUGH`). See [order-block-definition](order-block-definition.md).
 
 ## Two populations, one is traded
 

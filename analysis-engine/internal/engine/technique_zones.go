@@ -6,6 +6,7 @@ import (
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -26,42 +27,48 @@ func productionTechniqueZoneSettings() TechniqueZoneSettings {
 
 var techniqueChain = techniquezone.ProductionChainSettings()
 
-// fvgDefinitionTechnique is the technique settings the two instance sources the zone strategies read (the execution frame's and the higher frames') judge a
-// fair value gap with: the shared settings plus the fvg strategy's confirmed-path gap definition (strategies.fvg.confirmed_minimum_gap_atr,
-// confirmed_minimum_displacement_body_atr, confirmed_minimum_displacement_body_ratio; docs/strategies/fvg-definition.md). The shared settings themselves
-// are left alone on purpose: they also feed the Confluence Zone facts (structuralInstanceSource) and the zone book, which must not change. Absent keys
-// leave the definition off.
-func fvgDefinitionTechnique(settings Settings) techniquezone.TechniqueSettings {
+// zoneDefinitionTechnique is the technique settings the two instance sources the zone strategies read (the execution frame's and the higher frames')
+// judge a confirmed zone with: the shared settings plus the fvg strategy's gap definition (strategies.fvg.confirmed_minimum_gap_atr,
+// confirmed_minimum_displacement_body_atr, confirmed_minimum_displacement_body_ratio; docs/strategies/fvg-definition.md) and the order_block strategy's
+// close-break rule (strategies.order_block.confirmed_break_buffer_atr; docs/strategies/order-block-definition.md). The shared settings themselves are left
+// alone on purpose: they also feed the Confluence Zone facts (structuralInstanceSource) and the zone book, which must not change. Absent keys leave a
+// definition off.
+func zoneDefinitionTechnique(settings Settings) techniquezone.TechniqueSettings {
 	technique := settings.TechniqueZones.Technique
 	for _, cfg := range settings.Strategies {
-		if cfg.ID != "fvg" {
-			continue
-		}
-		if v, ok := cfg.Parameters["confirmed_minimum_gap_atr"].(float64); ok && v > 0 {
-			technique.FVGMinGapATR = v
-		}
-		if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_atr"].(float64); ok && v > 0 {
-			technique.FVGMinDisplacementBodyATR = v
-		}
-		if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_ratio"].(float64); ok && v > 0 {
-			technique.FVGMinDisplacementBodyRatio = v
+		switch cfg.ID {
+		case "fvg":
+			if v, ok := cfg.Parameters["confirmed_minimum_gap_atr"].(float64); ok && v > 0 {
+				technique.FVGMinGapATR = v
+			}
+			if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_atr"].(float64); ok && v > 0 {
+				technique.FVGMinDisplacementBodyATR = v
+			}
+			if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_ratio"].(float64); ok && v > 0 {
+				technique.FVGMinDisplacementBodyRatio = v
+			}
+		case "order_block":
+			if v, ok := cfg.Parameters["confirmed_break_buffer_atr"].(float64); ok && v > 0 {
+				technique.OBBreakBufferATR = v
+			}
 		}
 	}
 	return technique
 }
 
-// WithoutFVGDefinition removes the fair value gap definition parameters from the fvg strategy, leaving the confirmed path exactly as the frozen Python
-// publisher ran it (a gap of one pip, no displacement candle). The parity replays use it (replaycapture.Options.WithoutStopBudget implies it).
-func WithoutFVGDefinition(settings *Settings) {
+// withoutParameters removes the named parameters from one strategy, never mutating the caller's map.
+func withoutParameters(settings *Settings, id string, names ...string) {
 	for i := range settings.Strategies {
-		if settings.Strategies[i].ID != "fvg" {
+		if string(settings.Strategies[i].ID) != id {
 			continue
+		}
+		drop := make(map[string]bool, len(names))
+		for _, name := range names {
+			drop[name] = true
 		}
 		params := make(map[string]any, len(settings.Strategies[i].Parameters))
 		for k, v := range settings.Strategies[i].Parameters {
-			switch k {
-			case "confirmed_minimum_gap_atr", "confirmed_minimum_displacement_body_atr", "confirmed_minimum_displacement_body_ratio":
-			default:
+			if !drop[k] {
 				params[k] = v
 			}
 		}
@@ -69,34 +76,48 @@ func WithoutFVGDefinition(settings *Settings) {
 	}
 }
 
-// fvgRefusalLedger collects, for one closed-bar evaluation, the fair value gaps the confirmed path refused, by structure timeframe and reason. The
-// instance sources fill it when a strategy first reads them (once per frame per evaluation, so a gap is counted once) and the worker drains it after the
-// strategies have run. A nil ledger records nothing.
-type fvgRefusalLedger struct {
-	mu     sync.Mutex
-	counts map[fvgRefusalKey]int64
+// WithoutFVGDefinition removes the fair value gap definition parameters from the fvg strategy, leaving the confirmed path exactly as the frozen Python
+// publisher ran it (a gap of one pip, no displacement candle). The parity replays use it (replaycapture.Options.WithoutStopBudget implies it).
+func WithoutFVGDefinition(settings *Settings) {
+	withoutParameters(settings, "fvg", "confirmed_minimum_gap_atr", "confirmed_minimum_displacement_body_atr", "confirmed_minimum_displacement_body_ratio")
 }
 
-type fvgRefusalKey struct {
+// WithoutOBDefinition removes the order block definition from the order_block strategy: the close-break rule (confirmed_break_buffer_atr) and the touch limit
+// (maximum_zone_touches), leaving the confirmed path exactly as the frozen Python publisher ran it. The parity replays use it
+// (replaycapture.Options.WithoutStopBudget implies it).
+func WithoutOBDefinition(settings *Settings) {
+	withoutParameters(settings, "order_block", "confirmed_break_buffer_atr", "maximum_zone_touches")
+}
+
+// zoneRefusalLedger collects, for one closed-bar evaluation, the confirmed-path zones the definitions refused (fair value gaps and order blocks), by
+// technique, structure timeframe and reason. The instance sources fill it when a strategy first reads them (once per frame per evaluation, so a zone is
+// counted once) and the worker drains it after the strategies have run. A nil ledger records nothing.
+type zoneRefusalLedger struct {
+	mu     sync.Mutex
+	counts map[zoneRefusalKey]int64
+}
+
+type zoneRefusalKey struct {
+	technique string
 	timeframe market.Timeframe
 	reason    string
 }
 
-func (l *fvgRefusalLedger) recorder(tf market.Timeframe) func(techniquezone.Instance, string) {
+func (l *zoneRefusalLedger) recorder(tf market.Timeframe) func(techniquezone.Instance, string) {
 	if l == nil {
 		return nil
 	}
-	return func(_ techniquezone.Instance, reason string) {
+	return func(in techniquezone.Instance, reason string) {
 		l.mu.Lock()
 		defer l.mu.Unlock()
 		if l.counts == nil {
-			l.counts = make(map[fvgRefusalKey]int64)
+			l.counts = make(map[zoneRefusalKey]int64)
 		}
-		l.counts[fvgRefusalKey{tf, reason}]++
+		l.counts[zoneRefusalKey{in.Technique, tf, reason}]++
 	}
 }
 
-func (l *fvgRefusalLedger) drain() map[fvgRefusalKey]int64 {
+func (l *zoneRefusalLedger) drain() map[zoneRefusalKey]int64 {
 	if l == nil {
 		return nil
 	}
@@ -178,7 +199,7 @@ func techniqueInstanceZone(in techniquezone.Instance, bars []market.Candle) zone
 // zone-chain techniques collected from the execution frame's scored unmerged
 // zones, plus the CRT instances the H1 frame and the execution window produce.
 // The result is memoised for the frame's one closed-bar evaluation.
-func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings, refusals *fvgRefusalLedger) func() []techniquezone.Instance {
+func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings, refusals *zoneRefusalLedger) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
 	return func() []techniquezone.Instance {
@@ -188,7 +209,7 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 				return
 			}
 			execATR := techniquezone.ATRScalar(exec.ATR, 1)
-			instances = techniquezone.InstancesFromScoredZonesWithATR(exec.TechniqueZones, bars, exec.ATR, fvgDefinitionTechnique(settings), refusals.recorder(settings.PrimaryTimeframe))
+			instances = techniquezone.InstancesFromScoredZonesWithATR(exec.TechniqueZones, bars, exec.ATR, zoneDefinitionTechnique(settings), refusals.recorder(settings.PrimaryTimeframe))
 			if h1 == nil || len(h1.Bars) == 0 {
 				return
 			}
@@ -250,7 +271,7 @@ func exportHigherTimeframe(all []techniquezone.Instance, tf market.Timeframe) []
 // own last close sits: IgnoreProximity is on. With it off, an H1 zone was offered only if the last CLOSED H1 bar closed in it or at its proximal
 // edge, so an M5 wick into the zone in the middle of an hour (after an H1 bar that closed away from it) found no instance. Proximity is decided
 // where the trade is executed, by the M5 EntryValid check in TechniqueSource.publish.
-func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings, refusals *fvgRefusalLedger) func() []techniquezone.Instance {
+func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings, refusals *zoneRefusalLedger) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
 	return func() []techniquezone.Instance {
@@ -258,7 +279,7 @@ func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market
 			if len(frame.Bars) < 10 {
 				return
 			}
-			technique := fvgDefinitionTechnique(settings)
+			technique := zoneDefinitionTechnique(settings)
 			technique.IgnoreProximity = true
 			instances = exportHigherTimeframe(techniquezone.InstancesFromScoredZonesWithATR(frame.TechniqueZones, frame.Bars, frame.ATR, technique, refusals.recorder(tf)), tf)
 		})
@@ -277,4 +298,42 @@ func crtMinimumH1RangeATR(settings Settings, fallback float64) float64 {
 		}
 	}
 	return fallback
+}
+
+// orderBlockBreakBuffer is strategies.order_block.confirmed_break_buffer_atr, 0 when absent (the rule is off).
+func orderBlockBreakBuffer(settings Settings) float64 {
+	for _, cfg := range settings.Strategies {
+		if cfg.ID == "order_block" {
+			if v, ok := cfg.Parameters["confirmed_break_buffer_atr"].(float64); ok && v > 0 {
+				return v
+			}
+		}
+	}
+	return 0
+}
+
+// structureBreakBuffer is the break buffer, in price units, of a live opportunity's structure on the timeframe whose bar just closed: the strategy's buffer
+// in ATRs times that frame's ATR at the closed bar (the detector-contract frame's, the same series the instance definition judges with; the canonical ATR
+// only where the frame has none). A strategy without the rule has no buffer, so none of its opportunities is retired this way.
+func (w *SymbolWorker) structureBreakBuffer(tf market.Timeframe, canonicalATR []float64) func(opportunity.StrategyID) (float64, bool) {
+	atrs := orderBlockBreakBuffer(w.settings)
+	if atrs <= 0 {
+		return nil
+	}
+	frameATR := 0.0
+	if frame := w.state.Context.Timeframes[tf]; frame != nil && frame.Legacy != nil && len(frame.Legacy.ATR) > 0 {
+		frameATR = frame.Legacy.ATR[len(frame.Legacy.ATR)-1]
+	}
+	if !(frameATR > 0) && len(canonicalATR) > 0 {
+		frameATR = canonicalATR[len(canonicalATR)-1]
+	}
+	if !(frameATR > 0) {
+		return nil
+	}
+	return func(id opportunity.StrategyID) (float64, bool) {
+		if id != "order_block" {
+			return 0, false
+		}
+		return atrs * frameATR, true
+	}
 }

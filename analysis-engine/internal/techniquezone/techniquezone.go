@@ -1060,12 +1060,17 @@ type TechniqueSettings struct {
 	FVGMinGapATR                float64
 	FVGMinDisplacementBodyATR   float64
 	FVGMinDisplacementBodyRatio float64
-	FVGEntryMaxWidthPrice       float64
-	MomentumBodyFrac            float64
-	RetestMaxTouches            int
-	InvalidationToleranceATR    float64
-	SweepReclaimBars            int
-	MaxBreakEpisodes            int
+	// OBBreakBufferATR defines when a CONFIRMED-path order block is dead (docs/strategies/order-block-definition.md): any close of the frame the block
+	// was found on, after the block's own candle, beyond its far edge (demand: below the low, supply: above the high) by more than OBBreakBufferATR of the
+	// frame's ATR at that bar retires it for good. No reclaim forgiveness and no episode budget: a wick that closes back inside is the sweep, a close is
+	// the break. 0 = off, which is every setting that does not name the key, the zone book, the Confluence Zone facts and the frozen-Python parity replays.
+	OBBreakBufferATR         float64
+	FVGEntryMaxWidthPrice    float64
+	MomentumBodyFrac         float64
+	RetestMaxTouches         int
+	InvalidationToleranceATR float64
+	SweepReclaimBars         int
+	MaxBreakEpisodes         int
 	// IgnoreProximity drops the retest-proximity test (price must be at the zone
 	// now) from the instance validation: a structure is then judged only on what it
 	// is (not spent, not invalidated, sized, unfilled), never on where price is at
@@ -1331,6 +1336,8 @@ const (
 	FVGRefusedGapSmall              = "gap_small"
 	FVGRefusedDisplacementWeak      = "displacement_weak"
 	FVGRefusedDisplacementDirection = "displacement_direction"
+	// OBRefusedClosedThrough is the order block definition's refusal reason: a close of the block's own frame went beyond its far edge by more than the buffer.
+	OBRefusedClosedThrough = "ob_closed_through"
 )
 
 // fvgDefinitionRefusal judges a fair value gap on its own three candles and on the ATR of the frame it comes from AS OF its third candle, so it reads
@@ -1373,6 +1380,38 @@ func fvgDefinitionRefusal(in Instance, bars []market.Candle, atr float64, atrSer
 	return ""
 }
 
+// obClosedThroughRefusal reports OBRefusedClosedThrough when any close after the order block's own candle, up to the frame's last closed bar, is beyond
+// the block's far edge by more than OBBreakBufferATR of the frame's ATR AT THAT BAR (atrSeries[i]; the scalar ATR only where the series is missing). The far
+// edge is the block's structural one when its entry band was clipped. It returns "" when the rule is off, for any other technique, or when no close broke it.
+func obClosedThroughRefusal(in Instance, bars []market.Candle, atr float64, atrSeries []float64, s TechniqueSettings) string {
+	if s.OBBreakBufferATR <= 0 || in.Technique != "order_block" {
+		return ""
+	}
+	o := in.OriginIndex
+	if o < 0 || o >= len(bars)-1 {
+		return ""
+	}
+	low, high := in.Low, in.High
+	if in.EntryClipped {
+		low, high = in.StructuralLow, in.StructuralHigh
+	}
+	aligned := len(atrSeries) == len(bars)
+	for i := o + 1; i < len(bars); i++ {
+		frameATR := atr
+		if aligned && atrSeries[i] > 0 && !math.IsNaN(atrSeries[i]) {
+			frameATR = atrSeries[i]
+		}
+		buffer := s.OBBreakBufferATR * frameATR
+		if in.Side == "buy" && bars[i].Close < low-buffer-1e-9 {
+			return OBRefusedClosedThrough
+		}
+		if in.Side == "sell" && bars[i].Close > high+buffer+1e-9 {
+			return OBRefusedClosedThrough
+		}
+	}
+	return ""
+}
+
 func validateInstance(in Instance, bars []market.Candle, price, atr float64, s TechniqueSettings) bool {
 	ok, _ := validateInstanceWithATR(in, bars, price, atr, nil, s)
 	return ok
@@ -1411,6 +1450,12 @@ func validateInstanceWithATR(in Instance, bars []market.Candle, price, atr float
 	if in.Technique == "fvg" {
 		// Judged last, so a refusal here is a gap every other test would have offered to the strategy.
 		if reason := fvgDefinitionRefusal(in, bars, atr, atrSeries, s); reason != "" {
+			return false, reason
+		}
+	}
+	if in.Technique == "order_block" {
+		// Judged last, like the gap definition: a block every other test would have offered to the strategy.
+		if reason := obClosedThroughRefusal(in, bars, atr, atrSeries, s); reason != "" {
 			return false, reason
 		}
 	}
