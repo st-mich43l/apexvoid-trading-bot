@@ -23,7 +23,7 @@ Generic mechanism: it applies on every instrument with that instrument's own env
 
 `analysis-engine/test/stopbudget/measure_test.go` (`STOP_BUDGET_OUT=<dir> go test ./test/stopbudget -run TestMeasureStopBudget`) replays the 21 committed M5 captures twice, without the budget (what is published today, reaction-anchored stop included) and with it.
 It classifies every confirmed candidate (12,080 distinct opportunities, the same set as the reaction-anchored-stop study) and asserts that the budgeted engine publishes exactly the candidates that are not refused, with the same entry, the same invalidation and the matching
-evidence code. Output: [legacy-stop-budget-results.json](legacy-stop-budget-results.json). Risk is the published (tick-rounded) distance; the detector decides on the unrounded one, so a candidate within one tick of a bound can read either way.
+evidence code. Output: `legacy-stop-budget-results.json` (written by the replay, not committed). Risk is the published (tick-rounded) distance; the detector decides on the unrounded one, so a candidate within one tick of a bound can read either way.
 Nothing here is an outcome and nothing is tuned.
 
 ### XAU (cap 70, floor 50)
@@ -90,7 +90,7 @@ never mistaken for a detection difference. `test/keylevelparity` failed without 
 | File | Reason | Diff |
 |---|---|---|
 | `analysis-engine/testdata/replay-go-supply-demand-confirmed-envelopes-xau-20260921.jsonl` + `replay-go-xau-20260921.meta.json` | the confirmed XAU supply/demand envelopes of the September capture are budgeted: those over 70 pips are no longer published, the others carry a budget code; ids change with the version | 173 rows before, 12 after: 161 rows removed (all with a structural stop of 71.6-644.6 pips from the proximal edge); the 12 kept rows differ only by the `stop_budget_structural` (9) / `stop_budget_floor` (3) evidence code and the id; entry, invalidation, targets, quality, direction and expiry are identical |
-| `analysis-engine/testdata/confluence-zone-other-strategies-baseline-master-f18179f.json` + `docs/strategies/confluence-zone-v3-replay-results.json` | the other strategies' candidate set now excludes the refused legacy candidates and carries the budget codes | 6 of 6 captures: candidate count and hash change (4050 to 3288, 2185 to 1612, 4217 to 4189, 5591 to 5552, 4193 to 4102, 5801 to 5613); no confluence_zone field changes |
+| `analysis-engine/testdata/confluence-zone-other-strategies-baseline-master-f18179f.json` + `analysis-engine/testdata/confluence-zone-v3-replay-results.json` | the other strategies' candidate set now excludes the refused legacy candidates and carries the budget codes | 6 of 6 captures: candidate count and hash change (4050 to 3288, 2185 to 1612, 4217 to 4189, 5591 to 5552, 4193 to 4102, 5801 to 5613); no confluence_zone field changes |
 
 No parity golden changed. `test/keylevelparity`, `test/techniqueparity`, `test/legacyparity` and `test/detectorparity` pass untouched with `WithoutStopBudget`; the causality and prefix-invariance suites pass unchanged.
 

@@ -2,7 +2,7 @@
 
 Incident: production 2026-10-12 USDJPY, four same-direction range-scalp SELLs admitted (replayed here as Range Box Scalp, the surviving range scalp)
 between 06:51 and 09:01 against one rising resistance. See
-docs/risk/same-direction-exposure-incident.md.
+docs/execution.md (exposure).
 """
 
 from __future__ import annotations

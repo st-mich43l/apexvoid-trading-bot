@@ -1,6 +1,5 @@
 # Break & Retest (v3)
 
-> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence WEAK. Scope: all instruments; replace the constant with a measured function in the quality reconstruction. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 `break_retest` trades the retest of a structure price has just broken. v3 replaces
 the frozen-Python-parity v2 with a Go contract that owns its structures, accepts a
@@ -20,7 +19,7 @@ intentional difference from the Python detector.
 
 ## Status and execution
 
-- **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)): the
+- **Certification**: `GO_NATIVE_VALIDATED` ([catalog](README.md#catalog)): the
   technical contract below is certified by tests and replays, and is deliberately
   **not** parity with the Python detector. It makes no profitability claim.
 - **Symbols**: all instruments. Pip size and the execution stop cap come from the
@@ -191,7 +190,7 @@ With `ATR_c` at the confirmation candle `c`:
 ## Quality and arbitration
 
 `Quality.Overall` is the mean of seven measured `score_*` dimensions (`break_retest.quality.v1`,
-[quality-scoring.md](quality-scoring.md)); the former constant 0.75 and its configuration key
+[quality](../analysis-engine.md#acceptance-and-quality)); the former constant 0.75 and its configuration key
 `published_overall_quality` are gone. The raw measurements are still published in `Quality.Components`:
 `break_distance_atr`, `break_body_ratio`, `break_close_strength`,
 `break_displacement_atr`, `break_accept_closes`, `retest_depth_atr`,

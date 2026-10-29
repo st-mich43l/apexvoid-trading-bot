@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble docs/architecture/python-go-parity-matrix.json from measured evidence.
+"""Assemble `git show f02d62f:docs/architecture/python-go-parity-matrix.json` from measured evidence.
 
 Nothing here classifies a function by its name or by a Go comment. Every row is derived from, in this order:
 

@@ -3,7 +3,7 @@ namespace CTraderFeed.Tests;
 /// <summary>
 /// Proves the TradePlan execution path (TradePlanExecutionEngine.cs, TradePlan.cs)
 /// never references the legacy dual-planning symbols named in
-/// docs/autotrade-execution-integrity.md - a source-text check rather than a
+/// docs/execution.md - a source-text check rather than a
 /// runtime mock, so a future edit that adds a call site fails this test
 /// immediately regardless of which code path exercises it.
 /// </summary>

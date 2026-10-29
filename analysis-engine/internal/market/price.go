@@ -32,7 +32,7 @@ func (p Price) Distance(other Price) float64 {
 // PriceLevel is a single labeled price — the market-domain building block
 // for anything that needs "one price, and why it matters" without pulling
 // in a whole Zone's lifecycle/mitigation state (that richer concept is
-// internal/zone's, a higher layer; see docs/architecture/analysis-engine.md
+// internal/zone's, a higher layer; see docs/analysis-engine.md
 // on why opportunity.Candidate's Entry field is its own small EntryZone
 // type rather than reusing internal/zone's Zone).
 type PriceLevel struct {

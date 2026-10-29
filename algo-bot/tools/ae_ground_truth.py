@@ -4,8 +4,8 @@ Reproduce (repository root, Python 3.12):
 
     cd analysis-engine && GT_DUMP_DIR=/tmp/gt go test ./test/groundtruth -run TestDumpState
     cd ../algo-bot && python -m tools.ae_ground_truth /tmp/gt \
-        --hand-marked ../docs/strategies/ground-truth/hand-marked.json \
-        --out ../docs/strategies/ae-ground-truth-results.json
+        --hand-marked tools/data/ground-truth-hand-marked.json \
+        --out tools/data/ae-ground-truth-results.json
 
 What the labels are. Nothing here reuses engine code or engine parameters. ``Oracle`` is a
 separate, deliberately plain implementation of textbook definitions, in a different language, over the

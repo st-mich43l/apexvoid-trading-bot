@@ -179,11 +179,13 @@ container.
 
 | | |
 |---|---|
-| [Architecture](docs/architecture.md) | ownership, data planes, dependency rules |
+| [Docs index](docs/README.md) | reading map of everything below |
+| [Architecture](docs/architecture.md) | ownership, data planes, one bar end to end |
+| [Analysis Engine](docs/analysis-engine.md) | per-bar pipeline, zone validity, opportunity lifecycle, quality, dependency ranks |
 | [Execution](docs/execution.md) | the decision cycle, arbitration, exposure, expiry, TradePlan |
 | [Configuration](docs/configuration.md) | files, secrets, reachability, containment |
 | [Operations](docs/operations.md) | deployment, routine checks, backups, incidents |
-| [Strategies](docs/strategies/README.md) | certification matrix and per-strategy specifications |
+| [Strategies](docs/strategies/README.md) | catalog, shared confirmation spine, per-strategy specifications |
 | Reference | [Redis contract](docs/redis-contract.md), [Kafka transport](docs/transport/kafka.md), [bot commands](docs/bot-commands.md), [security](docs/security.md), [decisions](docs/adr/) |
 
 ## License

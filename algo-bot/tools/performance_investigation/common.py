@@ -1,4 +1,4 @@
-"""Shared inputs of the performance investigation (docs/strategies/performance-investigation-2026-10.md).
+"""Shared inputs of the performance investigation (`git show f02d62f:docs/strategies/performance-investigation-2026-10.md`).
 
 Read-only production exports, produced with ``ssh`` + ``psql`` on the production host (account data, not committed):
 

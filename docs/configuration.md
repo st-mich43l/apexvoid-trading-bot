@@ -21,6 +21,33 @@ resolve the same includes and the same environment overlay
 | `execution.yml` | TradePlan and broker execution, manual workflow |
 | `telegram.yml` | Telegram presentation, lifecycle and reports |
 
+```mermaid
+flowchart LR
+  subgraph repo [repo config/]
+    ROOT[apexvoid.yml] --> RT[runtime.yml]
+    ROOT --> INS[instruments.yml]
+    ROOT --> AN[analysis.yml]
+    ROOT --> AA[auto-algo.yml]
+    ROOT --> EX[execution.yml]
+    ROOT --> TGY[telegram.yml]
+    ROOT --> ENV["environments/production.yml<br/>(overlay, last wins)"]
+  end
+  repo -->|"Ansible ships config/ unchanged"| HOST["host ./config<br/>mounted read-only at /config"]
+  SEC["Ansible secret store"] -->|"renders secrets/trading-bot.env"| ENVF[".env: secrets + bootstrap"]
+  HOST --> GO["analysis-engine"]
+  HOST --> PY["algo-bot"]
+  HOST --> NET["ctrader-engine"]
+  ENVF --> GO
+  ENVF --> PY
+  ENVF --> NET
+```
+
+Every container gets `APEXVOID_CONFIG_FILE=/config/apexvoid.yml` from
+`deployment-template/docker-compose.yml.j2`, so the repo's `config/` tree is what
+production reads. Ansible also renders a legacy `config/trading-bot.yml` from its
+group_vars; no service is pointed at it, so a strategy or analysis value set only
+in ansible-library group_vars has no effect.
+
 Secrets and bootstrap inputs (see `.env.example`): the Telegram, cTrader and
 database credentials, channel and owner ids, `APEXVOID_CONFIG_FILE`, and the
 `LOG_*` switches. A secret is never added to the YAML.
@@ -57,8 +84,8 @@ re-enables execution; nothing else changes. Current containment is documented
 with its evidence in [strategies](strategies/README.md).
 
 A structure timeframe can be contained the same way:
-`...go_opportunity.observe_only_structure_timeframes` (all five instruments list
-`M15`, the unvalidated M15 supply/demand extension). Go publishes the timeframe a
+`...go_opportunity.observe_only_structure_timeframes`. Both lists are empty on every
+instrument (owner rule 2026-10-14: every strategy and structure timeframe trades). Go publishes the timeframe a
 setup's structure was built on as the typed `structure_timeframe` field of
 `analysis.opportunity.v1` (omitted when it equals `timeframe`), and the same two
 leaves are enforced twice: when the opportunity becomes a match, and again at
@@ -71,10 +98,11 @@ timeframe (M5, M15 or H1), not the execution band in `entry`. The root card prin
 a different band). No policy, identity or statistic reads it; an event without it renders as before. See
 [fvg definition](strategies/fvg-definition.md).
 
-`analysis.strategies.supply` and `demand` carry `higher_timeframes: [M15]`: the M15
-frame's own supply/demand zones are also evaluated against the M5 closed bars
-(see [supply](strategies/supply.md#higher-timeframe-zones)). Removing the key
-restores M5-only evaluation.
+`analysis.strategies.supply`, `demand`, `order_block` and `fvg` carry
+`higher_timeframes: [M15, H1]`: those frames' own zones are also evaluated against the
+M5 closed bars, judged on their own frame's bars and ATR, confirmed and executed on M5
+(see [HTF zone structure](strategies/htf-zone-structure.md)). Removing the key restores
+M5-only evaluation.
 
 ## Sessions
 

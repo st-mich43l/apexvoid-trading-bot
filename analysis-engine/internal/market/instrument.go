@@ -10,7 +10,7 @@ package market
 // This file is named instrument.go rather than symbol.go because
 // internal/market/symbol.go already exists and holds Geometry, not a
 // Symbol type — a pre-existing naming mismatch against the proposed tree
-// in docs/architecture/analysis-engine.md, left as-is by this task rather
+// in docs/analysis-engine.md, left as-is by this task rather
 // than renamed, to avoid touching an existing, tested, unrelated file for
 // a purely cosmetic reason. A future cleanup may rename symbol.go to
 // geometry.go and fold this file into the resulting symbol.go; not done

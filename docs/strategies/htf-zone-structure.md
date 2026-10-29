@@ -17,7 +17,7 @@ detector ATR); the entry band (proximal slice clipped by `fvg_entry_max_width_pr
 
 `analysis-engine/test/htfzones/measure_test.go` (`HTF_ZONES_OUT=<dir> go test ./test/htfzones -run TestMeasureHTFZones`) replays the 21 committed M5 captures. Before = the merge-base tree; after = this tree; the stop budget is off in every run so the stop distribution is whole (the budget is proven in
 `test/stopbudget`). Candidates are distinct opportunities; stop distance is from the proximal entry edge to the published invalidation; "per symbol-day" divides by the distinct UTC days each symbol's captures cover. Full cells (per instrument too) in
-[htf-zone-structure-results.json](htf-zone-structure-results.json). Nothing here is an outcome and nothing is tuned; no profit is implied.
+`htf-zone-structure-results.json` (written by the replay, not committed). Nothing here is an outcome and nothing is tuned; no profit is implied.
 
 ### XAU (cap 70, floor 50)
 

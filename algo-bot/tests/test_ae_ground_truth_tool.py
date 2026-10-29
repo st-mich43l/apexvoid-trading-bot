@@ -72,6 +72,6 @@ def test_the_committed_results_state_their_definitions_and_cover_every_symbol():
   import json
   from pathlib import Path
 
-  results = json.loads((Path(gt.REPO) / "docs/strategies/ae-ground-truth-results.json").read_text())
+  results = json.loads((Path(gt.REPO) / "algo-bot/tools/data/ae-ground-truth-results.json").read_text())
   assert set(results["definitions"]) == {"swing", "fvg", "impulse_origin", "reaction"}
   assert len(results["captures"]) == 5 and results["checkpoints_frames_scored"] > 100

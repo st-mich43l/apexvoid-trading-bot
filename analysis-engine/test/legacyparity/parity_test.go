@@ -54,7 +54,7 @@ var measuredOnly = map[string]bool{"trendline_reaction": true}
 // flip_*_zone_reaction: the frozen detector let the bar that broke the structure confirm the flip zone
 // that break created (the break candle trivially "reclaims" the band it closes through), so 80 of the
 // 91 oracle decisions were the formation itself, not a retest. Go requires the touch and the
-// confirmation to come after the break bar (docs/strategies/ae-quality-certification.md, section 12).
+// confirmation to come after the break bar (`git show f02d62f:docs/strategies/ae-quality-certification.md`, section 12).
 var narrowed = map[string]bool{"flip_demand_zone_reaction": true, "flip_supply_zone_reaction": true}
 
 // frozenSessionContext reproduces the frozen detectors, which set the session-context confluence

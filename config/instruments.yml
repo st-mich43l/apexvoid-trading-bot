@@ -24,7 +24,7 @@ instrument_packs:
       # Autonomous same-direction exposure on the same symbol is bounded for FX the same
       # way: one group at a time per direction (pending, submitted, partially or fully open;
       # a group stays counted after TP1/breakeven), whatever the strategy or scalp status. FX
-      # never stacks. Unknown exposure fails closed (docs/risk/same-direction-exposure-incident.md).
+      # never stacks. Unknown exposure fails closed (docs/execution.md (exposure)).
       same_direction:
         max_groups: 1
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
@@ -98,7 +98,7 @@ instrument_packs:
       # Autonomous same-direction exposure on the same symbol is bounded for FX the same
       # way: one group at a time per direction (pending, submitted, partially or fully open;
       # a group stays counted after TP1/breakeven), whatever the strategy or scalp status. FX
-      # never stacks. Unknown exposure fails closed (docs/risk/same-direction-exposure-incident.md).
+      # never stacks. Unknown exposure fails closed (docs/execution.md (exposure)).
       same_direction:
         max_groups: 1
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
@@ -165,7 +165,7 @@ instrument_packs:
       # direction (pending, submitted, partially or fully open; a group stays counted after
       # TP1/breakeven), whatever the strategy or scalp status. A scale-in ladder is ONE group,
       # so XAU still scales in; it no longer opens a second thesis on top of a live one.
-      # Unknown exposure fails closed (docs/risk/same-direction-exposure-incident.md).
+      # Unknown exposure fails closed (docs/execution.md (exposure)).
       same_direction:
         max_groups: 1
     # Gold retains the separately tuned scale-in and optional XAU-only risk leg.

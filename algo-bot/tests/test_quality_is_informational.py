@@ -3,7 +3,7 @@
 The only quality-dependent acceptance is the Go confluence floor, which runs in the Analysis Engine before publication. After it, Algo Bot
 records the stars as telemetry: a candidate below the policy minimum is still allowed (a preference note), the volume multiplier ignores the tier,
 and with ``quality_ranking: false`` the arbitration order uses no quality score (pinned by test_arbitration_neutral_ranking). Pinned here so a later change that makes a score
-operational is a decision, not an accident (docs/strategies/q3-quality-decision-map.md).
+operational is a decision, not an accident (docs/analysis-engine.md (acceptance and quality)).
 """
 
 import pytest

@@ -1,6 +1,6 @@
 """Q5.3: tie every closed auto group to the opportunity, the scoring rule and the configuration that produced it, then read the realized R.
 
-Inputs are read-only exports (the queries are in docs/strategies/q53-quality-expectancy.md):
+Inputs are read-only exports (the queries are in `git show f02d62f:docs/strategies/q53-quality-expectancy.md`):
 
   --results  auto_trade_results, one JSON object per line (``select * ...``)
   --opps     the creation envelopes of those groups' opportunities (``analysis_opportunity_events``, payload plus ``config_fingerprint`` and

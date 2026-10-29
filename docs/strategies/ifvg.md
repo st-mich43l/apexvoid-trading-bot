@@ -1,6 +1,5 @@
 # iFVG (v3)
 
-> **Quality review (2026-10-14): RETAIN** (proposal, not applied). Technical PASS, execution PARTIAL, performance UNPROVEN, evidence WEAK. Scope: all instruments. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 `ifvg` trades the retest of a fair-value gap that has just lost its role. v3
 replaces the frozen-Python-parity v2 with a Go contract that owns its gap, accepts
@@ -17,7 +16,7 @@ and every intentional difference from the Python detector.
   engine's HTF alignment, M5 structure bias and confluence rubric as *measured
   evidence*.
 - **Contract version**: `v3`. `Quality.Overall` is the mean of nine
-  `score_*` dimensions (`ifvg.quality.v1`, [quality-scoring.md](quality-scoring.md)); the stars are a diagnostic
+  `score_*` dimensions (`ifvg.quality.v1`, [quality](../analysis-engine.md#acceptance-and-quality)); the stars are a diagnostic
   ([Quality](#quality-and-arbitration)).
 
 ## Q2: measured session context and the causal inversion proof
@@ -32,7 +31,7 @@ and every intentional difference from the Python detector.
 
 ## Status and execution
 
-- **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)): the
+- **Certification**: `GO_NATIVE_VALIDATED` ([catalog](README.md#catalog)): the
   technical contract below is certified by tests and replays and is deliberately
   **not** parity with the Python detector. It makes no profitability claim.
 - **Symbols**: all instruments. Pip size, the proximal entry slice
@@ -198,7 +197,7 @@ risk           = entry_high - stop
 ## Quality and arbitration
 
 `Quality.Overall` is no longer `stars / 3`: it is the mean of the `score_*` dimensions of `ifvg.quality.v1`
-([quality-scoring.md](quality-scoring.md)). The *inputs* of the confluence stars (a diagnostic and the floor) are measured:
+([quality](../analysis-engine.md#acceptance-and-quality)). The *inputs* of the confluence stars (a diagnostic and the floor) are measured:
 
 | Factor | Measured as |
 |---|---|
@@ -378,4 +377,4 @@ techniques still use, is unchanged, and iFVG is the only consumer that moved.
 
 ## Q3 validation
 
-`session_context` counts only sweeps completed before the retest candle (the retest's own wick is the reaction, already credited). The 35 out-of-sample FX observations are a hypothesis, not proof, and within-strategy quality cannot be tested at this sample size ([q3-quality-validation.md](q3-quality-validation.md)).
+`session_context` counts only sweeps completed before the retest candle (the retest's own wick is the reaction, already credited). The 35 out-of-sample FX observations are a hypothesis, not proof, and within-strategy quality cannot be tested at this sample size ([quality](../analysis-engine.md#acceptance-and-quality)).

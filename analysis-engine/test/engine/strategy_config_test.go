@@ -56,7 +56,7 @@ func TestAll20StrategiesHaveConcreteFactoriesAndValidProductionConfig(t *testing
 	}
 }
 
-// Fade Scalp was purged (docs/strategies/fade-scalp-purge.md): a rendered configuration that still carries its block is a deployment error and
+// Fade Scalp was purged (CHANGELOG.md, 2026-10-29): a rendered configuration that still carries its block is a deployment error and
 // must stop the engine at startup, never revive the strategy or be ignored.
 func TestAConfigurationThatStillNamesFadeScalpFailsStartup(t *testing.T) {
 	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))

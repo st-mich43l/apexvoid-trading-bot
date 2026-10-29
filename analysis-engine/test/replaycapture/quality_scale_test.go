@@ -24,7 +24,7 @@ import (
 // It is a measurement with hard invariants, not a performance claim: quality is
 // compared with other quality, never with outcomes (no realized outcome data exists for
 // the captures). The distribution it logs is the evidence behind the finding in
-// docs/strategies/independence-audit.md.
+// docs/analysis-engine.md (strategy independence).
 func TestQualityScoresAcrossStrategiesAreMeasuredNotAssumed(t *testing.T) {
 	doc, err := config.ResolveDocument(filepath.Join("..", "..", "..", "config", "apexvoid.yml"))
 	if err != nil {

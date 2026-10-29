@@ -2,7 +2,7 @@
 
 Inputs are read-only exports of production: the auto_trade_results/fills join, the
 analysis_opportunities structure ids and the algo-bot admission log lines (see
-docs/risk/same-direction-exposure-incident.md for the exact queries). Output is
+docs/execution.md (exposure) for the exact queries). Output is
 one JSON record per group with its admission, fill and close times, planned
 money risk and derived money result.
 

@@ -1,5 +1,5 @@
 // Package f7barrier_test dumps, for a list of requested M5 bars of committed captures, the opposing-barrier book the
-// Go engine publishes at that bar (Model C of docs/architecture/f7-opposing-barrier-ground-truth.md) together with the
+// Go engine publishes at that bar (Model C of `git show f02d62f:docs/architecture/f7-opposing-barrier-ground-truth.md`) together with the
 // raw zones it was built from, so tools/f7_barrier_replay.py can evaluate the real Algo Bot target-room code against it.
 //
 //	F7_BARS=/tmp/f7/bars.json F7_CAPTURES=replay-xau-production-capture-20261014.json F7_DUMP_DIR=/tmp/f7 \

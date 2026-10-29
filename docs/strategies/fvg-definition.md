@@ -1,7 +1,5 @@
 # A real fair value gap on every timeframe, and a root card that shows which gap (fvg v6)
 
-Branch `agent/fvg-definition-and-card`, base `origin/master`. Go engine (the definition), the Kafka/V8 contract and the Python root card (a display line). No threshold or envelope of any other strategy, stop budget, ladder, sizing, enablement, arbitration, quality model or `min_confluence` changed; iFVG and the Confluence Zone facts are untouched.
-
 ## 1. The owner report (2026-10-28) and what the replay shows
 
 Trades were labelled FVG where the chart shows no fair value gap. Since #812 (`docs/strategies/htf-zone-structure.md`) `fvg` reads M5, M15 and H1 gaps (XAU, 21 captures: 79 distinct M15 gaps, 6 H1, 29 M5), and the card never said which. The confirmed path (`strategyutil.ConfirmedTechnique` -> `techniquezone.validateInstance`) only required a gap of at least 1 pip, a width of at most `FVGMaxATR`, and not fully filled. Measured against the ATR of the gap's own timeframe (XAU, median):
@@ -37,7 +35,7 @@ Where it applies: the `fvg` strategy's two instance sources only (`techniqueInst
 
 ## 4. What it does to the published set
 
-`analysis-engine/test/fvgdefinition/measure_test.go` (`FVG_DEFINITION_OUT=<dir>`) replays all 21 committed M5 captures twice with the engine as configured, with the definition removed (what v5 published) and with it. Unit: one confirmed `fvg` candidate per opportunity id, first sight across overlapping captures. The gap, its middle candle and its ATR are re-derived from the capture's own bars of the gap's timeframe, independently of the engine, and the reason is judged in the engine's order. Result: [fvg-definition-results.json](fvg-definition-results.json).
+`analysis-engine/test/fvgdefinition/measure_test.go` (`FVG_DEFINITION_OUT=<dir>`) replays all 21 committed M5 captures twice with the engine as configured, with the definition removed (what v5 published) and with it. Unit: one confirmed `fvg` candidate per opportunity id, first sight across overlapping captures. The gap, its middle candle and its ATR are re-derived from the capture's own bars of the gap's timeframe, independently of the engine, and the reason is judged in the engine's order. Result: `fvg-definition-results.json` (written by the replay, not committed).
 
 | class, timeframe | v5 candidates | distinct gaps | refused | gap_small | displacement_weak | displacement_direction | still published | newly reachable |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -94,7 +92,7 @@ Non-parity goldens that moved (regenerated, reviewed, nothing else changed):
 | `testdata/replay-go-xau-20260921.meta.json` (`TestRealCaptureReplayIsDeterministicAndMatchesTheCommittedGolden`) | 399 discovered opportunities, envelope hash `152a9496...` | 382 (-17, -4.3%), hash `290d7a2c...` | the definition refuses thin `fvg` gaps (a different hash because of it and of the structure block) |
 | `testdata/replay-go-supply-demand-confirmed-envelopes-xau-20260921.jsonl` | 12 envelopes | the same 12 envelopes, each with one added field, `payload.structure` (verified: no other field of any envelope differs) | the structure block of the contract |
 | `testdata/confluence-zone-other-strategies-baseline-master-f18179f.json`, XAU 21 Sep / XAU 13 Oct / EURUSD / GBPUSD / GBPJPY / USDJPY 13 Oct | 1,518 / 3,121 / 4,406 / 6,007 / 4,439 / 5,957 candidates | **the same counts**, six new hashes | the opportunity id of `fvg` carries the strategy version (v5 to v6); `test/czreplay` replays without the definition, so no candidate is added or removed |
-| `docs/strategies/confluence-zone-v3-replay-results.json` | the six hashes above | the six new ones | derived from the same replays; its Confluence Zone figures are unchanged (only the `other_strategies_candidates_sha256` fields differ) |
+| `analysis-engine/testdata/confluence-zone-v3-replay-results.json` | the six hashes above | the six new ones | derived from the same replays; its Confluence Zone figures are unchanged (only the `other_strategies_candidates_sha256` fields differ) |
 
 That baseline file certifies that the Confluence Zone v3 change did not touch other strategies. Like the earlier Key Level changes, a deliberate change to a strategy's identity moves its hashes, and the new values are the baseline from here on.
 

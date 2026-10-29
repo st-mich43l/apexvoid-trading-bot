@@ -307,7 +307,7 @@ func TestPriceHasRunThroughOrAwayFromTheEntry(t *testing.T) {
 
 func nan() float64 { var z float64; return z / z }
 
-// Cases an independent review found (docs/strategies/confluence-zone-v3-certification.md).
+// Cases an independent review found (`git show f02d62f:docs/strategies/confluence-zone-v3-certification.md`).
 
 func TestAStopAlreadyTradedThroughByAWickIsNeverPublished(t *testing.T) {
 	// The confirming candle is 28 (stop 4097.5); candle 29 wicks to 4090 and closes back at 4104.8.
