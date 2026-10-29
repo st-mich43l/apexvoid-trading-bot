@@ -166,3 +166,29 @@ func TestOpportunityArbitrationSchema_ValidatesAThesisCorrelatedPayload(t *testi
 	}
 	validateGo(t, schema, p)
 }
+
+func TestOpportunitySchema_ValidatesAPayloadWithAStructureBlockAndRejectsAMalformedOne(t *testing.T) {
+	schema := compileSchema(t, repoContractPath("analysis", "opportunity-v1.schema.json"))
+	p := kafka.OpportunityPayload{
+		ID: "cand-1", Strategy: "fvg", Symbol: "XAU", Timeframe: "M5", StructureTimeframe: "M15", Direction: "BUY",
+		Entry:            kafka.EntryZonePayload{Low: 2000, High: 2002},
+		Invalidation:     kafka.PriceLevelPayload{Price: 1990, Label: "fvg_invalidated"},
+		Targets:          []kafka.TargetPayload{{Price: kafka.PriceLevelPayload{Price: 2020}}},
+		Evidence:         []kafka.EvidencePayload{{Code: "m5_fvg_zone_confirmed"}},
+		Quality:          kafka.QualityPayload{Overall: 0.8, Components: map[string]float64{"zone_quality": 0.9}},
+		AlgorithmVersion: kafka.AlgorithmVersionPayload{Structure: "v2", Liquidity: "v1"},
+		Structure:        &kafka.StructurePayload{Timeframe: "M15", Low: 1998.5, High: 2002, FormedAt: 900},
+		CreatedAt:        1000, ExpiresAt: 2000,
+	}
+	validateGo(t, schema, p)
+
+	var raw map[string]any
+	encoded, _ := json.Marshal(p)
+	if err := json.Unmarshal(encoded, &raw); err != nil {
+		t.Fatal(err)
+	}
+	delete(raw["structure"].(map[string]any), "formed_at")
+	if err := schema.Validate(raw); err == nil {
+		t.Error("a structure block without formed_at must be rejected")
+	}
+}

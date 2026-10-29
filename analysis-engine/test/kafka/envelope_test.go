@@ -164,3 +164,23 @@ func TestEnvelope_Validate_CausationIDAndConfigProvenanceAreOptional(t *testing.
 		t.Fatalf("a root event with no causation_id and no config provenance must still validate, got: %v", err)
 	}
 }
+
+func TestOpportunityPayload_CarriesTheStructureBlockOnlyWhenTheCandidateHasOne(t *testing.T) {
+	candidate := testCandidate()
+	version := kafka.AlgorithmVersion{Structure: "v2", Liquidity: "v1"}
+	raw, err := json.Marshal(kafka.OpportunityPayloadFromCandidate(candidate, version))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"structure":{`) {
+		t.Fatalf("a candidate without a structure zone must not carry the block: %s", raw)
+	}
+	candidate.Structure = &opportunity.StructureZone{Timeframe: market.M15, Low: 4152.3, High: 4154.4, FormedAt: 1791987300}
+	raw, err = json.Marshal(kafka.OpportunityPayloadFromCandidate(candidate, version))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"structure":{"timeframe":"M15","low":4152.3,"high":4154.4,"formed_at":1791987300}`) {
+		t.Fatalf("the structure block is missing or malformed: %s", raw)
+	}
+}

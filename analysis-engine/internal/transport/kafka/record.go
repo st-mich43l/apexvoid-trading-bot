@@ -4,21 +4,23 @@ package kafka
 // Kafka carries this neutral business event; it deliberately has no
 // market-bar or tick DTOs because Redis is the market-data plane.
 type OpportunityPayload struct {
-	ID                 string                  `json:"id"`
-	Strategy           string                  `json:"strategy"`
-	Symbol             string                  `json:"symbol"`
-	Timeframe          string                  `json:"timeframe,omitempty"`
-	StructureTimeframe string                  `json:"structure_timeframe,omitempty"`
-	Direction          string                  `json:"direction"`
-	Entry              EntryZonePayload        `json:"entry"`
-	Invalidation       PriceLevelPayload       `json:"invalidation"`
-	Targets            []TargetPayload         `json:"targets"`
-	Evidence           []EvidencePayload       `json:"evidence"`
-	Quality            QualityPayload          `json:"quality"`
-	AlgorithmVersion   AlgorithmVersionPayload `json:"algorithm_version"`
-	FormedAt           int64                   `json:"formed_at"`
-	CreatedAt          int64                   `json:"created_at"`
-	ExpiresAt          int64                   `json:"expires_at"`
+	ID                 string `json:"id"`
+	Strategy           string `json:"strategy"`
+	Symbol             string `json:"symbol"`
+	Timeframe          string `json:"timeframe,omitempty"`
+	StructureTimeframe string `json:"structure_timeframe,omitempty"`
+	// Structure is the zone-family structure's own bounds, for display. Optional; consumers must parse events without it.
+	Structure        *StructurePayload       `json:"structure,omitempty"`
+	Direction        string                  `json:"direction"`
+	Entry            EntryZonePayload        `json:"entry"`
+	Invalidation     PriceLevelPayload       `json:"invalidation"`
+	Targets          []TargetPayload         `json:"targets"`
+	Evidence         []EvidencePayload       `json:"evidence"`
+	Quality          QualityPayload          `json:"quality"`
+	AlgorithmVersion AlgorithmVersionPayload `json:"algorithm_version"`
+	FormedAt         int64                   `json:"formed_at"`
+	CreatedAt        int64                   `json:"created_at"`
+	ExpiresAt        int64                   `json:"expires_at"`
 	// RecoveredAt is set only when the engine backfills a still-live
 	// opportunity after bootstrap. It is an additive V1 fact: the technical
 	// observation remains CreatedAt, while this field records when the
@@ -32,6 +34,14 @@ type OpportunityPayload struct {
 	// strategy family; consumers fall back to their own legacy envelope
 	// lookup rather than fabricating one.
 	StopEnvelope *StopEnvelopePayload `json:"stop_envelope,omitempty"`
+}
+
+// StructurePayload mirrors opportunity.StructureZone.
+type StructurePayload struct {
+	Timeframe string  `json:"timeframe"`
+	Low       float64 `json:"low"`
+	High      float64 `json:"high"`
+	FormedAt  int64   `json:"formed_at"`
 }
 
 // StopEnvelopePayload mirrors opportunity.StopEnvelope — see that type's

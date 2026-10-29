@@ -40,6 +40,20 @@ type EntryZone struct {
 	High float64
 }
 
+// StructureZone is the structural band of a zone-family setup: the bounds of the
+// structure itself (the whole fair value gap, supply or demand zone, order block),
+// not the execution band the order is placed in, which may be clipped to the
+// proximal edge or widened.
+type StructureZone struct {
+	// Timeframe is the timeframe the structure was found on; the execution
+	// timeframe when the structure is not a higher-timeframe one.
+	Timeframe market.Timeframe
+	Low, High float64
+	// FormedAt is the open time of the bar that completed the structure (the
+	// third candle of a fair value gap), Unix seconds.
+	FormedAt int64
+}
+
 // Evidence is one machine-readable fact backing a Candidate — per the
 // source task's §25, avoid opaque free-text-only explanations inside the
 // core engine (e.g. "major_structure_bearish", "m5_bos_down",
@@ -258,6 +272,11 @@ type Candidate struct {
 	// is typed provenance, so execution policy can contain a higher-timeframe
 	// extension without parsing evidence strings.
 	StructureTimeframe market.Timeframe
+	// Structure is the structure behind a zone-family setup (supply, demand,
+	// order block, fair value gap) as drawn on its own timeframe, so a consumer can
+	// show which structure it is. Display only: no policy, identity or statistic
+	// reads it. Nil for every other strategy and for a setup with no zone.
+	Structure *StructureZone
 
 	Direction market.Direction
 
@@ -348,6 +367,14 @@ func (c Candidate) Validate() error {
 	if c.StructureTimeframe != "" {
 		if _, ok := c.StructureTimeframe.Minutes(); !ok {
 			return fmt.Errorf("opportunity: structure timeframe is invalid")
+		}
+	}
+	if c.Structure != nil {
+		if _, ok := c.Structure.Timeframe.Minutes(); !ok {
+			return fmt.Errorf("opportunity: structure zone timeframe is invalid")
+		}
+		if !finite(c.Structure.Low) || !finite(c.Structure.High) || c.Structure.Low > c.Structure.High {
+			return fmt.Errorf("opportunity: structure zone must be a finite low-to-high range")
 		}
 	}
 	if !finite(c.Entry.Low) || !finite(c.Entry.High) || c.Entry.Low > c.Entry.High {
@@ -525,6 +552,10 @@ func cloneCandidate(c Candidate) Candidate {
 		for name, value := range c.Quality.Components {
 			clone.Quality.Components[name] = value
 		}
+	}
+	if c.Structure != nil {
+		structure := *c.Structure
+		clone.Structure = &structure
 	}
 	if c.StopEnvelope != nil {
 		envelope := *c.StopEnvelope

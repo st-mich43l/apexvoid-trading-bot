@@ -342,3 +342,36 @@ func TestBook_DoesNotLeakOrShareTheTechnicalContextPointer(t *testing.T) {
 		t.Fatalf("Record() leaked a mutable pointer into the book: %+v", live[0].Technical)
 	}
 }
+
+func TestCandidate_StructureZoneMustBeAValidFiniteRangeAndTheBookDoesNotShareIt(t *testing.T) {
+	zone := func() *opportunity.StructureZone {
+		return &opportunity.StructureZone{Timeframe: market.M15, Low: 2000.5, High: 2001.5, FormedAt: 900}
+	}
+	for name, mutate := range map[string]func(*opportunity.StructureZone){
+		"bad timeframe": func(z *opportunity.StructureZone) { z.Timeframe = "M2" },
+		"no timeframe":  func(z *opportunity.StructureZone) { z.Timeframe = "" },
+		"inverted":      func(z *opportunity.StructureZone) { z.Low, z.High = z.High, z.Low },
+		"NaN":           func(z *opportunity.StructureZone) { z.Low = math.NaN() },
+	} {
+		c := candidate("opp-structure")
+		c.Structure = zone()
+		mutate(c.Structure)
+		if err := c.Validate(); err == nil {
+			t.Errorf("%s: expected Validate to reject the structure zone", name)
+		}
+	}
+	c := candidate("opp-structure-ok")
+	c.Structure = zone()
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	book := opportunity.NewBook()
+	if _, err := book.Observe(c, 11); err != nil {
+		t.Fatal(err)
+	}
+	c.Structure.Low = 1 // the caller mutates its own copy after Observe
+	record, _ := book.Record("opp-structure-ok")
+	if record.Candidate.Structure.Low != 2000.5 {
+		t.Fatalf("stored record shares the caller's pointer: %+v", record.Candidate.Structure)
+	}
+}

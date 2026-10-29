@@ -64,6 +64,13 @@ setup's structure was built on as the typed `structure_timeframe` field of
 leaves are enforced twice: when the opportunity becomes a match, and again at
 plan admission, so a match stored before a containment change cannot become a plan.
 
+For the zone family (`supply`, `demand`, `order_block`, `fvg`) Go also publishes an optional, display-only
+`structure: {timeframe, low, high, formed_at}` block on `analysis.opportunity.v1`: the whole structure on its own
+timeframe (M5, M15 or H1), not the execution band in `entry`. The root card prints it as
+`Structure: FVG M15 · 4,152.30–4,154.40 · formed 14:15 UTC` (plus `Order zone: low–high` when the order is placed on
+a different band). No policy, identity or statistic reads it; an event without it renders as before. See
+[fvg definition](strategies/fvg-definition.md).
+
 `analysis.strategies.supply` and `demand` carry `higher_timeframes: [M15]`: the M15
 frame's own supply/demand zones are also evaluated against the M5 closed bars
 (see [supply](strategies/supply.md#higher-timeframe-zones)). Removing the key

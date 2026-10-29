@@ -236,6 +236,15 @@ carries none), and one counter records the mix directly:
 |---|---|---|
 | `go_structure_timeframe` | `strategy` (catalog id), `timeframe` | every Go-origin plan reaches stop planning (once per admission evaluation, like the counters above) |
 
+The same zone strategies carry an optional display block on the opportunity envelope (`analysis.opportunity.v1`,
+`contracts/analysis/opportunity-v1.schema.json`): `structure: {timeframe, low, high, formed_at}`, the whole structure
+(for a fair value gap, the whole gap, not the clipped entry band) on the timeframe it was found on, including M5, and
+`formed_at` the open time (Unix seconds) of the bar that completed it. The adapter copies it to the `StrategyMatch`
+(`structure_timeframe`, `structure_low`, `structure_high`, `structure_formed_at`, all optional) and only the root card
+reads it: `Structure: FVG M15 · low–high · formed HH:MM UTC`, and `Order zone: low–high` when the zone the plan trades
+differs from the structure. It is not a policy input, not part of any identity or stats key, and an event or cached
+match without it parses and renders as before.
+
 The dedicated signal bot sends full operational cards only to the configured
 owner DM. `SIGNAL_PUBLIC_CHANNEL_ID` remains exclusively for manual broadcasts
 from the general bot. Order message IDs are cached for seven days under
