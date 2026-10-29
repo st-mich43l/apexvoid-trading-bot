@@ -28,7 +28,7 @@ import (
 )
 
 const ID strategy.StrategyID = "fvg"
-const Version = "v5"
+const Version = "v6"
 
 const (
 	structureVersion = "v2"
@@ -155,7 +155,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // decides on the frame's technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueFVG, "", strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_fvg_zone_confirmed", ConfirmedEvidence: "m5_fvg_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_fvg_zone_confirmed", ConfirmedEvidence: "m5_fvg_rejection_confirmed",
 		InvalidationLabel: "fvg_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

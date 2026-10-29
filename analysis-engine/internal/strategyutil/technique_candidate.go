@@ -42,6 +42,8 @@ type TechniqueSpec struct {
 	// StopBudget is the instrument's stop envelope (see StopBudget): a structural stop wider than its cap is refused, never tightened; the zero value
 	// leaves the candidate as it was.
 	StopBudget StopBudget
+	// PublishStructure puts the structure's own bounds on the candidate (Candidate.Structure) for display. The zone family sets it.
+	PublishStructure bool
 }
 
 // structLowOrHigh is the structural invalidation: the far edge of the structure, one buffer beyond.
@@ -136,6 +138,9 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	if dec.Instance != nil && dec.Instance.Timeframe != "" {
 		candidate.StructureTimeframe = market.Timeframe(dec.Instance.Timeframe)
 	}
+	if spec.PublishStructure && dec.Instance != nil {
+		candidate.Structure = structureZone(dec, structLow, structHigh)
+	}
 	if conf != nil {
 		candidate.Reaction = &opportunity.ReactionConfirmation{
 			ZoneID: dec.ID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
@@ -150,6 +155,20 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 		}
 	}
 	return candidate, true
+}
+
+// structureZone is the structure the decision is anchored to, as drawn on its own timeframe: its whole bounds (not the clipped entry band), and the
+// open time of the bar that completed it. The execution frame is M5.
+func structureZone(dec *TechniqueDecision, low, high float64) *opportunity.StructureZone {
+	timeframe := market.M5
+	if dec.Instance.Timeframe != "" {
+		timeframe = market.Timeframe(dec.Instance.Timeframe)
+	}
+	formedAt := dec.Instance.OriginTime
+	if bars := dec.Detector.Frame.Bars; formedAt == 0 && dec.Instance.OriginIndex >= 0 && dec.Instance.OriginIndex < len(bars) {
+		formedAt = bars[dec.Instance.OriginIndex].Time
+	}
+	return &opportunity.StructureZone{Timeframe: timeframe, Low: low, High: high, FormedAt: formedAt}
 }
 
 // nearestOpposingTarget is the nearest unswept opposing liquidity at least the

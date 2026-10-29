@@ -58,8 +58,12 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 			DesiredMinimumPips: c.StopEnvelope.DesiredMinimumPips, Source: c.StopEnvelope.Source,
 		}
 	}
+	var structurePayload *StructurePayload
+	if c.Structure != nil {
+		structurePayload = &StructurePayload{Timeframe: string(c.Structure.Timeframe), Low: c.Structure.Low, High: c.Structure.High, FormedAt: c.Structure.FormedAt}
+	}
 	return OpportunityPayload{
-		TechnicalContext: technical, StopEnvelope: stopEnvelope,
+		TechnicalContext: technical, StopEnvelope: stopEnvelope, Structure: structurePayload,
 		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), StructureTimeframe: string(c.StructureTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},

@@ -266,6 +266,25 @@ class TechnicalContext(FrozenConfigModel):
     return self
 
 
+class StructureZone(FrozenConfigModel):
+  """The structure behind a zone-family setup (supply, demand, order_block, fvg) on its own timeframe.
+
+  Display only: ``low``/``high`` are the whole structure (the full fair value gap), not the execution band in ``entry``. ``formed_at`` is the
+  open time of the bar that completed it (the third candle of a gap).
+  """
+
+  timeframe: Literal["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"]
+  low: FiniteFloat
+  high: FiniteFloat
+  formed_at: int = Field(ge=0)
+
+  @model_validator(mode="after")
+  def validate_order(self):
+    if self.low > self.high:
+      raise ValueError("structure.low must be <= structure.high")
+    return self
+
+
 class AnalysisOpportunity(FrozenConfigModel):
   id: str = Field(min_length=1)
   strategy: str = Field(min_length=1)
@@ -274,6 +293,8 @@ class AnalysisOpportunity(FrozenConfigModel):
   # Typed provenance: the timeframe the structure was built on when it differs
   # from ``timeframe`` (an M15 zone reacted to on M5 bars); None otherwise.
   structure_timeframe: Literal["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"] | None = None
+  # Optional display block (older events omit it): which structure the setup is, with its own bounds.
+  structure: StructureZone | None = None
   direction: Literal["BUY", "SELL"]
   entry: EntryZone
   invalidation: PriceLevel

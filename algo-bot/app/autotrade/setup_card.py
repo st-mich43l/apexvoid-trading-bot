@@ -24,6 +24,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from html import escape
 from typing import Any, Awaitable, Callable
 
@@ -2022,6 +2023,41 @@ def _trade_area_target_lines(
   ]
 
 
+def structure_lines(
+  match: StrategyMatch,
+  *,
+  symbol: str,
+  execution_zone: tuple[float, float] | None,
+) -> list[str]:
+  """The "Structure:" line (and, when the order is placed elsewhere, the "Order zone:" line) under the setup name.
+
+  Display only. It reads the structure block Go published for a zone-family setup (FVG, Supply, Demand, Order Block); an event without the block renders
+  nothing, as it did before. ``Structure`` is the whole structure on its own timeframe, which may be a different (older, higher) one than the M5 the
+  trade is placed on; ``Order zone`` is shown only when the zone the order trades is not the structure's own bounds.
+  """
+  timeframe = str(match.structure_timeframe or "").upper()
+  low, high = match.structure_low, match.structure_high
+  if not timeframe or low is None or high is None:
+    return []
+  try:
+    low, high = float(low), float(high)
+  except (TypeError, ValueError):
+    return []
+  if not (math.isfinite(low) and math.isfinite(high)):
+    return []
+  name = card_setup_label(match.strategy, match.direction) or "Setup"
+  text = f"{name} {timeframe} · {_price_text(low, symbol=symbol)}–{_price_text(high, symbol=symbol)}"
+  if match.structure_formed_at:
+    text += f" · formed {datetime.fromtimestamp(int(match.structure_formed_at), tz=timezone.utc):%H:%M} UTC"
+  lines = [f"Structure: {escape(text)}"]
+  if execution_zone is not None:
+    order_low, order_high = min(execution_zone), max(execution_zone)
+    shown = (_price_text(order_low, symbol=symbol), _price_text(order_high, symbol=symbol))
+    if shown != (_price_text(low, symbol=symbol), _price_text(high, symbol=symbol)):
+      lines.append(f"Order zone: {shown[0]}–{shown[1]}")
+  return lines
+
+
 def format_plan_published_root_card(
   match: StrategyMatch,
   *,
@@ -2072,8 +2108,12 @@ def format_plan_published_root_card(
       f"{direction_icon} <b>{escape(direction)} · "
       f"{escape(setup_label)}</b> · {stars}"
     ),
-    "",
   ]
+  execution_zone = entry_span
+  if execution_zone is None and match.entry_low is not None and match.entry_high is not None:
+    execution_zone = (float(match.entry_low), float(match.entry_high))
+  lines.extend(structure_lines(match, symbol=symbol, execution_zone=execution_zone))
+  lines.append("")
   card_digits = card_price_digits(symbol)
   if entry_span is not None:
     lines.append(format_plan_entry_line(

@@ -221,6 +221,12 @@ class StrategyMatch:
   go_stop_envelope_cap_pips: float | None = None
   go_stop_envelope_desired_minimum_pips: float | None = None
   go_stop_envelope_source: str | None = None
+  # Display only (the root card's "Structure:" line): the whole structure behind a zone-family setup on its own timeframe, as Go published it.
+  # Additive; older cached matches omit it and no policy, identity or statistic reads it.
+  structure_timeframe: str | None = None
+  structure_low: float | None = None
+  structure_high: float | None = None
+  structure_formed_at: int | None = None
 
   def to_json(self) -> str:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
@@ -732,6 +738,22 @@ class StrategyMatch:
         go_stop_envelope_source=(
           None if payload.get("go_stop_envelope_source") is None
           else str(payload["go_stop_envelope_source"])
+        ),
+        structure_timeframe=(
+          None if payload.get("structure_timeframe") is None
+          else str(payload["structure_timeframe"]).upper()
+        ),
+        structure_low=(
+          None if payload.get("structure_low") is None
+          else float(payload["structure_low"])
+        ),
+        structure_high=(
+          None if payload.get("structure_high") is None
+          else float(payload["structure_high"])
+        ),
+        structure_formed_at=(
+          None if payload.get("structure_formed_at") is None
+          else int(payload["structure_formed_at"])
         ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
