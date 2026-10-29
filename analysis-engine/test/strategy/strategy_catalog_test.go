@@ -7,10 +7,13 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/asiarange"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/confluencezone"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/crt"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulsepullback"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/roundnumber"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/shockretest"
 	strategytrendline "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/test/legacyfixture"
 )
@@ -136,6 +139,7 @@ func TestStrategiesRejectMissingConfiguration(t *testing.T) {
 		factory strategy.Factory
 	}{
 		{"ifvg", ifvg.ID, ifvg.New}, {"trendline", strategytrendline.ID, strategytrendline.New}, {"crt", crt.ID, crt.New}, {"confluence_zone", confluencezone.ID, confluencezone.New}, {"impulse_pullback", impulsepullback.ID, impulsepullback.New},
+		{"round_number", roundnumber.ID, roundnumber.New}, {"asia_range", asiarange.ID, asiarange.New}, {"shock_retest", shockretest.ID, shockretest.New},
 	}
 	for _, tc := range factories {
 		t.Run(tc.name, func(t *testing.T) {

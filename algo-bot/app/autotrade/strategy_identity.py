@@ -22,6 +22,9 @@ STRUCTURAL_SETUPS = frozenset({
   "FVG",
   "iFVG",
   "CRT",
+  "Round Number",
+  "Asia Range",
+  "Shock Retest",
   "Confluence Zone",
 })
 

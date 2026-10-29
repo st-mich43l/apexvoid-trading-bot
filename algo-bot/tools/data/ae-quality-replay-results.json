@@ -4523,6 +4523,51 @@
  },
  "seed": 20261014,
  "strategy_matrix": {
+  "asia_range": {
+   "confirmed_defects": [
+    "New strategy: no production trades; rare on the real captures (2 published)."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": null,
+    "median_technical_rr": null,
+    "share_room_cover_below_1": null,
+    "share_technical_rr_below_1": null
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/asia_range.md (test/scalpstrategies)",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "measured components published"
+   },
+   "rationale": "A rare setup with structural geometry is not a reason to retire it; no realized evidence yet.",
+   "real_trade_sample_size": null,
+   "realized_r_evidence": null,
+   "recommendation_scope": "XAU only; re-audit when >= 30 setups exist",
+   "replay_evidence": {
+    "ci95": null,
+    "filled": null,
+    "mean_r": null,
+    "oos_mean_r": null,
+    "opportunities": null
+   },
+   "strategy_id": "asia_range",
+   "technical_thesis": "London raid or acceptance of the finalized Asia range; one thesis per edge per day.",
+   "validation_conditions": "Range width in M15 ATR within [1, 6]; sweep and reclaim or M15 break with M5 acceptance and retest measured.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "COMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v1"
+  },
   "break_retest": {
    "confirmed_defects": [
     "Quality constant at 0.75: it cannot rank or be calibrated."
@@ -5132,6 +5177,96 @@
     "technical": "PASS"
    },
    "version": "v2"
+  },
+  "round_number": {
+   "confirmed_defects": [
+    "New strategy: no production trades; the real-capture smoke test publishes on the XAU captures only."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": null,
+    "median_technical_rr": null,
+    "share_room_cover_below_1": null,
+    "share_technical_rr_below_1": null
+   },
+   "final_recommendation": "RETAIN",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": false,
+   "prior_certification": "docs/strategies/round_number.md (test/scalpstrategies)",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "measured components published"
+   },
+   "rationale": "Geometry is structural and inside the instrument stop budget by construction; no realized evidence yet.",
+   "real_trade_sample_size": null,
+   "realized_r_evidence": null,
+   "recommendation_scope": "XAU only; re-audit when >= 30 setups exist",
+   "replay_evidence": {
+    "ci95": null,
+    "filled": null,
+    "mean_r": null,
+    "oos_mean_r": null,
+    "opportunities": null
+   },
+   "strategy_id": "round_number",
+   "technical_thesis": "Stop run or accepted break at a gold handle (M5 sweep_reclaim or break_retest); one episode per handle, side and trading day.",
+   "validation_conditions": "Handle distance, sweep depth, reclaim and retest rejection measured in M5 ATR; stop budget and confluence floor enforced.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "COMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "PASS"
+   },
+   "version": "v1"
+  },
+  "shock_retest": {
+   "confirmed_defects": [
+    "The literal geometry (stop beyond the shock origin, target the shock extreme, entry in the 50-61.8 percent band) caps the reward-to-risk below 1, so it publishes nothing on the real captures."
+   ],
+   "enabled": true,
+   "enabled_instruments": [
+    "XAU"
+   ],
+   "execution_compatibility": {
+    "median_room_cover": null,
+    "median_technical_rr": null,
+    "share_room_cover_below_1": null,
+    "share_technical_rr_below_1": null
+   },
+   "final_recommendation": "RECONSTRUCT",
+   "independent_review_status": "pending",
+   "observe_only_instruments": [],
+   "owner_approval_required": true,
+   "prior_certification": "docs/strategies/shock_retest.md (test/scalpstrategies)",
+   "quality_formula": {
+    "class": "stars_over_3",
+    "note": "measured components published"
+   },
+   "rationale": "The detector is correct as specified, but the specified geometry cannot clear the minimum reward-to-risk; enablement is unchanged until the owner decides.",
+   "real_trade_sample_size": null,
+   "realized_r_evidence": null,
+   "recommendation_scope": "XAU only; the geometry needs an owner decision (target beyond the extreme, or an entry nearer the extreme)",
+   "replay_evidence": {
+    "ci95": null,
+    "filled": null,
+    "mean_r": null,
+    "oos_mean_r": null,
+    "opportunities": null
+   },
+   "strategy_id": "shock_retest",
+   "technical_thesis": "First retest of the 50-61.8 percent retracement after a price-defined volatility shock; target the shock extreme.",
+   "validation_conditions": "Shock size in ATR, settle, retracement band and dead zone measured; stop budget enforced.",
+   "verdicts": {
+    "evidence": "INSUFFICIENT",
+    "execution": "INCOMPATIBLE",
+    "performance": "UNPROVEN",
+    "technical": "PASS_WITH_DEFECTS"
+   },
+   "version": "v1"
   },
   "supply": {
    "confirmed_defects": [

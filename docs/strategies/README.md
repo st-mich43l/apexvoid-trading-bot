@@ -1,6 +1,6 @@
 # Strategies
 
-Twelve independent technical theses. Each has one Go package in
+Fifteen independent technical theses. Each has one Go package in
 `analysis-engine/internal/strategy/`, one versioned entry under
 `analysis.strategies` in `config/analysis.yml` and a specification here. All are
 enabled and no instrument contains any of them (`observe_only_strategies: []`
@@ -27,6 +27,9 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `flip_zone` | v5 | M5 | zone born of an accepted role flip at a key level, confirmed reaction after the break | `test/legacyparity` golden | [flip_zone](flip_zone.md) |
 | `trendline` | v6 | M5 | causal trendline with healthy anchors, live interaction, reaction | `test/legacyparity` golden | [trendline](trendline.md) |
 | `confluence_zone` | v3 | M5 | two or more genuinely independent structures on one price region, measured rejection | contract tests, `test/czreplay` | [confluence_zone](confluence_zone.md), [spec](confluence-zone-v3-technical-spec.md) |
+| `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | contract tests, real-capture smoke | [round_number](round_number.md) |
+| `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | contract tests, real-capture smoke | [asia_range](asia_range.md) |
+| `shock_retest` | v1 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction (see the open issue in the spec) | contract tests, real-capture smoke | [shock_retest](shock_retest.md) |
 | `impulse_pullback` | v3 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | `test/scalpparity` (synthetic M1 only) | [impulse_pullback](impulse_pullback.md) |
 
 "Golden" means the decisions and entry reproduce the frozen Python publisher on
@@ -63,6 +66,8 @@ not one strategy × direction cell. The zone part of it is drawn in full in
 | Stop wider than the instrument cap is refused, never tightened | the same seven; CRT, Break & Retest, iFVG and Confluence Zone own their equivalent | [legacy-stop-budget](legacy-stop-budget.md) |
 | Setup found on M15/H1 structure, confirmed and executed on M5 | supply, demand, order_block, fvg | [htf-zone-structure](htf-zone-structure.md) |
 | Sessions, ranges and sweeps are evidence, never strategies | every strategy that cites them | [shared-structure-evidence](shared-structure-evidence.md) |
+| The London session's net move in M15 ATR is evidence (`session_momentum_aligned` / `_opposed`), never a gate or a confluence factor | round_number, asia_range, shock_retest, when confirmed in New York | [shared-structure-evidence](shared-structure-evidence.md) |
+| Stop wider than the instrument cap is refused, never tightened | round_number, asia_range, shock_retest as well | [legacy-stop-budget](legacy-stop-budget.md) |
 
 ## Candidate contract
 

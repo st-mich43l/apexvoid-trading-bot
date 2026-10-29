@@ -593,6 +593,102 @@ analysis:
       displacement_atr_multiple: 1.5
       displacement_body_fraction: 0.6
       reward_risk_ladder: [2.0, 1.0]
+    round_number:
+      # v1 (docs/strategies/round_number.md): stop runs at gold handles (Osler 2003/2005). The stop orders cluster just beyond a round number: a trade
+      # through the band that is taken straight back is a stop run to fade, one that is accepted is a cascade to trade on the retest. Scoped to XAU.
+      version: v1
+      enabled: true
+      symbols: [XAU]
+      handle_step: 10.0
+      major_step: 50.0
+      max_handle_distance_atr: 3.0
+      atr_length: 14
+      atr_window_bars: 140
+      # Setup A: sweep the handle by 5 to 40 pips, close back through it, then an M5 structure shift.
+      minimum_sweep_pips: 5.0
+      maximum_sweep_pips: 40.0
+      minimum_reclaim_pips: 2.0
+      reclaim_max_bars: 3
+      acceptance_closes: 2
+      confirmation_mode: mss
+      structure_pivot_bars: 2
+      structure_lookback_bars: 24
+      mss_max_bars: 6
+      minimum_mss_body_ratio: 0.5
+      minimum_mss_displacement_atr: 0.5
+      minimum_mss_close_strength: 0.6
+      confirmation_max_age_bars: 2
+      entry_band_pips: 15.0
+      # Setup B: a forceful close through the handle, accepted by closes beyond it, the first retest rejected.
+      break_buffer_pips: 10.0
+      minimum_break_body_ratio: 0.6
+      minimum_break_range_atr: 1.2
+      retest_max_bars: 12
+      retest_tolerance_pips: 5.0
+      displacement_grade_atr: 1.0
+      minimum_wick_ratio: 0.4
+      stop_buffer_pips: 5.0
+      stop_buffer_atr: 0.10
+      minimum_target_r: 1.0
+      expiry_hours: 2
+      # Evidence only (strategyutil.SessionMomentum): London's net move in M15 ATR, read for what is confirmed during New York.
+      session_momentum_minimum_atr: 1.0
+    asia_range:
+      # v1 (docs/strategies/asia_range.md): London raids the finalized Asia range and reverses, or breaks it and is accepted. A complete thesis with its
+      # own anchor, confirmation and stop; the session is the structure it is about, never a clock gate. Scoped to XAU.
+      version: v1
+      enabled: true
+      symbols: [XAU]
+      atr_length: 14
+      atr_window_bars: 140
+      minimum_range_atr: 1.0
+      maximum_range_atr: 6.0
+      active_window_hours: 7
+      minimum_sweep_pips: 3.0
+      minimum_sweep_atr: 0.10
+      minimum_reclaim_pips: 1.0
+      minimum_reclaim_atr: 0.05
+      reclaim_max_bars: 6
+      structure_pivot_bars: 2
+      structure_lookback_bars: 24
+      mss_max_bars: 12
+      minimum_mss_body_ratio: 0.5
+      minimum_mss_displacement_atr: 0.5
+      minimum_mss_close_strength: 0.6
+      confirmation_max_age_bars: 2
+      entry_band_pips: 20.0
+      break_buffer_atr: 0.15
+      acceptance_closes: 2
+      retest_max_bars: 24
+      displacement_grade_atr: 1.0
+      minimum_wick_ratio: 0.4
+      measured_move_fraction: 0.5
+      stop_buffer_pips: 5.0
+      stop_buffer_atr: 0.10
+      minimum_target_r: 1.0
+      expiry_hours: 4
+      session_momentum_minimum_atr: 1.0
+    shock_retest:
+      # v1 (docs/strategies/shock_retest.md): the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the
+      # shock direction (Awartani, Hussain and Virk 2024; Cai, Cheung and Wong 2001). Scoped to XAU.
+      version: v1
+      enabled: true
+      symbols: [XAU]
+      atr_length: 14
+      atr_window_bars: 140
+      shock_range_atr: 3.0
+      minimum_shock_body_ratio: 0.6
+      shock_leg_atr: 4.0
+      settle_bars: 1
+      retest_max_bars: 24
+      minimum_wick_ratio: 0.4
+      displacement_grade_atr: 1.0
+      confirmation_max_age_bars: 2
+      stop_buffer_pips: 5.0
+      stop_buffer_atr: 0.10
+      minimum_target_r: 1.0
+      expiry_hours: 2
+      session_momentum_minimum_atr: 1.0
 
   # Analysis Engine owns these market-state inputs. Depth and thresholds are
   # shared technical configuration, not execution policy.

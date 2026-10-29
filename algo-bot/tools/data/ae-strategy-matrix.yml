@@ -265,3 +265,57 @@ strategies:
     owner_approval_required: false
     rationale: Already contained; nothing to enable.
     prior_certification: docs/strategies/impulse_pullback.md
+  round_number:
+    technical_thesis: Stop run or accepted break at a gold handle (M5 sweep_reclaim or break_retest); one episode per handle, side and trading day.
+    validation_conditions: Handle distance, sweep depth, reclaim and retest rejection measured in M5 ATR; stop budget and confluence floor enforced.
+    quality_formula:
+      class: stars_over_3
+      note: measured components published
+    confirmed_defects:
+    - 'New strategy: no production trades; the real-capture smoke test publishes on the XAU captures only.'
+    verdict:
+      technical: PASS
+      execution: COMPATIBLE
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
+    recommendation: RETAIN
+    scope: XAU only; re-audit when >= 30 setups exist
+    owner_approval_required: false
+    rationale: Geometry is structural and inside the instrument stop budget by construction; no realized evidence yet.
+    prior_certification: docs/strategies/round_number.md (test/scalpstrategies)
+  asia_range:
+    technical_thesis: London raid or acceptance of the finalized Asia range; one thesis per edge per day.
+    validation_conditions: Range width in M15 ATR within [1, 6]; sweep and reclaim or M15 break with M5 acceptance and retest measured.
+    quality_formula:
+      class: stars_over_3
+      note: measured components published
+    confirmed_defects:
+    - 'New strategy: no production trades; rare on the real captures (2 published).'
+    verdict:
+      technical: PASS
+      execution: COMPATIBLE
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
+    recommendation: RETAIN
+    scope: XAU only; re-audit when >= 30 setups exist
+    owner_approval_required: false
+    rationale: A rare setup with structural geometry is not a reason to retire it; no realized evidence yet.
+    prior_certification: docs/strategies/asia_range.md (test/scalpstrategies)
+  shock_retest:
+    technical_thesis: First retest of the 50-61.8 percent retracement after a price-defined volatility shock; target the shock extreme.
+    validation_conditions: Shock size in ATR, settle, retracement band and dead zone measured; stop budget enforced.
+    quality_formula:
+      class: stars_over_3
+      note: measured components published
+    confirmed_defects:
+    - 'The literal geometry (stop beyond the shock origin, target the shock extreme, entry in the 50-61.8 percent band) caps the reward-to-risk below 1, so it publishes nothing on the real captures.'
+    verdict:
+      technical: PASS_WITH_DEFECTS
+      execution: INCOMPATIBLE
+      performance: UNPROVEN
+      evidence: INSUFFICIENT
+    recommendation: RECONSTRUCT
+    scope: XAU only; the geometry needs an owner decision (target beyond the extreme, or an entry nearer the extreme)
+    owner_approval_required: true
+    rationale: The detector is correct as specified, but the specified geometry cannot clear the minimum reward-to-risk; enablement is unchanged until the owner decides.
+    prior_certification: docs/strategies/shock_retest.md (test/scalpstrategies)

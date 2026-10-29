@@ -40,7 +40,7 @@ def _registered() -> set[str]:
 
 def test_matrix_covers_exactly_the_registered_strategies() -> None:
   assert set(MATRIX) == _registered()
-  assert len(MATRIX) == 12
+  assert len(MATRIX) == 15
 
 
 @pytest.mark.parametrize("strategy_id", sorted(MATRIX))
