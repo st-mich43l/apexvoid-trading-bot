@@ -1,6 +1,6 @@
 """Dump the historical Python analysis chain (the oracle) at hourly checkpoints of one committed capture.
 
-This is an independent source-to-source oracle for docs/architecture/python-go-migration-forensic-audit.md. It runs the
+This is an independent source-to-source oracle for `git show f02d62f:docs/architecture/python-go-migration-forensic-audit.md`. It runs the
 frozen Python ``build_context`` (the exact call the frozen scanner made, ``causal_structure=False``) on a git worktree of
 a historical commit and serialises every layer of ``TimeframeAnalysis`` with absolute bar timestamps, so a Go dump of the
 same checkpoints can be compared layer by layer. It imports nothing from the Go engine, never reads Go output, and never

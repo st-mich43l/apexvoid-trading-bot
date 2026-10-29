@@ -1,6 +1,5 @@
 # Confluence Zone Strategy V3
 
-> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS, execution COMPATIBLE, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on XAU and GBPJPY; keep EURUSD, GBPUSD, USDJPY live. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 `confluence_zone` is the one approved compositional exception: it trades a price
 region that at least `minimum_facts` (two) **genuinely independent**, already-canonical
@@ -13,9 +12,8 @@ part of a confluence).
 v3 replaces the Python-parity v2, whose contract could not answer "are two
 independent structures supporting the same price?": it counted technique *labels*,
 published the *union* of the members as the entry, let a member be born on the
-reacting candle, hard-coded two quality factors, and invented a 2R target. The audit
-that found this is [confluence-zone-xau-forensic-audit](confluence-zone-xau-forensic-audit.md);
-the full contract, the mathematics and the verification are in
+reacting candle, hard-coded two quality factors, and invented a 2R target. The XAU forensic audit
+that found this predates v3 and is in the repository history; the full contract, the mathematics and the verification are in
 [confluence-zone-v3-technical-spec.md](confluence-zone-v3-technical-spec.md). This
 page is the summary.
 
@@ -25,7 +23,7 @@ page is the summary.
   independence, regions, causal availability: pure) and `internal/strategy/confluencezone`
   (reaction, stop, target, candidate). The Algo Bot applies execution policy and
   arbitration only; it keeps no second decision.
-- **Certification**: see [confluence-zone-v3-certification](confluence-zone-v3-certification.md)
+- **Certification**: `analysis-engine/test/czreplay`, pinned against `analysis-engine/testdata/confluence-zone-v3-replay-results.json`
   (technical certification and the trading evidence are separate judgements).
 - **Symbols**: all instruments. Pip size, the proximal entry slice
   (`fvg_entry_max_width_price`) and the execution stop cap (`execution_stop_max_pips`)
@@ -35,9 +33,8 @@ page is the summary.
   `m5_confluence_reaction`; both are carried. Enablement, containment, risk and
   arbitration are not changed by v3.
 - **Arbitration**: opportunities on the same symbol and direction that share a thesis
-  group, a structure or an entry corridor compete; the best by quality, confluence,
-  structural quality and freshness trades and the rest are suppressed
-  ([execution](../execution.md#same-thesis-arbitration)). `Quality.Overall` is the mean of this strategy's `score_*` dimensions ([quality-scoring.md](quality-scoring.md)); the confluence stars remain a compatibility diagnostic and the only quality-based gate (`min_confluence`).
+  group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id
+  trades and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)). `Quality.Overall` is the mean of this strategy's `score_*` dimensions ([quality](../analysis-engine.md#acceptance-and-quality)); the confluence stars remain a compatibility diagnostic and the only quality-based gate (`min_confluence`).
 
 ## The contract in one page
 

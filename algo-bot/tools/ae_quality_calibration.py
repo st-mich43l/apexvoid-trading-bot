@@ -4,7 +4,7 @@ Reproduce (repository root, Python 3.12, the algo-bot requirements installed):
 
     cd analysis-engine && AEQ_DUMP=/tmp/aeq go test ./test/aequality -run TestReplayAllStrategies
     cd ../algo-bot && PYTHONPATH=. python -m tools.ae_quality_calibration /tmp/aeq/records.jsonl \
-        --out ../docs/strategies/ae-quality-calibration-results.json
+        --out /tmp/ae-quality-calibration-results.json
 
 Method. The records are the all-strategy replay of every committed production capture (candidates
 with their published components, geometry and a closed-candle causal simulation, see

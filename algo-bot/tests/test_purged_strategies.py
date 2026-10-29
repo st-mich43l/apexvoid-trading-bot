@@ -74,7 +74,7 @@ def test_no_live_code_or_configuration_names_a_purged_strategy():
   assert offenders == {}, offenders
 
 
-# ---- Fade Scalp (purged 2026-10-29, docs/strategies/fade-scalp-purge.md) -------------------------------------------------------------------
+# ---- Fade Scalp (purged 2026-10-29, CHANGELOG.md, 2026-10-29) -------------------------------------------------------------------
 # Unlike the three above, its display name stays resolvable as a retired, profile-less alias: persisted trades, plans, events and stats of the 18
 # production trades must keep decoding to a name, while nothing can publish, enable, size or stop it any more.
 

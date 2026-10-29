@@ -1,7 +1,5 @@
 # XAU Key Level: publish only after the level has been swept (key_level v6)
 
-Branch `agent/keylevel-sweep-first`, base `master` at `9cb13660`. Go engine only, XAU only. No Python, stop envelope, floor, cap, ladder, sizing, enablement, arbitration, quality or `min_confluence` changed, and no other strategy or instrument.
-
 ## 1. The owner report (2026-10-28)
 
 XAU's manipulation and V-shaped runs of the last two weeks have hurt the bot. A replay of the committed XAU captures through the engine as it stood (the candidates the AE publishes today; the XAU ladder 1R-4R at 40/20/20/20, break-even after 1R, an executed stop of max(structural, 50 pips), candidates above 70 pips skipped; R measured above 20 random entries with the same stop and ladder; symbol-day cluster bootstrap) showed:
@@ -48,7 +46,7 @@ Tests (`internal/strategy/keylevel/sweep_test.go`):
 
 ## 4. What it does to the published set
 
-`analysis-engine/test/keylevelsweep/measure_test.go` (`KEYLEVEL_SWEEP_OUT=<dir>`) replays all 21 committed M5 captures twice with the engine as configured (stop budget on): without the rule (the v5 behaviour for XAU) and with it. Unit: one XAU Key Level confirmed candidate per opportunity id, first sight across overlapping captures. Result: [keylevel-sweep-first-results.json](keylevel-sweep-first-results.json).
+`analysis-engine/test/keylevelsweep/measure_test.go` (`KEYLEVEL_SWEEP_OUT=<dir>`) replays all 21 committed M5 captures twice with the engine as configured (stop budget on): without the rule (the v5 behaviour for XAU) and with it. Unit: one XAU Key Level confirmed candidate per opportunity id, first sight across overlapping captures. Result: `keylevel-sweep-first-results.json` (written by the replay, not committed).
 
 | period (confirmation time, UTC) | XAU Key Level candidates | swept | not swept | refused by the rule | recovered by the per-attempt selection |
 |---|---:|---:|---:|---:|---:|
@@ -97,7 +95,7 @@ Non-parity goldens that moved, and why (regenerated, reviewed, nothing else chan
 | same, EURUSD / GBPUSD 2026-10-13 | 4,406 / 6,007 | 4,406 / 6,007 (hash changed) | per-attempt selection only (the rule is XAU-only, asserted): a different, in-budget candidate is published where the best attempt used to be refused |
 | same, USDJPY 2026-10-13 | 5,956 | 5,957 (+1) | per-attempt selection only |
 | same, GBPJPY 2026-10-13 | 4,439 | 4,439 (identical) | none |
-| `docs/strategies/confluence-zone-v3-replay-results.json` | the six hashes above | the six new ones | derived from the same replays; its Confluence Zone figures are unchanged (only the `other_strategies_candidates*` fields differ) |
+| `analysis-engine/testdata/confluence-zone-v3-replay-results.json` | the six hashes above | the six new ones | derived from the same replays; its Confluence Zone figures are unchanged (only the `other_strategies_candidates*` fields differ) |
 
 That baseline file certifies that the Confluence Zone v3 change did not touch other strategies. Like the reaction-anchored-stop and stop-budget changes before it, a deliberate change to Key Level moves it, and the new values are the baseline from here on.
 

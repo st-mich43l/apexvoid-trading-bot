@@ -41,7 +41,7 @@ type Config struct {
 	// ordered by CandidateID alone and every opposite-direction thesis is a
 	// conflict that only the structural bias can settle, whatever the margin.
 	// Quality.Overall is a per-strategy score on its own scale that did not
-	// predict outcomes (docs/strategies/arbitration-impact-report.md); the zero
+	// predict outcomes (docs/execution.md (same-thesis arbitration)); the zero
 	// value keeps the quality order.
 	IgnoreQuality bool
 	// InPlayATR is how far (in the candidate's own ATR) price may sit from

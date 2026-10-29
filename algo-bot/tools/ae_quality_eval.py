@@ -4,10 +4,10 @@ Reproduce (repository root, Python 3.12, the algo-bot requirements installed):
 
     cd analysis-engine && AEQ_DUMP=/tmp/aeq go test ./test/aequality -run TestReplayAllStrategies
     cd ../algo-bot && PYTHONPATH=. python -m tools.ae_quality_eval /tmp/aeq/records.jsonl \
-        --trades /tmp/trades.csv --out ../docs/strategies/ae-quality-replay-results.json
+        --trades /tmp/trades.csv --out tools/data/ae-quality-replay-results.json
 
 ``--trades`` is optional: it is a read-only export of ``auto_trade_results`` joined to the
-opportunity ledger (the query is in docs/strategies/ae-quality-certification.md) and is not
+opportunity ledger (the query is in `git show f02d62f:docs/strategies/ae-quality-certification.md`) and is not
 committed. Without it the production section is omitted and the replay section is unchanged.
 
 Everything simulated here is a *hypothetical opportunity outcome*: closed candles, causal fills,
@@ -331,7 +331,7 @@ def exit_path_bounds(rows: list[dict]) -> dict:
 
 def strategy_matrix(report: dict) -> dict:
   """Merge the reviewer's matrix with the measured replay and production numbers."""
-  document = yaml.safe_load((REPO / "docs/strategies/ae-strategy-matrix.yml").read_text())
+  document = yaml.safe_load((REPO / "algo-bot/tools/data/ae-strategy-matrix.yml").read_text())
   config = strategy_config()
   by_id = report.get("production_trades", {}).get("by_strategy_id", {})
   matrix = {}

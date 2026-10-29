@@ -13,7 +13,7 @@ fixed-reward:risk fallback target, the quality geometry (`room_reward_risk`) and
 ## Measurement
 
 `analysis-engine/test/reactionstop/measure_test.go` replays all 21 committed M5 captures (the `-m1-` captures excluded) and compares, for every confirmed candidate of the seven strategies, the
-structural-only price with the anchored one. Output: [reaction-anchored-stop-results.json](reaction-anchored-stop-results.json). Nothing here is an outcome and nothing was tuned on it.
+structural-only price with the anchored one. Output: `reaction-anchored-stop-results.json` (written by the replay, not committed). Nothing here is an outcome and nothing was tuned on it.
 
 - **Before** figures come from the merge-base tree (`797266e4`): `git worktree add <dir> 797266e4`, copy `measure_test.go` into it, `REACTION_STOP_OUT=<out> go test ./test/reactionstop -run TestMeasureReactionAnchoredStop`.
   They reproduce the baseline exactly: 12,080 confirmed candidates, 1,481 (12.3%) with the stop inside the reaction; key_level FX 577/4,289, XAU 244/1,697; demand FX 239/2,113, XAU 33/425; supply FX 177/1,937, XAU 40/400;
@@ -69,7 +69,7 @@ structural-only price with the anchored one. Output: [reaction-anchored-stop-res
 | File | Reason | Diff |
 |---|---|---|
 | `analysis-engine/testdata/replay-go-supply-demand-confirmed-envelopes-xau-20260921.jsonl` and `replay-go-xau-20260921.meta.json` | the confirmed supply/demand envelopes carry the anchored invalidation, the evidence code and the geometry-derived `room_reward_risk`; opportunity ids change with the strategy version | 173 of 173 rows change id/event id (version bump); matched by strategy, direction, time and zone, 44 rows change invalidation (all further out), evidence and `room_reward_risk`; entry, targets, direction, timeframe and expiry are identical in all 173 |
-| `analysis-engine/testdata/confluence-zone-other-strategies-baseline-master-f18179f.json` and `docs/strategies/confluence-zone-v3-replay-results.json` | the hash of the other strategies' candidates includes the seven strategies' invalidation (and their ids) | 6 of 6 captures: the hash changes, the candidate counts are identical |
+| `analysis-engine/testdata/confluence-zone-other-strategies-baseline-master-f18179f.json` and `analysis-engine/testdata/confluence-zone-v3-replay-results.json` | the hash of the other strategies' candidates includes the seven strategies' invalidation (and their ids) | 6 of 6 captures: the hash changes, the candidate counts are identical |
 
 No parity golden changed (`test/keylevelparity`, `test/techniqueparity`, `test/legacyparity`, `test/detectorparity` pass untouched), and no causality test changed.
 

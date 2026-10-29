@@ -260,11 +260,11 @@ func TestCertification(t *testing.T) {
 		}
 		return
 	}
-	want, err := os.ReadFile(repoFile("docs", "strategies", "confluence-zone-v3-replay-results.json"))
+	want, err := os.ReadFile(repoFile("analysis-engine", "testdata", "confluence-zone-v3-replay-results.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(want, got) {
-		t.Fatal("the committed replay results drifted: regenerate with CZ_RESULTS_OUT=docs/strategies/confluence-zone-v3-replay-results.json go test ./test/czreplay -run TestCertification and review the diff")
+		t.Fatal("the committed replay results drifted: regenerate with CZ_RESULTS_OUT=analysis-engine/testdata/confluence-zone-v3-replay-results.json go test ./test/czreplay -run TestCertification and review the diff")
 	}
 }

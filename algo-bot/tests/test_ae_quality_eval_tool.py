@@ -23,7 +23,7 @@ from tools import ae_quality_eval as ev
 pytestmark = pytest.mark.no_database
 
 REPO = Path(ev.REPO)
-MATRIX = yaml.safe_load((REPO / "docs/strategies/ae-strategy-matrix.yml").read_text())["strategies"]
+MATRIX = yaml.safe_load((REPO / "algo-bot/tools/data/ae-strategy-matrix.yml").read_text())["strategies"]
 RECOMMENDATIONS = {"RETAIN", "RECONSTRUCT", "RETIRE"}
 VOCABULARY = {
   "technical": {"PASS", "PASS_WITH_DEFECTS", "FAIL"},
@@ -59,7 +59,7 @@ def test_matrix_row_is_well_formed(strategy_id: str) -> None:
 
 
 def test_committed_results_match_the_matrix() -> None:
-  results = json.loads((REPO / "docs/strategies/ae-quality-replay-results.json").read_text())
+  results = json.loads((REPO / "algo-bot/tools/data/ae-quality-replay-results.json").read_text())
   merged = results["strategy_matrix"]
   assert set(merged) == set(MATRIX)
   for strategy_id, row in MATRIX.items():

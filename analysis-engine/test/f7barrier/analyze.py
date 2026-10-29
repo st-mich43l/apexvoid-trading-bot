@@ -1,4 +1,4 @@
-"""Aggregate the F-7 replay into the tables of docs/architecture/f7-opposing-barrier-ground-truth.md.
+"""Aggregate the F-7 replay into the tables of `git show f02d62f:docs/architecture/f7-opposing-barrier-ground-truth.md`.
 
 Inputs are the outputs of extract_events.py, oracle_books.py, dump_test.go, credibility.py, replay_admission.py, simulate.py and
 anatomy.py. Pure Python 3, deterministic (the bootstrap uses a fixed seed).

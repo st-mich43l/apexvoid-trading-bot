@@ -1,6 +1,5 @@
 # Supply
 
-> **Quality review (2026-10-14): adjusted in v3.** The audit found technical RR below 1 in most setups and a weak hypothetical result; v3 removes spent zones (below). The geometry finding is unchanged and deliberately not "fixed": it does not separate outcomes in the replay (see below). See [ae-quality-certification.md](ae-quality-certification.md). Independent review: pending.
 
 ## Spent zones (v3)
 
@@ -89,7 +88,7 @@ execution-age policy.
 
 `Quality.Components`: `freshness_quality`
 (`1.0 - 0.15*TouchCount`, floored at 0.2 — a fresh zone is the cleanest
-read, each touch erodes confidence). `Overall` is that value. Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [q3-quality-validation.md](q3-quality-validation.md).
+read, each touch erodes confidence). `Overall` is that value. Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [quality](../analysis-engine.md#acceptance-and-quality).
 
 Evidence codes: `m5_supply_zone_<state>`, `m5_supply_zone_relevance_<relevance>`,
 `m5_supply_zone_layer_<layer>`.
@@ -133,10 +132,9 @@ validity, entry clip and stop rules.
 
 ## Status and execution
 
-- **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
+- **Certification**: `LEGACY_PARITY_PROVEN` ([catalog](README.md#catalog)).
 - **Symbols**: all instruments.
 - **Execution**: Trades on every instrument.
 - **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by quality,
-  confluence, structural quality and freshness trades and the rest are
-  suppressed ([execution](../execution.md#same-thesis-arbitration)).
+  thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
+  (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).

@@ -14,7 +14,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/replaycapture"
 )
 
-// The tests below reproduce the migration audit's confirmed porting defects (docs/architecture/python-go-migration-forensic-audit.md).
+// The tests below reproduce the migration audit's confirmed porting defects (`git show f02d62f:docs/architecture/python-go-migration-forensic-audit.md`).
 // They are skipped unless requested. AUDIT_FINDINGS=1 MEASURES and logs (the suite stays green while the defects are open and nothing in
 // production changes); AUDIT_STRICT=1 ASSERTS the Python behaviour and therefore fails until the defect is fixed.
 

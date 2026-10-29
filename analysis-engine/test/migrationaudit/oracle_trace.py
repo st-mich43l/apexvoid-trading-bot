@@ -1,6 +1,6 @@
 """Which Python functions does the frozen analysis + detector chain actually execute on the committed captures?
 
-For docs/architecture/python-go-parity-matrix.json: a Python function that is never executed on 11 real captures x
+For `git show f02d62f:docs/architecture/python-go-parity-matrix.json`: a Python function that is never executed on 11 real captures x
 every registered detector is reported as NOT_EXERCISED instead of being given a verdict by name. Also records, per detector,
 how often it fires (non-None result) at the traced checkpoints.
 

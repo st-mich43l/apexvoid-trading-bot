@@ -1,94 +1,109 @@
 # Order Block
 
-> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on EURUSD and GBPJPY; XAU and USDJPY unchanged. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
+`order_block` `v5`, package `analysis-engine/internal/strategy/orderblock`.
+Structure on M5, M15 and H1 (`higher_timeframes: [M15, H1]`); confirmation and
+execution on M5. Trades on every instrument.
 
-## Strategy ID / version
+## Two populations, one is traded
 
-`order_block`, `v5`. Implemented in
-`analysis-engine/internal/strategy/orderblock`. Algorithm versions:
-`structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
+```mermaid
+flowchart LR
+  subgraph traded [traded: confirmed path]
+    TZ["techniquezone.OrderBlocks<br/>M5 · M15 · H1 frames"] --> CT["strategyutil.ConfirmedTechnique"] --> C1["confirmed candidate<br/>evidence m5_order_block_rejection_confirmed"]
+  end
+  subgraph resting [not executable: resting observation]
+    V2["internal/zone order blocks<br/>Fresh/Touched, Immediate/Nearby"] --> R1["resting candidate<br/>evidence m5_order_block_STATE"]
+  end
+```
 
-**Reaction after formation (Q2).** An order block exists once the break of structure that qualifies it has closed (`Zone.BreakIndex`); a touch or confirmation on bars up to that break is its formation, not a reaction to it (20 of 549 replayed confirmed Order Block opportunities).
+Everything below describes the confirmed path, the one that produces trades.
+The resting candidates (`orderblock.resting`) carry no reaction and are never
+executed; their lifecycle is the V2 zone book's (`analysis.techniques.*`).
 
-## Purpose / thesis
+## What an order block is
 
-A still-valid, currently-relevant Order Block zone is a standing reaction
-zone in whichever direction its own `Side` implies
-(`zone.Side.Direction()` — Demand-side OB expects a bounce/buy,
-Supply-side OB expects a rejection/sell). `internal/zone` already decides
-what an order block IS (origin candle/displacement/structure-break
-relationship, not "last opposite candle before a move" alone); this
-strategy decides tradeability only.
+```mermaid
+flowchart TD
+  LEG["displacement leg<br/>consecutive same-direction candles,<br/>move ≥ 1.5 ATR, at least half with body ≥ 0.6 of range"] --> BOS{"a BOS or CHoCH in the leg's direction<br/>falls inside the leg?"}
+  BOS -- no --> NO[no order block]
+  BOS -- yes --> ORG["origin = last opposite-direction candle<br/>before the leg"]
+  ORG --> BAND["band = origin candle body<br/>[min(open, close), max(open, close)]"]
+  BAND --> SIDE["up leg → demand (BUY)<br/>down leg → supply (SELL)"]
+```
 
-## Supported instruments / timeframes
+`techniquezone.OrderBlocks` (`techniquezone.go`) builds them on each frame's own
+bars. Touches are counted from the bar after the structure break.
 
-Any symbol; single timeframe `M5`.
+## When it stays tradable
 
-## Required regime / structure / liquidity / location
+The block is judged on its own frame's bars, with that frame's median ATR over
+the 400-bar window:
 
-- Zone `Kind == KindOrderBlock`.
-- `State` is `Fresh` or `Touched`.
-- `Relevance` is `Immediate` or `Nearby`.
-- `Strength >= minimum_strength`.
-- An opposing-side liquidity pool exists at the required distance
-  (`LiquidityBuySide` for a Demand-side block, `LiquiditySellSide` for a
-  Supply-side block).
-- `ctx.Volatility.ATR > 0`.
+| Test | Rule (production values) |
+|---|---|
+| Spent | touched more than `RetestMaxTouches` (30) times |
+| Invalidated | a close beyond the far edge by more than `max(pip, 0.05·ATR, 0.5·ATR)` that is not closed back inside within 6 bars, or more than 2 such reclaimed breaks |
+| Price at the block | M5 frame only; M15/H1 blocks skip it and let M5 `EntryValid` decide |
+| Width | at most 3.0 ATR |
+| Origin candle | body at least 0.6 of its range, with a qualifying BOS/CHoCH |
 
-## Formation / trigger / confirmation
+These values live in `techniquezone.ProductionTechniqueSettings()`, not in
+`config/analysis.yml`. A break that is reclaimed inside 6 bars counts as a
+liquidity sweep and the block stays live.
 
-Owned by `internal/zone`. Direction is read from `z.Side.Direction()`,
-never re-derived.
+## Confirmation, stop and target
 
-## Entry / invalidation / target
+```mermaid
+flowchart TD
+  B[tradable block] --> EV{"M5 price within<br/>maximum_entry_atr (2.0 ATR) of the block?"}
+  EV -- no --> X[no candidate]
+  EV -- yes --> RX{"M5 reaction after the block formed<br/>(reaction_lookback_bars 3)"}
+  RX -- none --> X
+  RX -- "wick_rejection · sweep_reclaim · rejection_choch ·<br/>strong_reclaim · engulfing" --> FIN{"confluence stars ≥ 2"}
+  FIN -- no --> X
+  FIN -- yes --> STOP["stop = beyond the block's far edge and the reaction extreme<br/>+ invalidation_buffer_atr (0.5) × M5 ATR"]
+  STOP --> BUD{"stop within the instrument cap?<br/>(XAU 70 pips)"}
+  BUD -- no --> X
+  BUD -- yes --> TGT["target = nearest opposing liquidity<br/>≥ minimum_target_distance_atr (1.0)"]
+  TGT --> C["candidate, expires 24 h after the touch"]
+```
 
-- **Entry**: the block's own band.
-- **Invalidation**: Buy → `Low - invalidation_buffer_atr*ATR`; Sell →
-  `High + invalidation_buffer_atr*ATR`.
+- **Entry**: the proximal slice of the block (`entry_max_width_price`, 5.0 on XAU).
+- **Stop**: reaction-anchored ([reaction-anchored-stop](reaction-anchored-stop.md));
+  refused above the instrument cap, never tightened; below the floor it carries
+  `stop_budget_floor` and execution widens it ([legacy-stop-budget](legacy-stop-budget.md)).
+- **Higher timeframes**: an M15/H1 block is bound to M5 by time; the stop covers
+  the whole higher-timeframe block ([htf-zone-structure](htf-zone-structure.md)).
+- **Selection**: among this strategy's confirmed blocks on one bar, the most stars,
+  then the nearest entry.
 
-**Reaction-anchored invalidation (v3).** A candidate with a confirmed reaction publishes the far edge of the structure or, if the bars from the touch to the confirmation traded beyond it, that extreme, in both cases one `invalidation_buffer_atr*ATR` further out (Buy: `min(structure low, lowest low touch..confirm) - buffer`; Sell: `max(structure high, highest high touch..confirm) + buffer`). A sweep or strong reclaim is confirmed by a wick that pierces the band, and a stop inside that wick has already been traded. The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries the evidence code `invalidation_beyond_reaction_extreme`. A resting candidate (no confirmation) keeps the structural price, and the fixed-reward:risk fallback target, the quality geometry and the published invalidation follow the new price. Measured on the committed captures in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged (`LEGACY_PARITY_PROVEN`); the invalidation differs from the frozen publisher by design.
-- **Target**: nearest opposing-side pool, at least
-  `minimum_target_distance_atr*ATR` from the block's own near edge.
+## Known gaps
 
-**Instrument stop budget (v4).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
+From the 28-29 Oct 2026 XAU losses; none is fixed yet.
 
-**Higher-timeframe structure (v5).** The setup is found on M15/H1 structure and confirmed and executed on M5 (`higher_timeframes: [M15, H1]`). The higher frame's zones are judged as facts (spent, invalidated, width, fill and minimum, body and BOS), not by its last close; the M5 price decides whether the entry is valid. The M5 reaction confirms, the entry band is the proximal slice, and the stop is beyond the whole higher-timeframe zone and the M5 reaction extreme, plus `invalidation_buffer_atr` x the M5 detector ATR. The candidate carries `StructureTimeframe` and the evidence `htf_zone_<tf>`. Measured in [htf-zone-structure.md](htf-zone-structure.md).
+- **Closes inside the tolerance never break the block.** 0.5 × median ATR is
+  about 1.3 points on XAU M5, so repeated closes through the far edge by less than
+  that leave the block live.
+- **The sweep forgiveness reads closes, not wicks.** Three consecutive closes
+  beyond the edge and a 32-point rally were forgiven because price closed back
+  inside within 6 bars.
+- **No touch cap.** Supply and demand set `maximum_zone_touches: 2`;
+  `order_block` does not, so the 30-touch sanity cap applies.
+- **The published opportunity outlives the block.** Once published, an
+  opportunity ends only on a close beyond its stop level or after 24 h
+  ([lifecycle](../analysis-engine.md#opportunity-lifecycle)); a block that later
+  closes through does not withdraw it, so a waiting setup can fill hours later.
 
-## Expiry
+## Quality and evidence
 
-`expiry_hours` after the block's own most recent real timestamp.
+`Quality.Overall` is the zone-family model (`strategyutil.ZoneFamilyQuality`),
+informational only ([quality](../analysis-engine.md#acceptance-and-quality)).
+Evidence: `m5_order_block_confirmed`, `m5_order_block_rejection_confirmed`,
+`invalidation_beyond_reaction_extreme` when the reaction set the stop,
+`stop_budget_structural` / `stop_budget_floor`, `htf_zone_<tf>`.
 
-## Failure cases / anti-patterns
+## Parity
 
-Below-threshold strength, wrong lifecycle state, not currently relevant,
-no opposing liquidity, zero ATR — all reject outright.
-
-## Quality components / evidence codes
-
-`freshness_quality` only (`Overall` is that value). Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [q3-quality-validation.md](q3-quality-validation.md).
-
-Evidence codes: `m5_order_block_<state>`, `m5_order_block_relevance_<relevance>`,
-`m5_order_block_side_<side>`.
-
-## Bullish / bearish examples
-
-Both directions, driven by `Side`. Demand-side example: block at
-2020–2022, buy-side pool at 2031–2032, ATR=1.0 → Buy, invalidation 2019.5.
-Supply-side example: block at 2020–2022, sell-side pool at 2010–2011 →
-Sell, invalidation 2022.5.
-
-## Valid / invalid examples
-
-Valid: either direction as above. Invalid: `Kind != KindOrderBlock` (e.g.
-a Breaker zone), `State=Mitigated`, `Strength` below floor
-(`test/strategy/orderblock/orderblock_test.go`).
-
-## Status and execution
-
-- **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
-- **Symbols**: all instruments.
-- **Execution**: Trades on every instrument.
-- **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by quality,
-  confluence, structural quality and freshness trades and the rest are
-  suppressed ([execution](../execution.md#same-thesis-arbitration)).
+Decisions and entry reproduce the frozen Python `order_block_technique_reaction`
+(`test/techniqueparity` golden, 5 symbols). The stop (reaction-anchored), the
+stop budget and the higher-timeframe export differ from it by design.

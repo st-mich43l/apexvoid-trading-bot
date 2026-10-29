@@ -1,18 +1,16 @@
 # Confluence Zone v3: technical specification
 
-Status: **implemented and certified for review, not deployed** (part A: `analysis-engine/internal/structuralconfluence`,
-the facts, independence, regions and causal availability; part B: `analysis-engine/internal/strategy/confluencezone`,
-the reaction, the honest stop, the target and the strategy itself; part C: the replay certification in
-[confluence-zone-v3-certification.md](confluence-zone-v3-certification.md)). Nothing here is deployed or enabled by being
-merged: Confluence Zone's enablement, containment, risk and arbitration settings are unchanged.
+Status: **live.** Part A: `analysis-engine/internal/structuralconfluence` (the facts, independence, regions and causal
+availability). Part B: `analysis-engine/internal/strategy/confluencezone` (the reaction, the honest stop, the target and the
+strategy itself). Part C, the replay certification, is pinned by `analysis-engine/test/czreplay` against
+`analysis-engine/testdata/confluence-zone-v3-replay-results.json`.
 
 The contract this strategy answers:
 
 > Are at least two genuinely independent, causally valid structures supporting the same directional trade at the
 > same price location, with real confirmation, structural invalidation and sufficient target room?
 
-Why v2 could not answer it is in [the forensic audit](confluence-zone-xau-forensic-audit.md) (on the audit's own
-branch until merged): `minimum_facts = 2` counted technique *labels*, the entry zone was the *union* of the
+Why v2 could not answer it (from the XAU forensic audit, in the repository history): `minimum_facts = 2` counted technique *labels*, the entry zone was the *union* of the
 members, a member could be born on the reaction candle, and two quality factors were constants.
 
 ## 1. A structural fact
@@ -196,7 +194,7 @@ v2 hard-coded `wick_rejection` and `structural_agreement` to true on every decis
 in the audit) and its `reaction` component to 1. A measurement that is unavailable is **omitted** (an unknown
 structure publishes no `structural_alignment`), never replaced by a neutral number.
 
-`Quality.Overall` (2026-10-22) is the mean of the seven `score_*` dimensions of `confluence_zone.quality.v1` ([quality-scoring.md](quality-scoring.md));
+`Quality.Overall` (2026-10-22) is the mean of the seven `score_*` dimensions of `confluence_zone.quality.v1` ([quality](../analysis-engine.md#acceptance-and-quality));
 the confluence stars, from the unchanged `confluence.Evaluate`, remain the diagnostic and the floor. The region's zone score is the best supporting structure's score plus the frozen
 contract's +2.5 for **every additional independent source** (v2 paid it per label, so a supply zone and an order
 block of one leg earned it twice). No new live scoring formula was introduced and no arbitration input changed;
@@ -338,8 +336,8 @@ Part C adds the replay certification.
   engine-level invariants: appending future candles, randomising them, removing 500 candles of warm-up, and reflecting the
   whole market do not change (or exactly mirror) the v3 decisions, and one confirmation is never published under two
   overlapping opportunities. The results are committed as
-  [confluence-zone-v3-replay-results.json](confluence-zone-v3-replay-results.json) and a coefficient sensitivity as
-  [confluence-zone-v3-sensitivity.json](confluence-zone-v3-sensitivity.json).
+  `analysis-engine/testdata/confluence-zone-v3-replay-results.json` and a coefficient sensitivity as
+  `analysis-engine/testdata/confluence-zone-v3-sensitivity.json`.
 
 ## 11. Known limits
 

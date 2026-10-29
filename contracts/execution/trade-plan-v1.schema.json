@@ -10,7 +10,7 @@
     "plan_id": { "type": "string" },
     "opportunity_id": {
       "type": "string",
-      "description": "Traces back to the analysis.opportunity.v1 event this plan was built from — analysis-engine never builds a TradePlan itself (docs/architecture/algo-bot.md's TradePlan-ownership section)."
+      "description": "Traces back to the analysis.opportunity.v1 event this plan was built from — analysis-engine never builds a TradePlan itself (docs/architecture.md's TradePlan-ownership section)."
     },
     "symbol": { "type": "string" },
     "direction": { "type": "string", "enum": ["BUY", "SELL"] },

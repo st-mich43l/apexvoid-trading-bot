@@ -152,7 +152,7 @@ def _neutral_rank(intent: ExecutionIntent) -> tuple:
   """Order without any quality score: executable first, then the freshest confirmation, then id.
 
   ``quality_overall``, confluence stars and ``structural_quality`` are per-strategy scores on
-  different scales that did not predict outcomes (docs/strategies/arbitration-impact-report.md),
+  different scales that did not predict outcomes (docs/execution.md (same-thesis arbitration)),
   so none of them orders intents here. Freshness and the id make the order total and
   reproducible; they claim no quality.
   """

@@ -160,7 +160,7 @@ func TestSensitivity(t *testing.T) {
 // cheap, always-run check that the committed evidence is internally consistent.
 func TestCommittedSensitivityAgreesWithTheCertification(t *testing.T) {
 	var sens Sensitivity
-	raw, err := os.ReadFile(repoFile("docs", "strategies", "confluence-zone-v3-sensitivity.json"))
+	raw, err := os.ReadFile(repoFile("analysis-engine", "testdata", "confluence-zone-v3-sensitivity.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestCommittedSensitivityAgreesWithTheCertification(t *testing.T) {
 		t.Fatal(err)
 	}
 	var cert Results
-	raw, err = os.ReadFile(repoFile("docs", "strategies", "confluence-zone-v3-replay-results.json"))
+	raw, err = os.ReadFile(repoFile("analysis-engine", "testdata", "confluence-zone-v3-replay-results.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

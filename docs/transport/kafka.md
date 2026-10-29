@@ -7,25 +7,30 @@ market-data feed. Closed bars, rolling OHLC history, latest spot, bootstrap,
 and recovery remain on Redis; see [Redis market-data contract](../redis-contract.md)
 and [ADR-010](../adr/010-redis-market-data-kafka-events.md).
 
-```text
-cTrader → Redis → Analysis Engine → Kafka → future Algo Bot
-                                 ↑
-                       AnalysisOpportunity events
+```mermaid
+flowchart LR
+  AE[analysis-engine] -->|"analysis.opportunity.v1<br/>(created)"| K[(Kafka)]
+  AE -->|analysis.opportunity.invalidated.v1| K
+  AE -->|analysis.opportunity.arbitration.v1| K
+  K -->|"consumer group<br/>ledger write, then commit"| AB[algo-bot]
+  AB -. "execution.trade-plan.v1<br/>(provisioned, unused)" .-> K
+  CE[ctrader-engine] -. "execution.trade-event.v1<br/>(provisioned, unused)" .-> K
 ```
 
-The broker is deliberately available before every producer and consumer is
-implemented. That does not mean every topic has a runtime owner yet.
+TradePlans travel on the Redis stream `execution:trade_plans`, not Kafka
+([execution](../execution.md)).
 
 ## Topics
 
-Configuration V3 explicitly provisions only these business topics:
+All topics are provisioned by `kafka-init` from `config/runtime.yml`.
 
-| Topic | Intended producer | Intended consumer | Current status |
+| Topic | Producer | Consumer | Status |
 |---|---|---|---|
-| `analysis.opportunity.v1` | Analysis Engine | Algo Bot | Analysis Engine lifecycle publisher is wired; no Algo Bot consumer yet |
-| `analysis.opportunity.invalidated.v1` | Analysis Engine | Algo Bot | Analysis Engine lifecycle publisher is wired; no Algo Bot consumer yet |
-| `execution.trade-plan.v1` | Algo Bot | cTrader Engine | topology only |
-| `execution.trade-event.v1` | cTrader Engine | Algo Bot | topology only |
+| `analysis.opportunity.v1` | Analysis Engine | Algo Bot (`app/analysis_client/consumer.py`) | live |
+| `analysis.opportunity.invalidated.v1` | Analysis Engine | Algo Bot | live |
+| `analysis.opportunity.arbitration.v1` | Analysis Engine | Algo Bot (provenance, never decides a trade) | live |
+| `execution.trade-plan.v1` | none | none | topology only |
+| `execution.trade-event.v1` | none | none | topology only |
 
 There is no `market.bar.closed.v1` or `market.tick.v1` topic. There is no
 Kafka market producer in `ctrader-engine` and no Kafka consumer in
@@ -54,8 +59,7 @@ symbols to use other partitions. Opportunity ID is the lifecycle identity.
 
 The producer uses franz-go's idempotent producer defaults and `acks=all`.
 Every publish is synchronous (`ProduceSync`), so the caller receives a broker
-delivery failure rather than losing it in an asynchronous callback. A future
-strategy must persist or retry an opportunity that cannot be acknowledged; it
+delivery failure rather than losing it in an asynchronous callback. A strategy must persist or retry an opportunity that cannot be acknowledged; it
 must never silently drop it.
 
 The producer is independent from Redis ingestion. A Kafka outage must not
@@ -64,8 +68,9 @@ engine queues lifecycle transitions off its bar-ingestion path and retries
 publication; see `internal/engine/publisher.go` and the documented in-memory
 queue limitation in `internal/engine/publisher.go`.
 
-ADR-009 defines at-least-once handling for future Kafka consumers. It does
-not make Kafka a source of market candles.
+ADR-009 defines at-least-once handling: the Algo Bot consumer writes the
+opportunity idempotently (by opportunity id) and commits the offset only after
+the ledger write. Kafka is never a source of market candles.
 
 ## Configuration and operations
 
@@ -89,5 +94,4 @@ docker run --rm --network apexvoid-trading-bot_default \
   go test ./test/kafka -run 'TestProducer_'
 ```
 
-This validates the producer against a real broker; it does not claim that the
-unimplemented Algo Bot or cTrader execution consumers are live.
+This validates the producer against a real broker.

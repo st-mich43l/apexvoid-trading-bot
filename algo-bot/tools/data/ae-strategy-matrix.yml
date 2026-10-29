@@ -1,7 +1,7 @@
 # Human-authored half of the AE quality matrix (2026-10-14 audit, updated by the owner's decisions).
 #
 # algo-bot/tools/ae_quality_eval.py merges this file with the measured replay and production
-# numbers into docs/strategies/ae-quality-replay-results.json -> strategy_matrix. Nothing here
+# numbers into algo-bot/tools/data/ae-quality-replay-results.json -> strategy_matrix. Nothing here
 # is a measurement: the labels are the reviewer's judgement from those measurements and from
 # reading each strategy's code. Owner decisions (2026-10-14): a retired strategy is removed, not
 # disabled (Range Sweep); nothing is observe-only (every strategy trades live); Trendline was

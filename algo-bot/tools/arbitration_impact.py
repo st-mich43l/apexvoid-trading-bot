@@ -5,7 +5,7 @@ Reproduce (repository root, Python 3.12, the algo-bot requirements installed):
   cd analysis-engine && ARBITRATION_DUMP_DIR=/tmp/arb-dump \
     go test ./test/replaycapture -run TestDumpCandidates
   cd ../algo-bot && PYTHONPATH=. python -m tools.arbitration_impact /tmp/arb-dump \
-    --out ../docs/strategies/arbitration-impact-results.json
+    --out /tmp/arbitration-impact-results.json
 
 Question: ``arbitrate_execution_intents`` ranks executable intents by ``quality_overall`` (then
 confluence stars, ``v2_raw``, freshness, id) and holds a direction conflict unless the best

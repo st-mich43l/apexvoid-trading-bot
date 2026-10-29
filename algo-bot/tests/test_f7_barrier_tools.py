@@ -1,6 +1,6 @@
 """The F-7 investigation tooling must itself be right: constructed inputs with a known answer.
 
-The conclusions of docs/architecture/f7-opposing-barrier-ground-truth.md rest on four small pieces of logic: the causal
+The conclusions of `git show f02d62f:docs/architecture/f7-opposing-barrier-ground-truth.md` rest on four small pieces of logic: the causal
 triple-barrier race, the bar a production timestamp maps to, the union length behind the gap measure and the classification of where
 two books first part ways. Each is checked here against hand-computed cases.
 """

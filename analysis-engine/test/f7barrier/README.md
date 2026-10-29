@@ -1,6 +1,6 @@
 # F-7 opposing-barrier investigation tooling
 
-Reproduces [docs/architecture/f7-opposing-barrier-ground-truth.md](../../../docs/architecture/f7-opposing-barrier-ground-truth.md).
+Reproduces [`git show f02d62f:docs/architecture/f7-opposing-barrier-ground-truth.md`](../../../`git show f02d62f:docs/architecture/f7-opposing-barrier-ground-truth.md`).
 Nothing here changes trading behavior, writes to production, or modifies a reference algorithm. Production is only ever read
 (Redis `SCAN`/`LRANGE`/`GET`, Postgres inside a `READ ONLY` transaction).
 
