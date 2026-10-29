@@ -674,7 +674,7 @@ func ArbitrationConfigFromConfig(doc *config.Document) (arbitration.Config, erro
 }
 
 // StopEnvelopeConfig is the per-strategy-family stop-distance risk policy
-// (Phase 4) — the SAME execution.reaction/range/trend leaves algo-bot's
+// (Phase 4) — the SAME execution.reaction/trend leaves algo-bot's
 // own protective_stop.py reads, and execution.trend.stop_max_pips is
 // already shared_with_ctrader (MismatchPolicy.FATAL) — reading it here
 // too extends an existing cross-service contract, not a new one.
@@ -683,8 +683,6 @@ type StopEnvelopeConfig struct {
 	ReactionMinPips       float64
 	ReactionMaxPips       float64
 	ReactionRoomFloorPips float64
-	RangeMinRR            float64
-	RangeRoomFloorPips    float64
 	ScalpMinPips          float64
 	ScalpMaxPips          float64
 	TrendMinPips          float64
@@ -695,14 +693,9 @@ type StopEnvelopeConfig struct {
 	InstrumentMinPips    float64
 	InstrumentMaxPips    float64
 	InstrumentConfigured bool
-	// InstrumentScalp* is the instrument's own band for the range-room
-	// scalps (Fade Scalp), when it declares one.
-	InstrumentScalpMinPips    float64
-	InstrumentScalpMaxPips    float64
-	InstrumentScalpConfigured bool
 }
 
-// StopEnvelopeConfigFromConfig reads execution.{reaction,range,trend,stops}.*
+// StopEnvelopeConfigFromConfig reads execution.{reaction,trend,stops}.*
 // and auto_algo.strategies.scalping.stop.* — the one place YAML becomes
 // StopEnvelopeConfig, mirroring every other *ConfigFromConfig function in
 // this file.
@@ -720,14 +713,6 @@ func StopEnvelopeConfigFromConfig(doc *config.Document) (StopEnvelopeConfig, err
 		return StopEnvelopeConfig{}, err
 	}
 	reactionRoomFloorPips, err := getFloat(doc, "execution.stops.reaction.room_floor_pips")
-	if err != nil {
-		return StopEnvelopeConfig{}, err
-	}
-	rangeMinRR, err := getFloat(doc, "execution.range.min_rr")
-	if err != nil {
-		return StopEnvelopeConfig{}, err
-	}
-	rangeRoomFloorPips, err := getFloat(doc, "execution.range.room_stop_floor_pips")
 	if err != nil {
 		return StopEnvelopeConfig{}, err
 	}
@@ -749,8 +734,8 @@ func StopEnvelopeConfigFromConfig(doc *config.Document) (StopEnvelopeConfig, err
 	}
 	return StopEnvelopeConfig{
 		ReactionMinRR: reactionMinRR, ReactionMinPips: reactionMinPips, ReactionMaxPips: reactionMaxPips,
-		ReactionRoomFloorPips: reactionRoomFloorPips, RangeMinRR: rangeMinRR, RangeRoomFloorPips: rangeRoomFloorPips,
-		ScalpMinPips: scalpMinPips, ScalpMaxPips: scalpMaxPips, TrendMinPips: trendMinPips, TrendMaxPips: trendMaxPips,
+		ReactionRoomFloorPips: reactionRoomFloorPips,
+		ScalpMinPips:          scalpMinPips, ScalpMaxPips: scalpMaxPips, TrendMinPips: trendMinPips, TrendMaxPips: trendMaxPips,
 	}, nil
 }
 
