@@ -92,6 +92,20 @@ const (
 	// An instance is counted once per evaluation.
 	CounterFVGDefinitionRefused Counter = "fvg_definition_refused"
 
+	// CounterOBDefinitionRefused counts order blocks the confirmed path
+	// refused because a close of their own frame went beyond their far edge
+	// (docs/strategies/order-block-definition.md). Labels: symbol, the
+	// structure timeframe and the reason (ob_closed_through), recorded with
+	// CountReason. An instance is counted once per evaluation.
+	CounterOBDefinitionRefused Counter = "ob_definition_refused"
+
+	// CounterOpportunityStructureClosedThrough counts live order block
+	// opportunities withdrawn because a close of their structure's own timeframe
+	// went beyond the structural far edge (reason code STRUCTURE_CLOSED_THROUGH).
+	// Labels: symbol, the structure timeframe and, in the reason label, the
+	// strategy id, recorded with CountReason.
+	CounterOpportunityStructureClosedThrough Counter = "go_opportunity_structure_closed_through"
+
 	// Opportunity lifecycle transition counters,
 	// one counter per internal/opportunity.TransitionKind an operator can
 	// observe (TransitionNoop is deliberately not counted: it carries no

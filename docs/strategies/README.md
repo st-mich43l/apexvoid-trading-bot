@@ -19,7 +19,7 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `key_level` | v6 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | `test/keylevelparity` golden | [key_level](key_level.md), [sweep first](keylevel-sweep-first.md) |
 | `supply` | v6 | M5, M15, H1 | confirmed rejection of a supply zone; zones touched more than 2 times are spent | `test/techniqueparity` golden | [supply](supply.md) |
 | `demand` | v6 | M5, M15, H1 | confirmed bounce from a demand zone; same touch cap | `test/techniqueparity` golden | [demand](demand.md) |
-| `order_block` | v5 | M5, M15, H1 | confirmed reaction at the last opposite candle before a displacement that broke structure | `test/techniqueparity` golden | [order_block](order_block.md) |
+| `order_block` | v6 | M5, M15, H1 | confirmed reaction at the last opposite candle before a displacement that broke structure; dead once a close of its own frame goes through its far edge ([order-block-definition](order-block-definition.md)) | `test/techniqueparity` golden | [order_block](order_block.md) |
 | `fvg` | v6 | M5, M15, H1 | confirmed reaction at a real fair value gap (≥ 0.5 ATR of its own frame) | `test/techniqueparity` golden | [fvg](fvg.md), [definition](fvg-definition.md) |
 | `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | contract tests, `test/ifvgreplay` | [ifvg](ifvg.md) |
 | `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | fixtures, `test/crtreplay` | [crt](crt.md) |

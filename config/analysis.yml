@@ -297,8 +297,15 @@ analysis:
       # entry validity and stop rules are unchanged.
       higher_timeframes: [M15, H1]
     order_block:
-      version: v5
+      version: v6
       enabled: true
+      # Order block definition (docs/strategies/order-block-definition.md; production 28-29 Oct 2026): a block is dead for good once ANY close of its own frame,
+      # after its own candle, is beyond its far edge by more than this share of that frame's ATR at the close. No reclaim forgiveness (a wick that closes back
+      # inside is the sweep and does not retire it). 0 switches the rule off. Shared by every instrument and timeframe; the shared analysis.techniques lifecycle
+      # (frozen-Python parity) is untouched.
+      confirmed_break_buffer_atr: 0.1
+      # A block touched more than this often is spent (the existing key supply and demand already use).
+      maximum_zone_touches: 2
       minimum_strength: 0.4
       # 2026-09-30: production saw order blocks as small as 0.03 ATR (half
       # of them under 0.5 ATR); same threshold as fvg/ifvg.
