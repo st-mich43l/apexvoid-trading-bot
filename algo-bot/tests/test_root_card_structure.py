@@ -10,6 +10,7 @@ import dataclasses
 import json
 from datetime import datetime, timezone
 
+import pytest
 from pydantic import ValidationError
 
 from app.analysis_client.models import OpportunityTopic, parse_analysis_event
@@ -18,6 +19,7 @@ from app.autotrade.setup_card import forming_card_matches_strategy, format_plan_
 from app.autotrade.strategy_match import StrategyMatch
 from tests.test_go_opportunity_policy import golden
 
+pytestmark = pytest.mark.no_database
 
 FORMED_AT = int(datetime(2026, 10, 14, 14, 15, tzinfo=timezone.utc).timestamp())
 
@@ -40,6 +42,7 @@ def _structure_lines(card: str) -> list[str]:
   return [line for line in card.splitlines() if line.startswith(("Structure:", "Order zone:"))]
 
 
+@pytest.mark.parametrize("timeframe", ["M5", "M15", "H1"])
 def test_an_fvg_card_names_the_gap_and_its_timeframe(timeframe):
   card = format_plan_published_root_card(_match(structure=(timeframe, 4152.30, 4154.40, FORMED_AT)))
   assert _structure_lines(card) == [f"Structure: FVG {timeframe} · 4,152.30–4,154.40 · formed 14:15 UTC"]
@@ -51,6 +54,7 @@ def test_the_structure_line_sits_directly_under_the_setup_name():
   assert lines[setup + 1].startswith("Structure: FVG M15")
 
 
+@pytest.mark.parametrize(
   "strategy,direction,name",
   [("Supply Demand", "SELL", "Supply"), ("Supply Demand", "BUY", "Demand"), ("Order Block", "BUY", "Order Block"), ("Order Block", "SELL", "Order Block")],
 )
@@ -94,6 +98,7 @@ def test_an_event_without_the_block_renders_exactly_as_before():
   assert [line for line in with_block.splitlines() if not line.startswith("Structure:")] == without.splitlines()
 
 
+@pytest.mark.parametrize("bad", [dict(structure_low=None), dict(structure_high=None), dict(structure_timeframe=None), dict(structure_low=float("nan"))])
 def test_a_partial_or_non_finite_block_renders_nothing(bad):
   assert _structure_lines(format_plan_published_root_card(_match(**bad))) == []
 
@@ -144,7 +149,9 @@ def test_the_envelope_parses_with_and_without_the_block():
   assert (new.payload.structure.timeframe, new.payload.structure.low, new.payload.structure.high, new.payload.structure.formed_at) == ("M15", 4331.0, 4333.0, FORMED_AT)
 
 
+@pytest.mark.parametrize("block", [{"timeframe": "M15", "low": 4334.0, "high": 4333.0, "formed_at": 1}, {"timeframe": "M2", "low": 1.0, "high": 2.0, "formed_at": 1}, {"timeframe": "M15", "low": 1.0, "high": 2.0}])
 def test_a_malformed_block_is_rejected(block):
+  with pytest.raises((ValidationError, ValueError)):
     _event(block)
 
 
