@@ -30,12 +30,6 @@ import (
 // simply no longer a parity target. Its v2 decisions remain reproducible as the
 // frozen baseline in test/brreplay.
 //
-// fade_scalp left it too, when rebuilt as v3 (docs/strategies/fade_scalp.md): it
-// publishes only a sweep that was not followed by continuation, whose reaction
-// confirmed, with the stop beyond the sweep's own extreme, the confluence factors
-// measured rather than asserted and a structural objective with the configured
-// reward:risk; the frozen detector invented a 2R target, set the rejection factor on
-// every decision and put the stop inside the wick. The oracle golden stays untouched.
 // What this test still proves is the analysis layer the detectors read: the
 // higher-timeframe bias, the local structure bias, the regime and the
 // premium/discount zone, bar by bar.
@@ -245,7 +239,7 @@ func TestGoDetectorsMatchTheFrozenPythonOracleBarByBar(t *testing.T) {
 }
 
 // freezeCompatPip sets the pip size the frozen compat helpers ran with (gold's 0.1 on every instrument). Production uses the
-// instrument's own pip size, because the frozen value made the Fade Scalp entry band level +- 0.1 on every other instrument; this
+// instrument's own pip size, because the frozen value made the frozen entry band level +- 0.1 on every other instrument; this
 // test keeps proving the oracle's decisions, which were taken with it.
 func freezeCompatPip(t *testing.T, doc *config.Document) {
 	t.Helper()
@@ -279,7 +273,7 @@ func TestEntryZoneBandIsInTheInstrumentsOwnUnits(t *testing.T) {
 		}
 		var legacy strategyutil.LegacyDetectorSettings
 		for _, cfg := range settings.Strategies {
-			if cfg.ID == "fade_scalp" {
+			if cfg.ID == "break_retest" {
 				if legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
 					t.Fatal(err)
 				}

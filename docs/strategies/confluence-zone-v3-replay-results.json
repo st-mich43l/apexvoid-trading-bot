@@ -1665,8 +1665,8 @@
    "v2_published_decisions": 160,
    "structure_only_published_decisions": 89,
    "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 87,
-   "other_strategies_candidates": 4406,
-   "other_strategies_candidates_sha256": "5753cdd6f5f398334093defc76f4b61fe756cf064c085563fa54b100a48adf95",
+   "other_strategies_candidates": 4405,
+   "other_strategies_candidates_sha256": "8798068db1c1df710e4d1a1329da8cd28daee6e624b83eefb4f7fbdced365282",
    "strategy_analysis_agrees_with_the_published_candidates": true
   },
   "GBPJPY": {
@@ -1694,8 +1694,8 @@
    "v2_published_decisions": 192,
    "structure_only_published_decisions": 206,
    "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 76,
-   "other_strategies_candidates": 4439,
-   "other_strategies_candidates_sha256": "0e80b168cde1fc64ec7d19fa9e18beba5afa341c17be8f4e51398b179e964820",
+   "other_strategies_candidates": 4436,
+   "other_strategies_candidates_sha256": "733a0ab516dc872c57abdaa35297a84e81ea8f35a3d2cb652922308cd67c338c",
    "strategy_analysis_agrees_with_the_published_candidates": true
   },
   "GBPUSD": {
@@ -1721,8 +1721,8 @@
    "v2_published_decisions": 201,
    "structure_only_published_decisions": 187,
    "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 86,
-   "other_strategies_candidates": 6007,
-   "other_strategies_candidates_sha256": "053d058d10d44374e828ef5bad97fa178aeddd84e019aa018d692dcf73a0910d",
+   "other_strategies_candidates": 6003,
+   "other_strategies_candidates_sha256": "41c2f9cc438b7e63d01656a36cc478f5a0dc25e33074a33951d31484bf7ec225",
    "strategy_analysis_agrees_with_the_published_candidates": true
   },
   "USDJPY": {
@@ -1749,8 +1749,8 @@
    "v2_published_decisions": 192,
    "structure_only_published_decisions": 197,
    "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 93,
-   "other_strategies_candidates": 5957,
-   "other_strategies_candidates_sha256": "ac32147edd196410ca5379697c05918f24246f5e16157a9fcfba6fc681c7221c",
+   "other_strategies_candidates": 5954,
+   "other_strategies_candidates_sha256": "47c2a2b201374f44f950992d34020c78f5ac0068143e11f47c7315905767a1b8",
    "strategy_analysis_agrees_with_the_published_candidates": true
   },
   "XAU Oct": {
@@ -1778,8 +1778,8 @@
    "v2_published_decisions": 173,
    "structure_only_published_decisions": 142,
    "structure_only_decisions_rejected_for_a_structure_created_after_the_touch": 70,
-   "other_strategies_candidates": 3121,
-   "other_strategies_candidates_sha256": "fbb8064d6e99e9706bc11f9d3ca9b034ed87208a6088b534e7a32eb98afc8ad7",
+   "other_strategies_candidates": 3110,
+   "other_strategies_candidates_sha256": "f8ac711f7439da8e239867981b13ad9d0865c1f440b60a1824afc227648f8249",
    "strategy_analysis_agrees_with_the_published_candidates": true
   },
   "XAU Sep": {

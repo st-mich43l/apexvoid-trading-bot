@@ -105,6 +105,6 @@ def test_trimming_never_pulls_the_stop_in_so_a_zone_whose_stop_is_over_70_is_sti
 
 
 def test_scalps_fx_and_the_market_strategies_keep_their_own_entry():
-  scalp = _evaluate(4140.0, 4147.0, strategy="Fade Scalp", kind="fade_scalp", invalidation=4139.0)
+  scalp = _evaluate(4140.0, 4147.0, strategy="Range Box Scalp", kind="range_box_scalp", invalidation=4139.0)
   if scalp.measured.get("planned_entry_zone_high") is not None:
     assert _width(scalp.measured) == pytest.approx(70.0, abs=0.01)

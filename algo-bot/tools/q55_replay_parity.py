@@ -62,7 +62,7 @@ def load_bars(paths):
 
 
 def ladder_for(symbol, strategy):
-  if symbol == "XAU" and strategy != "fade_scalp":
+  if symbol == "XAU":
     return [1, 2, 3, 4], [.4, .2, .2, .2]
   return [1, 2], [.5, .5]
 

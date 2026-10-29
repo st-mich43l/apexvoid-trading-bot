@@ -65,7 +65,7 @@ var pipSize = map[string]float64{"XAU": 0.1, "EURUSD": 0.0001, "GBPUSD": 0.0001,
 var spread = map[string]float64{"XAU": 0.25, "EURUSD": 0.00008, "GBPUSD": 0.0001, "USDJPY": 0.008, "GBPJPY": 0.02}
 
 // Scalp strategies trade a 1R / 2R ladder on every instrument; the XAU zone book uses 1R-4R.
-var scalps = map[string]bool{"fade_scalp": true, "impulse_pullback": true}
+var scalps = map[string]bool{"impulse_pullback": true}
 
 type outcome struct {
 	Result string  `json:"result"` // target | stop | stop_be | timeout | unfilled | not_executable | censored
@@ -110,10 +110,8 @@ type Record struct {
 	FormedAt     int64              `json:"formed_at"`
 	StructuralID string             `json:"structural_id"`
 	Repeats      int                `json:"repeats"`
-	// Shadow is set only on a Fade Scalp consideration (AEQ_FADE_OUT): "" published, otherwise the gate that refused it.
-	Shadow  string             `json:"shadow,omitempty"`
-	Facts   map[string]float64 `json:"facts,omitempty"`
-	Pattern string             `json:"pattern,omitempty"`
+	Facts        map[string]float64 `json:"facts,omitempty"`
+	Pattern      string             `json:"pattern,omitempty"`
 	// Reaction is the causal confirmation the strategy attached (nil for a strategy that publishes none).
 	ReactionTouch   int64  `json:"reaction_touch,omitempty"`
 	ReactionConfirm int64  `json:"reaction_confirm,omitempty"`
@@ -138,7 +136,6 @@ func repo(parts ...string) string {
 
 type run struct {
 	records  []*Record
-	shadows  []*Record
 	bars     map[string][]market.Candle // per capture and timeframe
 	barsBy   map[string]map[int64]int
 	evals    int
@@ -177,10 +174,8 @@ func replayCapture(t *testing.T, doc *config.Document, c capture) *run {
 		}
 	}
 	byID := map[string]*Record{}
-	fade := newFadeWatch(t, doc, c)
 	_, err = replaycapture.Replay(doc, loaded, market.M5, replaycapture.Options{StrategyParameters: strategyParameters(t), OnEvaluation: func(e engine.Evaluation) {
 		r.evals++
-		fade.observe(e, r)
 		for _, cand := range e.Candidates {
 			if rec, ok := byID[cand.ID]; ok {
 				rec.Repeats++
@@ -471,7 +466,6 @@ var recBars = map[string]recSeries{}
 
 var replayOnce sync.Once
 var allRecords []*Record
-var allShadows []*Record
 var replayErr error
 
 func replayAll(t *testing.T) []*Record {
@@ -500,16 +494,6 @@ func replayAll(t *testing.T) []*Record {
 		for i, r := range runs {
 			if r == nil {
 				continue
-			}
-			for _, rec := range r.shadows {
-				tf, seconds := "M5", int64(300)
-				bars, index := r.bars[tf], r.barsBy[tf]
-				rec.Sim["ladder_cost"] = simulate(rec, bars, index, seconds, "ladder", spread[rec.Symbol])
-				rec.Sim["oneR_cost"] = simulate(rec, bars, index, seconds, "oneR", spread[rec.Symbol])
-				rec.Sim["twoR_cost"] = simulate(rec, bars, index, seconds, "twoR", spread[rec.Symbol])
-				rec.Capture = captures[i].name
-				recBars[rec.ID] = recSeries{bars: bars, index: index, seconds: seconds}
-				allShadows = append(allShadows, rec)
 			}
 			for _, rec := range r.records {
 				if seen[rec.ID] {
@@ -640,7 +624,7 @@ func TestSupplyDemandZonesAreNotSpent(t *testing.T) {
 // asserts a quality: a configured threshold published with the fact it gates (the break needs N accepting closes; a confluence zone needs the
 // minimum number of independent facts) and a flag that exists only when it is true.
 var constantByDesign = map[string]bool{
-	"break_retest/break_accept_closes": true, "confluence_zone/independent_fact_count": true, "fade_scalp/reaction_displacement": true,
+	"break_retest/break_accept_closes": true, "confluence_zone/independent_fact_count": true,
 }
 
 // TestNoStrategyAssertsAConstantAsAMeasurement fails when a component carries the same value on every opportunity of a strategy (twenty or

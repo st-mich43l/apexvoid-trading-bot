@@ -22,13 +22,12 @@ pytestmark = pytest.mark.no_database
 
 CFG = _cfg()
 MIRROR = 10_000.0
-ENVELOPE = {"structural": (50, 70), "scalp": (15, 45), "m1": (12, 45)}
+ENVELOPE = {"structural": (50, 70), "m1": (12, 45)}
 STRATEGIES = {
   "structural": [
     "Key Level", "Supply Demand", "Order Block", "FVG", "iFVG", "CRT", "Confluence Zone",
     "Flip Zone", "Trendline", "Break & Retest",
   ],
-  "scalp": ["Fade Scalp"],
   "m1": ["Impulse Pullback Scalp"],
 }
 CASES = [(kind, name) for kind, names in STRATEGIES.items() for name in names]

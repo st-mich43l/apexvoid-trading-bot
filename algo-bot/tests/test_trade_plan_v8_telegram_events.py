@@ -430,7 +430,7 @@ def test_plan_rejected_event_renders_without_crashing():
 
 
 def test_plan_expired_event_renders_without_crashing():
-  # Live incident: a market_watch entry (eg. Fade Scalp) that never got a
+  # Live incident: a market_watch entry (eg. Range Box Scalp) that never got a
   # live quote back inside its declared zone used to expire in
   # TradePlanRuntime.cs with no PublishEventAsync call at all - the owner's
   # "SETUP FORMING" card just sat there forever with no resolution. Now

@@ -22,8 +22,8 @@ func TestEveryStrategyDeclaresItsOwnStopEnvelope(t *testing.T) {
 			t.Errorf("stop envelope table lists %q, which is not a catalog strategy", id)
 		}
 	}
-	if len(known) != 13 {
-		t.Fatalf("the catalog has %d strategies, want 13", len(known))
+	if len(known) != 12 {
+		t.Fatalf("the catalog has %d strategies, want 12", len(known))
 	}
 }
 
@@ -33,7 +33,6 @@ func TestStopEnvelopeKindsAreUnchangedByDeclaringThemPerStrategy(t *testing.T) {
 	want := map[string]stopEnvelopeKind{
 		"key_level": stopEnvelopeReactionRoom, "trendline": stopEnvelopeReactionRoom,
 		"impulse_pullback": stopEnvelopeM1Scalp,
-		"fade_scalp":       stopEnvelopeRangeRoom,
 	}
 	for _, id := range strategy.KnownIDs() {
 		kind, special := want[string(id)]

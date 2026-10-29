@@ -143,7 +143,5 @@ auto_algo:
         # require_htf_aligned: false
         # require_killzone: false
         # minimum_grade:
-    scalp:
-      fade_scalp_enabled: true
     trend:
       enabled: true

@@ -1,26 +1,26 @@
 {
   "replay-eurusd-production-capture-20261013.json": {
-    "candidates": 4406,
-    "sha256": "5753cdd6f5f398334093defc76f4b61fe756cf064c085563fa54b100a48adf95"
+    "candidates": 4405,
+    "sha256": "8798068db1c1df710e4d1a1329da8cd28daee6e624b83eefb4f7fbdced365282"
   },
   "replay-gbpjpy-production-capture-20261013.json": {
-    "candidates": 4439,
-    "sha256": "0e80b168cde1fc64ec7d19fa9e18beba5afa341c17be8f4e51398b179e964820"
+    "candidates": 4436,
+    "sha256": "733a0ab516dc872c57abdaa35297a84e81ea8f35a3d2cb652922308cd67c338c"
   },
   "replay-gbpusd-production-capture-20261013.json": {
-    "candidates": 6007,
-    "sha256": "053d058d10d44374e828ef5bad97fa178aeddd84e019aa018d692dcf73a0910d"
+    "candidates": 6003,
+    "sha256": "41c2f9cc438b7e63d01656a36cc478f5a0dc25e33074a33951d31484bf7ec225"
   },
   "replay-usdjpy-production-capture-20261013.json": {
-    "candidates": 5957,
-    "sha256": "ac32147edd196410ca5379697c05918f24246f5e16157a9fcfba6fc681c7221c"
+    "candidates": 5954,
+    "sha256": "47c2a2b201374f44f950992d34020c78f5ac0068143e11f47c7315905767a1b8"
   },
   "replay-xau-production-capture-20260921.json": {
     "candidates": 1518,
     "sha256": "a27ee411e6fb667d0c8a1ebdde151049c9e73bf243a473209a85a483294bb455"
   },
   "replay-xau-production-capture-20261013.json": {
-    "candidates": 3121,
-    "sha256": "fbb8064d6e99e9706bc11f9d3ca9b034ed87208a6088b534e7a32eb98afc8ad7"
+    "candidates": 3110,
+    "sha256": "f8ac711f7439da8e239867981b13ad9d0865c1f440b60a1824afc227648f8249"
   }
 }

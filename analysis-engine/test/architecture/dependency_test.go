@@ -116,7 +116,6 @@ var rank = map[string]int{
 	"strategy/ifvg":            7,
 	"strategy/crt":             7,
 	"strategy/confluencezone":  7,
-	"strategy/fadescalp":       7,
 	"strategy/breakretest":     7,
 	"strategy/impulsepullback": 7,
 	"engine":                   8,

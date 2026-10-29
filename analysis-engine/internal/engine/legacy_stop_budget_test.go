@@ -11,7 +11,7 @@ func budgetSettings(maxPips, minPips, pip float64) *Settings {
 	s := &Settings{}
 	s.InstrumentStopMaxPips, s.InstrumentStopMinPips = maxPips, minPips
 	s.Geometry.PipSize = pip
-	for _, id := range []strategy.StrategyID{"key_level", "supply", "demand", "order_block", "fvg", "flip_zone", "trendline", "crt", "ifvg", "fade_scalp"} {
+	for _, id := range []strategy.StrategyID{"key_level", "supply", "demand", "order_block", "fvg", "flip_zone", "trendline", "crt", "ifvg"} {
 		s.Strategies = append(s.Strategies, strategy.Config{ID: id, Parameters: map[string]any{"expiry_hours": 12.0}})
 	}
 	return s
@@ -35,7 +35,7 @@ func TestLegacyStopBudgetIsInjectedOnlyIntoTheSevenLegacyStrategies(t *testing.T
 			t.Errorf("%s: parameters %v", id, p)
 		}
 	}
-	for _, id := range []strategy.StrategyID{"crt", "ifvg", "fade_scalp"} {
+	for _, id := range []strategy.StrategyID{"crt", "ifvg"} {
 		if _, ok := paramsOf(s, id)["execution_pip_size"]; ok {
 			t.Errorf("%s must not receive the legacy stop budget", id)
 		}
