@@ -53,12 +53,17 @@ def _budget_events(events):
 @pytest.mark.parametrize("code", [STOP_BUDGET_STRUCTURAL_EVIDENCE, STOP_BUDGET_FLOOR_EVIDENCE])
 def test_the_adapter_accepts_the_stop_budget_evidence_codes(code):
   raw = golden()
-  raw["payload"]["evidence"] = [{"code": "m5_supply_zone_fresh"}, {"code": code}]
+  raw["payload"]["technical_context"]["confluence"] = {
+    "version": "v1", "selected_stars": 3, "v1_stars": 3, "v2_stars": 2, "v2_raw": 14.0, "raw_factor_score": 12.0, "zone_quality_score": 2.0, "mad_bonus": 0.0,
+    "factors": {"htf_aligned": True, "touches": 0, "wick_rejection": True, "displacement_grade": True, "session_context": False,
+                "structural_agreement": True, "fib_touch": False, "choch": False},
+  }
+  raw["payload"]["evidence"] = [{"code": "m5_supply_zone_fresh"}, {"code": code}, {"code": "session_momentum_aligned"}]
   event = parse_analysis_event(OpportunityTopic, json.dumps(raw))
   match = pol.build_strategy_match(event, profile=pol.REVIEWED_SCOPES["supply"], now=raw["payload"]["created_at"] + 1)
   assert match is not None
   assert code in match.reasons
-  assert match.confluence == 2    # Go's stars, not the evidence-code count: the extra code changes no admission input
+  assert match.confluence == 3    # Go's selected stars, not the evidence-code count (three codes are present): the extra code changes no admission input
 
 
 def test_a_structural_stop_inside_the_budget_is_counted_per_strategy():

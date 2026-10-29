@@ -86,3 +86,28 @@ func TestWithoutLegacyStopBudgetRestoresTheUnbudgetedStrategies(t *testing.T) {
 		}
 	}
 }
+
+func TestTheXAUScalpStrategiesGetTheBudgetThePipSizeAndTheTradingDay(t *testing.T) {
+	s := budgetSettings(70, 50, 0.1)
+	for _, id := range []strategy.StrategyID{"round_number", "asia_range", "shock_retest"} {
+		s.Strategies = append(s.Strategies, strategy.Config{ID: id, Parameters: map[string]any{"expiry_hours": 2.0}})
+	}
+	s.Session.DailyRolloverUTCHour = 21
+	applyLegacyStopBudget(s)
+	applyTradingDay(s)
+	applyTradingDay(s) // idempotent
+	for _, id := range []strategy.StrategyID{"round_number", "asia_range", "shock_retest"} {
+		p := paramsOf(s, id)
+		if p["execution_stop_max_pips"] != 70.0 || p["execution_stop_min_pips"] != 50.0 || p["execution_pip_size"] != 0.1 {
+			t.Errorf("%s: parameters %v", id, p)
+		}
+	}
+	if got := paramsOf(s, "round_number")["trading_day_rollover_utc_hour"]; got != 21.0 {
+		t.Errorf("round_number trading day rollover = %v, want 21", got)
+	}
+	for _, id := range []strategy.StrategyID{"asia_range", "shock_retest", "crt"} {
+		if _, ok := paramsOf(s, id)["trading_day_rollover_utc_hour"]; ok {
+			t.Errorf("%s must not receive the trading day", id)
+		}
+	}
+}

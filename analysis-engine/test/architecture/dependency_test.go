@@ -118,6 +118,9 @@ var rank = map[string]int{
 	"strategy/confluencezone":  7,
 	"strategy/breakretest":     7,
 	"strategy/impulsepullback": 7,
+	"strategy/roundnumber":     7,
+	"strategy/asiarange":       7,
+	"strategy/shockretest":     7,
 	"engine":                   8,
 
 	// Offline replay adapter: drives the engine from a captured bar

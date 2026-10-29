@@ -19,6 +19,9 @@ CATALOG_STRATEGY_IDS = frozenset({
   "trendline",
   "break_retest",
   "impulse_pullback",
+  "round_number",
+  "asia_range",
+  "shock_retest",
 })
 
 # Evidence code the Go engine appends when a legacy-family invalidation was set by the extreme of the reaction's own bars and not by the structure

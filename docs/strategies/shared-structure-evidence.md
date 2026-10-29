@@ -9,6 +9,8 @@ were purged (Q2): no code path generates an opportunity from them. What they wer
 | Equal highs/lows, swing liquidity, graded sweeps (grabs) | `internal/liquidity`, `internal/techniquezone/liquidity.go` | the sweep evidence |
 | Established-range geometry (barriers, equilibrium, state) | `internal/techniquezone/scalp.go`, `analysis.legacy_read.range_structure` | the opposing-barrier book's native room |
 | Confirmed sweeps of finalized liquidity | `strategyutil.LegacyDetector.SweepsSupporting` | Key Level, Flip Zone, Trendline, iFVG (the session-context factor) |
+| The London session's net move in M15 ATR, read causally from the finalized Asia and London levels (evidence only; applies to what is confirmed while New York is active) | `strategyutil.SessionMomentum` | Round Number, Asia Range, Shock Retest (`session_momentum_aligned` / `session_momentum_opposed` and the signed quality measurement `session_momentum_atr`) |
+| Stop sweep and accepted-break episodes of one horizontal level | `strategyutil.FindLevelSweeps`, `FindLevelRetest` | Round Number, Asia Range |
 
 ## Session calendar (daylight saving)
 

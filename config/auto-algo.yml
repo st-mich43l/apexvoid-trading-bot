@@ -76,6 +76,13 @@ auto_algo:
         enabled: true
       crt:
         enabled: true
+      # XAU scalp strategies (analysis.strategies.* in analysis.yml carries the symbol scope).
+      round_number:
+        enabled: true
+      asia_range:
+        enabled: true
+      shock_retest:
+        enabled: true
     zone:
       demand:
         enabled: true

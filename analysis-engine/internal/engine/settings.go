@@ -226,6 +226,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	settings.LegacyRead.PipSize = settings.TechniqueZones.Technique.PipSize
 	settings.LegacyRead.RoundStep = settings.KeyLevel.RoundStep
 	applyLegacyDetector(&settings)
+	applyTradingDay(&settings)
 	// Seed the M1 scalp lane the same way so construction is fail-closed
 	// before a symbol is attached; ApplyInstrument sets the instrument scale.
 	if err := applyScalpLane(&settings, doc); err != nil {
