@@ -1,5 +1,5 @@
 // Package state holds the engine's canonical state: SymbolState, the one
-// analytical truth for one symbol (see docs/architecture/analysis-engine.md).
+// analytical truth for one symbol (see docs/analysis-engine.md).
 // Strategies read it; nothing recomputes what it already holds (source
 // task §28).
 package state

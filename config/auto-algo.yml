@@ -39,7 +39,7 @@ auto_algo:
       # false: no quality score orders intents or settles a direction conflict (the order is
       # executable, freshest confirmation, id; opposite executable intents are held unless exactly
       # one agrees with the higher-timeframe bias). The scores did not predict outcomes
-      # (docs/strategies/arbitration-impact-report.md). true restores the quality order and the margin.
+      # (docs/execution.md (same-thesis arbitration)). true restores the quality order and the margin.
       quality_ranking: false
       conflict_margin_quality: 0.15
 

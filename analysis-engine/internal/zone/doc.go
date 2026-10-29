@@ -4,7 +4,7 @@
 // Invalidated) and relevance (Immediate/Nearby/Remote/Dormant)
 // classification. FVG *detection* belongs here; FVG *trading strategy*
 // does not (that is internal/strategy/fvg, a package reading this output) —
-// see docs/architecture.md.
+// see docs/analysis-engine.md.
 //
 // Ported from algo-bot/app/analysis/zones.py and
 // technique_geometry.py's not_invalidated/zone_is_spent pair, per
@@ -28,6 +28,6 @@
 // Dependency rule: zone depends on structure (Swing, StructureBreak,
 // DetectDisplacement) and MUST NOT import liquidity, context,
 // opportunity, strategy, or transport — see
-// docs/architecture.md's "zone promoted above
+// docs/analysis-engine.md's "zone promoted above
 // structure, sibling to liquidity" amendment.
 package zone

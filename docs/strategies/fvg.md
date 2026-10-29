@@ -1,6 +1,5 @@
 # Fair Value Gap
 
-> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on XAU; FX unchanged. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 ## Strategy ID / version
 
@@ -63,7 +62,7 @@ no opposing liquidity, zero ATR.
 
 `fill_quality` only (`Overall` is that value; Q3 removed `gap_strength_quality` and
 `relevance_quality`, constants of the admission rule — see
-[q3-quality-validation.md](q3-quality-validation.md)): this strategy's own
+[quality](../analysis-engine.md#acceptance-and-quality)): this strategy's own
 independent reasoning, the opposite polarity from Supply/Demand/
 OrderBlock's freshness dimension
 (`1.0 - 0.25*TouchCount`, floored at 0.1): for an FVG, `TouchCount` is a
@@ -91,10 +90,9 @@ markedly lower quality — see `TestFVG_MoreFillsLowersQualityRatherThanRaisingI
 
 ## Status and execution
 
-- **Certification**: `LEGACY_PARITY_PROVEN` ([matrix](README.md#certification)).
+- **Certification**: `LEGACY_PARITY_PROVEN` ([catalog](README.md#catalog)).
 - **Symbols**: all instruments.
 - **Execution**: Trades on every instrument. Minimum gap 0.5 ATR (0.36 ATR gaps traded as noise on XAU).
 - **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by quality,
-  confluence, structural quality and freshness trades and the rest are
-  suppressed ([execution](../execution.md#same-thesis-arbitration)).
+  thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
+  (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).

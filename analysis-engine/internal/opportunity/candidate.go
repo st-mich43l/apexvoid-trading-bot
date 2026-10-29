@@ -1,12 +1,12 @@
 // Package opportunity holds the technical-opportunity domain: a Candidate
-// is not a TradePlan (see docs/architecture/algo-bot.md's "TradePlan
+// is not a TradePlan (see docs/analysis-engine.md's "TradePlan
 // ownership" — analysis-engine never publishes broker-ready position
 // sizing). It is the pure, behavior-free result of a strategy's
 // evaluation: what the setup is, where it is, why (evidence), and how
 // good it looks by that strategy's own quality model.
 //
 // This package deliberately has NO dependency on internal/strategy — see
-// docs/architecture.md's "the one correction" for why:
+// docs/analysis-engine.md's "the one correction" for why:
 // strategy.Strategy.Evaluate returns []opportunity.Candidate, so
 // opportunity must sit below strategy in the dependency graph, not above
 // it as the source architecture task's own §51 literally (and, per that
@@ -33,7 +33,7 @@ type StrategyID string
 // EntryZone is a simple price range — deliberately not named "Zone" and
 // deliberately not internal/zone's richer Zone type (supply/demand
 // geometry with lifecycle/mitigation state, a higher layer opportunity
-// must not depend on). See docs/architecture/analysis-engine.md's naming
+// must not depend on). See docs/analysis-engine.md's naming
 // note on this exact point.
 type EntryZone struct {
 	Low  float64

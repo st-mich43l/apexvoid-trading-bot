@@ -5,6 +5,50 @@ Redis is ApexVoid's authoritative **operational market-data plane**, shared by
 reserved for durable business events and commands, never the bar/tick feed;
 see [ADR-010](adr/010-redis-market-data-kafka-events.md).
 
+## Who writes and who reads
+
+```mermaid
+flowchart LR
+  CE[ctrader-engine]
+  AE[analysis-engine]
+  AB[algo-bot]
+  subgraph md [market data]
+    BARS["bars:{SYM}:{TF}<br/>ZSET"]
+    NEW(["bars:new<br/>pub/sub"])
+    SPOT["price:{SYM}:spot"]
+  end
+  subgraph an [analysis]
+    ZB["analysis:zone_book:{SYM}<br/>20 min TTL"]
+  end
+  subgraph ex [execution]
+    STREAM["execution:trade_plans<br/>stream"]
+    CANCEL["execution:plan_cancel:{id}"]
+    PSTATE["execution:plan_state:{id}<br/>plan_ack · plan_runtime"]
+    SNAPK["auto_trade:executor_snapshot:{SYM}"]
+    LOCKS["route locks · entry_overlap<br/>group reservations"]
+  end
+  CE --> BARS
+  CE --> NEW
+  CE --> SPOT
+  BARS --> AE
+  NEW --> AE
+  AE --> ZB
+  ZB --> AB
+  SPOT --> AB
+  AB --> STREAM
+  AB --> CANCEL
+  AB <--> LOCKS
+  STREAM --> CE
+  CANCEL --> CE
+  CE --> PSTATE
+  CE --> SNAPK
+  PSTATE --> AB
+  SNAPK --> AB
+```
+
+Every key has one writing service. Python never edits `execution:plan_state:*`; the
+executor never writes a plan.
+
 ## Series Key
 
 One sorted set per `(symbol, timeframe)`:
@@ -254,7 +298,7 @@ reply target falls back to a standalone card.
 
 ## TradePlan Stream (execution:*)
 
-The only execution contract - see `docs/autotrade-execution-integrity.md`.
+The only execution contract - see `docs/execution.md`.
 Owner-armed manual `/algo` signals use the same stream: the bot converts each
 `manual_trade:intents` entry into a TradePlan whose `plan_id` is the intent id
 (`manual:{signal_id}:{revision}`) and whose plan-kind label (`strategy_family`) is `manual`.
@@ -406,7 +450,7 @@ and the proximal edge, is not behind the entry and still blocks. Without an exec
 for an untouched zone too: price can close beyond a zone without ever trading inside it (a gap, one displacement candle), and such a zone is
 `invalidated`, not `fresh`.
 
-Open F-7 decisions (no change here; see `docs/architecture/f7-opposing-barrier-ground-truth.md` section 12): whether a touched zone
+Open F-7 decisions (no change here; see ``git show f02d62f:docs/architecture/f7-opposing-barrier-ground-truth.md`` section 12): whether a touched zone
 should still be a barrier and after how many touches (Go: 30; the frozen Python: the first); whether a union wider than the
 per-zone width gate should be one wall; whether a strategy whose thesis is a rotation through a range may be blocked
 by that range's own interior. A range scalp is **not** exempt from the shared barrier book in the Go-origin flow (the legacy bypass

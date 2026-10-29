@@ -58,6 +58,14 @@ Docs live under `docs/` and follow these conventions:
   with a language hint (```` ```bash ````, ```` ```python ````, etc.).
 - Prefer tables for structured reference material.
 - Cross-link documents with relative paths (`docs/operations.md`).
+- Explain flows, states and ownership with a Mermaid diagram (```` ```mermaid ````)
+  next to the prose it illustrates; keep node labels quoted when they contain
+  punctuation. A diagram that disagrees with the code is a bug.
+- `docs/` describes the system as it is. A measurement, audit or investigation
+  goes in the pull request description; its conclusion goes in the page of the
+  rule it changed and in `CHANGELOG.md`. Data a test or tool reads lives next to
+  that test or tool (`analysis-engine/testdata/`, `algo-bot/tools/data/`), never
+  under `docs/`.
 
 When changing deployment steps, update `docs/operations.md` (and the
 Development block in `README.md` if the commands change).

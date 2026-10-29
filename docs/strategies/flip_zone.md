@@ -1,6 +1,5 @@
 # Flip Zone
 
-> **Quality review (2026-10-14): RETAIN_RESTRICTED** (proposal, not applied). Technical PASS_WITH_DEFECTS, execution PARTIAL, performance NEGATIVE, evidence MODERATE. Scope: propose observe-only on XAU; FX unchanged. See [ae-quality-certification.md](ae-quality-certification.md) and [ae-strategy-retirement-review.md](ae-strategy-retirement-review.md). Independent review: pending.
 
 **Contract.** Restored to the frozen `flip_demand_zone_reaction` / `flip_supply_zone_reaction`: a zone carrying the flip source, unmitigated and entry-valid, anchored to a key level whose closed-bar role is broken resistance (BUY) or broken support (SELL), with a confirmed structural reaction **after** the structure break that made the zone: the break bar built it and is no reaction to it (Q2). An ordinary zone touch is not a flip. Of the 91 oracle decisions (`test/legacyparity`) 80 were the break bar itself "rejecting" the band it closed through; Go publishes the other 11, each identical to the oracle's decision (a strict subset, asserted bar for bar).
 
@@ -88,10 +87,9 @@ Block, never treated as a flip).
 
 ## Status and execution
 
-- **Certification**: `GO_NATIVE_VALIDATED` ([matrix](README.md#certification)).
+- **Certification**: `GO_NATIVE_VALIDATED` ([catalog](README.md#catalog)).
 - **Symbols**: all instruments.
 - **Execution**: Trades on every instrument. The Python predecessor (`flip_*_zone_reaction`) is not reproduced: same bar and side on 4 of 91 oracle decisions. Behaviour is pinned by its own contract tests only. One live XAU trade so far (a stop-out), too few to judge.
 - **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by quality,
-  confluence, structural quality and freshness trades and the rest are
-  suppressed ([execution](../execution.md#same-thesis-arbitration)).
+  thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
+  (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).
