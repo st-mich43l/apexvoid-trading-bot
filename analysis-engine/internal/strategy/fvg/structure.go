@@ -292,7 +292,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 // bind maps a structure frame's gaps onto the execution frame by TIME: the origin to the first execution bar opening at or after the structure bar that
 // completed the gap, and the first bar that may touch it to the first execution bar opening at or after that bar's close. A gap older than the execution
 // window cannot be anchored there and is dropped.
-func bind(tf market.Timeframe, structureBars, execBars []market.Candle, gaps []instance) []instance {
+func bind(tf market.Timeframe, structureBars, execBars []market.Candle, gaps []instance, bounded bool) []instance {
 	if len(execBars) == 0 {
 		return nil
 	}
@@ -304,8 +304,14 @@ func bind(tf market.Timeframe, structureBars, execBars []market.Candle, gaps []i
 		}
 		originTime := structureBars[in.FrameOrigin].Time
 		index := sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= originTime })
-		if index >= len(execBars) || execBars[0].Time > originTime {
+		if index >= len(execBars) {
 			continue
+		}
+		if execBars[0].Time > originTime { // the origin precedes the execution window: its own frame still holds it, so it stays (OriginIndex -1)
+			if bounded {
+				continue // the frozen analysis dropped it (engine.WithFrozenWindows)
+			}
+			index = -1
 		}
 		touchable := 0
 		if known {

@@ -89,6 +89,14 @@ const (
 	// the counter never blocks an evaluation. It replaces fvg_definition_refused and ob_definition_refused.
 	CounterStrategyRefused Counter = "strategy_refused"
 
+	// CounterHistoryShort counts the closed-bar evaluations of a frame whose in-memory history holds fewer bars than its detection window or than the
+	// largest lookback an enabled strategy needs on it (analysis_history_short). Labels: symbol, timeframe. It never blocks an evaluation.
+	CounterHistoryShort Counter = "analysis_history_short"
+
+	// CounterHistoryGap counts the holes in a frame's closed-bar series inside its detection window, outside the market's weekly closure
+	// (analysis_history_gap). A hole is counted once, when it first appears in the window. Labels: symbol, timeframe. It never blocks an evaluation.
+	CounterHistoryGap Counter = "analysis_history_gap"
+
 	// CounterOpportunityStructureClosedThrough counts live order block
 	// opportunities withdrawn because a close of their structure's own timeframe
 	// went beyond the structural far edge (reason code STRUCTURE_CLOSED_THROUGH).

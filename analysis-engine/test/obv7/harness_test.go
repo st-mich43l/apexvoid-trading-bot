@@ -118,6 +118,7 @@ func newPair(t testing.TB, doc *config.Document, symbol market.Symbol) pair {
 	if err := engine.ApplyInstrument(&settings, doc, string(symbol)); err != nil {
 		t.Fatal(err)
 	}
+	engine.WithFrozenWindows(&settings) // v7 ran on the frozen candle windows: its structures never preceded the M5 window
 	var v7cfg strategy.Config
 	for _, c := range settings.Strategies {
 		if c.ID == "order_block" {
@@ -158,7 +159,7 @@ func confirmed(candidates []opportunity.Candidate) []opportunity.Candidate {
 	return out
 }
 
-// walk replays one capture and hands every closed M5 bar's decisions to visit.
+// walk replays one capture with the frozen candle windows (engine.WithFrozenWindows: the contexts the v6 proofs were made on, and exactly what v7 ran on) and hands every closed M5 bar's decisions to visit.
 func walk(t testing.TB, doc *config.Document, path string, visit func(b bar, e engine.Evaluation)) *replaycapture.Capture {
 	t.Helper()
 	capture, err := replaycapture.Load(path)
@@ -166,7 +167,7 @@ func walk(t testing.TB, doc *config.Document, path string, visit func(b bar, e e
 		t.Fatal(err)
 	}
 	p := newPair(t, doc, capture.Symbol)
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{FrozenWindows: true, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 || e.Context == nil {
 			return
 		}

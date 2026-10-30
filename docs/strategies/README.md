@@ -17,10 +17,10 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | Strategy | Version | Structure | Thesis | Proof | Spec |
 |---|---|---|---|---|---|
 | `key_level` | v6 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | `test/keylevelparity` golden | [key_level](key_level.md), [sweep first](keylevel-sweep-first.md) |
-| `supply` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | `test/supplyv7` | [supply](supply.md) |
+| `supply` | v8 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | `test/supplyv7` | [supply](supply.md) |
 | `demand` | v6 | M5, M15, H1 | confirmed bounce from a demand zone; same touch cap | `test/techniqueparity` golden | [demand](demand.md) |
-| `order_block` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at the last opposite candle before a displacement that broke structure, with room to the next opposing structure; dead once a close of its own frame goes through its far edge ([order-block-definition](order-block-definition.md)) | `test/obv7` | [order_block](order_block.md) |
-| `fvg` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at a real fair value gap, with room and no leg-extreme entry | `test/fvgv7` | [fvg](fvg.md) |
+| `order_block` | v8 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at the last opposite candle before a displacement that broke structure, with room to the next opposing structure; dead once a close of its own frame goes through its far edge ([order-block-definition](order-block-definition.md)) | `test/obv7` | [order_block](order_block.md) |
+| `fvg` | v8 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at a real fair value gap, with room and no leg-extreme entry | `test/fvgv7` | [fvg](fvg.md) |
 | `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | contract tests, `test/ifvgreplay` | [ifvg](ifvg.md) |
 | `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | fixtures, `test/crtreplay` | [crt](crt.md) |
 | `break_retest` | v3 | M5 | accepted break of its own key level or trendline, fresh retest, rejection | contract tests, `test/brreplay` | [break_retest](break_retest.md) |
