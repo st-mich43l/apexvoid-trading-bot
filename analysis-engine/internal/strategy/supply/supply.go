@@ -1,21 +1,6 @@
-// Package supply implements SupplyStrategy.
-// (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), one of the two
-// strategies the catalog split the original "Supply Demand"
-// detector into. Supply and demand share a canonical primitive
-// (internal/zone's displacement-based Supply/Demand geometry) but are
-// independently-owned strategies here —
-// this package must never be imported by internal/strategy/demand or vice
-// versa (test/architecture/dependency_test.go's strategy-isolation rule).
-//
-// Thesis: a still-valid (State Fresh/Touched, never Mitigated/Invalidated),
-// currently price-relevant (Relevance Immediate/Nearby) canonical Supply
-// zone is a standing sell reaction zone. Entry is the zone's own band —
-// this is a resting/limit thesis, not a "price just touched it this bar"
-// reaction: MarketContext exposes only already-computed causal facts
-// (zone.Relevance is itself recomputed from the real last close inside
-// zone.Update — source task §17), never raw OHLC, so "is this zone
-// currently relevant" is answered by the canonical primitive, not
-// re-derived here from candle wicks.
+// Package supply is the supply zone strategy (SELL). It owns its whole mechanism: what a supply zone is and when it is dead (structure.go), how a reaction off it is
+// confirmed (confirm.go), whether the entry is valid and the qualification (decision.go), and the candidate it publishes (candidate.go). It reads the
+// market only through the closed bars and facts of the frames in the context.
 package supply
 
 import (
@@ -25,77 +10,29 @@ import (
 	"sort"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
-// ID is this strategy's fixed V2 identity.
 const ID strategy.StrategyID = "supply"
-
-// Version is this strategy's own technical-thesis version — increments
-// only on a behavior-breaking redesign (source task §13), independent of
-// structure/liquidity/zone's own algorithm versions below.
 const Version = "v6"
 
-// Algorithm versions this strategy's logic was validated against — a
-// real, version-pinned contract fact each strategy owns (matches
-// internal/engine/config.go's own "only vN is supported" fail-closed
-// pattern), not tuning.
 const (
 	structureVersion = "v2"
 	liquidityVersion = "v1"
 	zoneVersionUsed  = "v1"
-	configVersion    = 3 // Configuration V3's own fixed version number.
+	configVersion    = 3
 )
 
-// Config is Supply's own parsed technical configuration — parsed from
-// strategy.Config.Parameters, never a generic registry-supplied shape
-// (source task §51: "each concrete factory... must parse and validate
-// its technical thresholds itself").
-type Config struct {
-	// MinimumStrength floors zone.Zone.Strength — a weak/marginal supply
-	// zone is not a tradeable thesis.
-	MinimumStrength float64
-	// InvalidationBufferATR is how far beyond the zone's own High a
-	// confirmed close must reach before the thesis is invalidated —
-	// never zero (a bare touch of the zone's own edge is not itself
-	// invalidation).
-	InvalidationBufferATR float64
-	// MinimumTargetDistanceATR rejects a target pool too close to entry
-	// to represent a meaningful technical objective.
-	MinimumTargetDistanceATR float64
-	// ExpiryHours is this strategy's own technical expiry window (source
-	// task's opportunity-lifecycle SETUP_EXPIRED reason) — distinct from
-	// Algo Bot's execution-age policy.
-	ExpiryHours float64
-	// Reaction is the shared legacy confirmation tuning (see strategyutil).
-	Reaction strategyutil.ReactionConfig
-	// Technique is the legacy Python technique validation (see strategyutil).
-	Technique strategyutil.TechniqueGeometry
-	// Legacy qualifies the confirmed reaction through the frozen detector contract.
-	Legacy strategyutil.LegacyDetectorSettings
-	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
-	StopBudget strategyutil.StopBudget
-}
-
-// Strategy is SupplyStrategy — see package doc comment for its thesis.
+// Strategy is the supply zone strategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
 	cfg         Config
-	rawConfig   strategy.Config
-	timeframe   market.Timeframe
 	fingerprint string
 }
 
-// New constructs SupplyStrategy from its registry configuration. Fails
-// closed on a missing/invalid required parameter (source task §56: "no
-// hidden strategy values... fail startup on missing required strategy
-// config").
 func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if cfg.ID != ID {
 		return nil, fmt.Errorf("supply: New called with strategy ID %q, want %q", cfg.ID, ID)
@@ -104,255 +41,45 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("supply: %w", err)
 	}
-	s := &Strategy{
-		cfg: parsed, rawConfig: cfg, timeframe: market.M5,
-		fingerprint: configFingerprint(cfg),
-	}
+	s := &Strategy{cfg: parsed, fingerprint: configFingerprint(cfg)}
 	s.cfg.StopBudget.Refusals = &s.RefusalCounter
 	return s, nil
 }
 
-func parseConfig(params map[string]any) (Config, error) {
-	minimumStrength, err := requireFloat(params, "minimum_strength")
-	if err != nil {
-		return Config{}, err
-	}
-	invalidationBuffer, err := requireFloat(params, "invalidation_buffer_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	minimumTargetDistance, err := requireFloat(params, "minimum_target_distance_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	expiryHours, err := requireFloat(params, "expiry_hours")
-	if err != nil {
-		return Config{}, err
-	}
-	if invalidationBuffer <= 0 {
-		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
-	}
-	if expiryHours <= 0 {
-		return Config{}, fmt.Errorf("expiry_hours must be > 0")
-	}
-	legacyConfig, err := strategyutil.ParseLegacyDetectorSettings(params)
-	if err != nil {
-		return Config{}, err
-	}
-	reactionConfig, err := strategyutil.ParseReactionConfig(params)
-	if err != nil {
-		return Config{}, err
-	}
-	techniqueConfig, err := strategyutil.ParseTechniqueGeometry(params)
-	if err != nil {
-		return Config{}, err
-	}
-	stopBudget, err := strategyutil.ParseStopBudget(params)
-	if err != nil {
-		return Config{}, err
-	}
-	return Config{
-		StopBudget:      stopBudget,
-		MinimumStrength: minimumStrength, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig, Legacy: legacyConfig,
-	}, nil
-}
-
-func requireFloat(params map[string]any, key string) (float64, error) {
-	raw, ok := params[key]
-	if !ok {
-		return 0, fmt.Errorf("missing required parameter %q", key)
-	}
-	switch v := raw.(type) {
-	case float64:
-		return v, nil
-	case int:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("parameter %q is not numeric (got %T)", key, raw)
-	}
-}
-
 func (s *Strategy) ID() strategy.StrategyID { return ID }
 
-func (s *Strategy) RequiredTimeframes() []market.Timeframe {
-	return []market.Timeframe{s.timeframe}
-}
+func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
-// Evaluate emits the resting-zone observations and, separately, the confirmed
-// reaction the frozen publisher (technique_detectors) decides on the frame's
-// technique instances.
+// Evaluate returns the confirmed reaction off the best zone of the execution frame and, separately, off the best zone of the configured higher frames:
+// a higher-frame decision never competes with the execution frame's.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
-	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueSupplyDemand, market.Sell, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_supply_zone_confirmed", ConfirmedEvidence: "m5_supply_zone_rejection_confirmed",
-		InvalidationLabel: "supply_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
-		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
-		Versions: opportunity.AnalysisProvenance{
-			StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-			ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-		},
-	})...)
-}
-
-// resting is the resting-zone half of Evaluate. Read-only: never mutates ctx
-// (source task §92).
-func (s *Strategy) resting(ctx *context.MarketContext) []opportunity.Candidate {
-	tfCtx, ok := ctx.Timeframes[s.timeframe]
+	base, ok := newView(ctx, &s.cfg)
 	if !ok {
 		return nil
 	}
-	atr := ctx.Volatility.ATR
-	if atr <= 0 {
-		return nil
+	exec := s.frameInstances(base.frame, true)
+	var higher []instance
+	for _, tf := range s.cfg.HigherTimeframes {
+		frameContext := ctx.Timeframes[tf]
+		if frameContext == nil || frameContext.Legacy == nil {
+			continue
+		}
+		higher = append(higher, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, s.frameInstances(frameContext.Legacy, false))...)
 	}
-
-	var candidates []opportunity.Candidate
-	for _, z := range tfCtx.Zones.Zones {
-		if z.Kind != zone.KindSupply {
+	var out []opportunity.Candidate
+	for _, d := range []*decision{s.best(base, exec), s.best(base, higher)} {
+		// The best decision of the bar competes across both sides; this strategy publishes it only when it is a SELL.
+		if d == nil || d.direction != market.Sell {
 			continue
 		}
-		if z.State != zone.StateFresh && z.State != zone.StateTouched {
-			continue
+		if candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d); ok {
+			out = append(out, candidate)
 		}
-		if z.Relevance != zone.Immediate && z.Relevance != zone.Nearby {
-			continue
-		}
-		if z.Strength < s.cfg.MinimumStrength {
-			continue
-		}
-
-		entryLow, entryHigh := float64(z.Low), float64(z.High)
-		invalidationPrice := entryHigh + s.cfg.InvalidationBufferATR*atr
-
-		targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, liquidity.LiquiditySellSide, entryLow, s.cfg.MinimumTargetDistanceATR*atr)
-		if !ok {
-			continue
-		}
-
-		createdAt := zoneReferenceTime(z)
-		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
-
-		setupKey := fmt.Sprintf("zone:%s", z.ID)
-		id, err := opportunity.DeterministicID(opportunity.Identity{
-			Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: market.Sell, SetupKey: setupKey,
-		})
-		if err != nil {
-			continue
-		}
-
-		quality := computeQuality(z)
-
-		candidate := opportunity.Candidate{
-			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction:    market.Sell,
-			StructuralID: z.ID,
-			Entry:        opportunity.EntryZone{Low: entryLow, High: entryHigh},
-			Invalidation: market.PriceLevel{
-				Price: market.Price(invalidationPrice), Label: "supply_zone_invalidated",
-			},
-			Targets: []opportunity.Target{{
-				Price: market.PriceLevel{Price: market.Price(targetPool.Low), Label: "nearest_sell_side_liquidity"},
-			}},
-			Evidence: []opportunity.Evidence{
-				{Code: "m5_supply_zone_" + z.State.String()},
-				{Code: "m5_supply_zone_relevance_" + z.Relevance.String()},
-				{Code: "m5_supply_zone_layer_" + z.Layer.String()},
-			},
-			Quality:   quality,
-			CreatedAt: createdAt, ExpiresAt: expiresAt,
-			Provenance: opportunity.AnalysisProvenance{
-				StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-				ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-			},
-		}
-		candidates = append(candidates, candidate)
 	}
-	return candidates
+	return out
 }
 
-// nearestPool returns the liquidity pool of side, on the correct side of
-// referencePrice, at least minimumDistance away, closest to
-// referencePrice — the technical target objective (source task §48:
-// "opposing liquidity... never account-based TP sizing").
-func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64) (liquidity.Pool, bool) {
-	var candidates []liquidity.Pool
-	for _, p := range pools {
-		if p.Side != side {
-			continue
-		}
-		mid := (float64(p.Low) + float64(p.High)) / 2
-		distance := referencePrice - mid
-		if side == liquidity.LiquidityBuySide {
-			distance = mid - referencePrice
-		}
-		if distance < minimumDistance {
-			continue
-		}
-		candidates = append(candidates, p)
-	}
-	if len(candidates) == 0 {
-		return liquidity.Pool{}, false
-	}
-	sort.Slice(candidates, func(i, j int) bool {
-		mi := (float64(candidates[i].Low) + float64(candidates[i].High)) / 2
-		mj := (float64(candidates[j].Low) + float64(candidates[j].High)) / 2
-		if side == liquidity.LiquidityBuySide {
-			return mi < mj
-		}
-		return mi > mj
-	})
-	return candidates[0], true
-}
-
-// zoneReferenceTime is the most recent real timestamp this zone carries —
-// used as this Candidate's CreatedAt. MarketContext exposes no
-// evaluation-time clock (strategy.Strategy.Evaluate takes only ctx), so
-// the most recent already-known causal fact about the zone itself is the
-// correct, deterministic, replay-safe substitute — never the SetupKey,
-// which must not be an evaluation timestamp or Kafka event ID.
-func zoneReferenceTime(z zone.Zone) int64 {
-	if z.LastTouchedAt != nil && *z.LastTouchedAt > z.CreatedAt {
-		return *z.LastTouchedAt
-	}
-	return z.CreatedAt
-}
-
-// computeQuality is Supply's own quality model (source task §39) —
-// dimensions specific to a displacement-origin reaction zone. Not shared
-// with Demand/OrderBlock/etc., even though the shape of "some components
-// plus an overall score" recurs — each strategy computes its own values
-// independently (source task §40).
-func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	// A resting zone has had no reaction, so its one measurable dimension is how much of it is left: every touch spends resting
-	// interest (Fall(touches; 0, 5)). The engine's technique-zone adapter gives every zone a Strength of 1 and
-	// a Relevance of Immediate (it has neither), so neither is scored. Resting zones are not executable and are not comparable with
-	// confirmed ones, which are scored by the full model of strategyutil.ZoneFamilyQuality.
-	m := quality.New("supply.resting.quality.v1")
-	m.Score("zone_freshness", quality.Fall(float64(z.TouchCount), 0, 5))
-	m.Measure("zone_touches", float64(z.TouchCount))
-	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
-}
-
-func clamp01(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
-}
-
-// configFingerprint hashes THIS strategy's own registry configuration
-// (id/version/sorted parameters) — a real, deterministic value, though
-// deliberately not the whole resolved Configuration V3 document's own
-// fingerprint: a strategy has no access to *config.Document (it sits
-// below internal/config's rank; only internal/engine reads it).
-// (engine wiring, not this phase) is expected to enrich/overwrite
-// Provenance.ConfigFingerprint with the real whole-document fingerprint
-// before a Candidate reaches the OpportunityBook/Kafka — this value is a
-// legitimate bootstrapping placeholder, not a permanent design choice,
-// and is documented as such rather than silently presented as final.
+// configFingerprint is the strategy's version-pinned parameter digest.
 func configFingerprint(cfg strategy.Config) string {
 	keys := make([]string, 0, len(cfg.Parameters))
 	for k := range cfg.Parameters {
