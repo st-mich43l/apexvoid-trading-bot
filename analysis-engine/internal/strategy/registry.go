@@ -39,6 +39,21 @@ type Evaluation struct {
 	// UnsweptRefused counts, per strategy, the candidates refused in this evaluation because the confirming reaction did not sweep the level
 	// (nil when none). Strategies that require a sweep report it through UnsweptReporter.
 	UnsweptRefused map[StrategyID]int
+	// Refusals counts, per strategy, the structures it refused in this evaluation by the strategy's own reason and the timeframe the structure was found
+	// on (nil when none). A strategy that owns its refusal reasons reports them through RefusalReporter.
+	Refusals map[StrategyID]map[Refusal]int64
+}
+
+// Refusal is one reason a strategy refused a structure, and the timeframe the structure lives on.
+type Refusal struct {
+	Reason    string
+	Timeframe market.Timeframe
+}
+
+// RefusalReporter is implemented by a strategy that counts the structures it refuses, by its own reason codes. The registry drains the counts after every
+// Evaluate; a reporter never influences an evaluation.
+type RefusalReporter interface {
+	TakeRefusals() map[Refusal]int64
 }
 
 // StopBudgetReporter is implemented by a strategy that refuses a structural stop wider than the instrument cap. The registry drains the count after
@@ -217,6 +232,14 @@ func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Ti
 					result.UnsweptRefused = make(map[StrategyID]int)
 				}
 				result.UnsweptRefused[registered.config.ID] += int(n)
+			}
+		}
+		if reporter, ok := registered.strategy.(RefusalReporter); ok {
+			if taken := reporter.TakeRefusals(); len(taken) > 0 {
+				if result.Refusals == nil {
+					result.Refusals = make(map[StrategyID]map[Refusal]int64)
+				}
+				result.Refusals[registered.config.ID] = taken
 			}
 		}
 		for _, candidate := range candidates {

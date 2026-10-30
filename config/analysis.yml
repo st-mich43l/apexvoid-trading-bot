@@ -325,36 +325,44 @@ analysis:
       # Also evaluate these timeframes' own order blocks against the M5 bars (see supply).
       higher_timeframes: [M15, H1]
     fvg:
-      version: v6
+      # v7 (docs/strategies/fvg.md): self-contained. The gap is found on M15/H1 (its definition judged on that frame as of its third candle), M5 confirms with a
+      # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as
+      # strategy_refused{strategy="fvg"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
+      # confluence rubric are injected by the engine.
+      version: v7
       enabled: true
-      minimum_strength: 0.4
-      # A real fair value gap on every timeframe (docs/strategies/fvg-definition.md; owner report 2026-10-28). The confirmed path used to accept any gap of
-      # one pip on M5, M15 and H1; these three keys are the gap contract iFVG v3 already uses, judged on the bars and the ATR of the frame the gap was found
-      # on, as of its third candle: the structural gap is at least confirmed_minimum_gap_atr of that ATR, the middle candle's body is at least
-      # confirmed_minimum_displacement_body_atr of it and at least confirmed_minimum_displacement_body_ratio of its own range, and that candle closed in the
-      # gap's direction. 0 switches a condition off. Same values for every instrument.
-      confirmed_minimum_gap_atr: 0.5
-      confirmed_minimum_displacement_body_atr: 0.5
-      confirmed_minimum_displacement_body_ratio: 0.5
-      # 2026-09-30: XAU traded 13-pip gaps (0.36 ATR) because a big middle
-      # candle lifted their strength past minimum_strength.
+      structure_timeframes: [M15, H1]
+      # The gap definition (the contract iFVG v3 uses): the structural gap is at least minimum_gap_atr of the ATR of its own frame, the middle candle's body at
+      # least minimum_displacement_body_atr of it and minimum_displacement_body_ratio of its own range, closing in the gap's direction. 0 switches one off.
       minimum_gap_atr: 0.5
-      invalidation_buffer_atr: 0.5
-      minimum_target_distance_atr: 1.0
-      expiry_hours: 24.0
-      # Legacy Python reaction confirmation (shared by every technique).
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
-      # Legacy Python technique validation (technique_geometry.py): price must be at
-      # the zone, width capped in ATR, entry clipped to its proximal slice.
-      epsilon_atr_fraction: 0.05
+      minimum_displacement_body_atr: 0.5
+      minimum_displacement_body_ratio: 0.5
+      # A gap is dead once a close of its own frame, after the candle that completed it, is beyond its far edge by more than this share of that bar's ATR.
+      close_through_buffer_atr: 0.1
       maximum_zone_atr: 2.0
       entry_max_width_price: 5.0
-      # Also evaluate these timeframes' own fair value gaps against the M5 bars: the setup is
-      # found on the higher-timeframe structure, the M5 reaction confirms it and the M5 price
-      # executes it (owner direction 2026-10-24). Confirmation, entry validity and stop rules
-      # are the M5 ones; the stop is beyond the whole higher-timeframe gap.
-      higher_timeframes: [M15, H1]
+      maximum_entry_atr: 2.0
+      # M5 confirmation: a touch of the entry band, then within confirmation_window_bars (the touch bar included) a wick rejection (closes beyond the band's
+      # proximal edge with a wick of at least minimum_wick_ratio of its range) or an engulfing close of at least engulfing_minimum_range_atr of the M5 ATR;
+      # not older than confirmation_max_age_bars at the decision bar.
+      confirmation_window_bars: 3
+      confirmation_max_age_bars: 2
+      minimum_wick_ratio: 0.5
+      engulfing_minimum_range_atr: 0.5
+      invalidation_buffer_atr: 0.5
+      # Room: the nearest opposing obstacle (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the impulse extreme) must be
+      # at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
+      minimum_target_r: 1.0
+      fallback_target_r: 2.0
+      obstacle_pivot_bars: 2
+      # Leg extension: a leg (from the lowest low leg_lookback_bars before the gap's first candle to its extreme) of at least extension_minimum_leg_atr of the
+      # structure ATR whose extreme is retraced by less than minimum_leg_retracement at the entry is refused (entry_at_leg_extreme).
+      leg_lookback_bars: 6
+      extension_minimum_leg_atr: 3.0
+      minimum_leg_retracement: 0.25
+      confluence_floor: 2
+      fibonacci_enabled: true
+      expiry_hours: 24.0
     ifvg:
       version: v3
       enabled: true

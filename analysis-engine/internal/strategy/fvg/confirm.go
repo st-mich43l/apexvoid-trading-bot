@@ -4,36 +4,22 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
-// The confirmation episode of this strategy: a touch of the entry band followed, on or after the touch bar, by one of the recognised rejection patterns.
-// The pattern priority, windows and thresholds are this package's own.
+// The confirmation episode of this strategy (docs/strategies/fvg.md). On M5, after the gap exists, a TOUCH trades into the entry band without closing
+// beyond the gap's far edge; within ConfirmationWindowBars of it (the touch bar included) one bar must reject:
+//
+//   - wick_rejection: it closes beyond the band's proximal edge in the trade direction (a BUY closes above the band high) with a rejecting wick of at
+//     least MinimumWickRatio of its range, in the trade direction;
+//   - engulfing: it is a bullish (bearish) engulfing close of the prior bar, with a range of at least EngulfingMinimumRangeATR of the M5 ATR.
+//
+// The rejection must not be older than ConfirmationMaxAgeBars at the decision bar. Sweep-reclaim, strong-reclaim and rejection-CHoCH are not
+// confirmations of a gap.
 
 const (
-	patternWickRejection  = "wick_rejection"
-	patternSweepReclaim   = "sweep_reclaim"
-	patternRejectionCHoCH = "rejection_choch"
-	patternStrongReclaim  = "strong_reclaim"
-	patternEngulfing      = "engulfing"
+	patternWickRejection = "wick_rejection"
+	patternEngulfing     = "engulfing"
 
 	epsilonPrice = 1e-12
 )
-
-// grabRef is a liquidity grab (sweep then reclaim) the frame found on one bar; only grades A and B confirm.
-type grabRef struct {
-	Index int
-	Grade string
-}
-
-type confirmParams struct {
-	Direction                string // "BUY" | "SELL"
-	Low, High                float64
-	TouchLookback            int
-	ConfirmLookback          int
-	Grabs                    []grabRef
-	HasCHoCH                 bool
-	ATR                      float64
-	EngulfingMinimumRangeATR float64
-	MinIndex                 int
-}
 
 type confirmation struct {
 	Type              string
@@ -43,99 +29,79 @@ type confirmation struct {
 	ConfirmationTime  int64
 }
 
-// evaluateConfirmation finds the latest valid confirmation within the lookback windows, or nil. Touch and confirmation may be on different bars; the
-// confirmation is on or after its touch.
-func evaluateConfirmation(candles []market.Candle, p confirmParams) *confirmation {
-	if len(candles) == 0 {
-		return nil
+// touches reports whether bar c is a touch of the band that does not close beyond the gap's far edge.
+func touches(c market.Candle, direction market.Direction, bandLow, bandHigh, structLow, structHigh float64) bool {
+	if c.Low > bandHigh+epsilonPrice || c.High < bandLow-epsilonPrice {
+		return false
 	}
-	touchLB := p.TouchLookback
-	if touchLB < 1 {
-		touchLB = 1
+	if direction == market.Buy {
+		return c.Close >= structLow-epsilonPrice
 	}
-	confirmLB := touchLB
-	if p.ConfirmLookback > 0 {
-		confirmLB = p.ConfirmLookback
-	}
-	last := len(candles) - 1
-	touchEarliest := maxInt(maxInt(0, p.MinIndex), last-touchLB+1)
-	confirmEarliest := maxInt(maxInt(0, p.MinIndex), last-confirmLB+1)
+	return c.Close <= structHigh+epsilonPrice
+}
 
-	var touchIndexes []int
-	for i := touchEarliest; i <= last; i++ {
-		if candles[i].Low <= p.High+epsilonPrice && candles[i].High >= p.Low-epsilonPrice {
-			touchIndexes = append(touchIndexes, i)
+// rejects names the pattern bar c shows as a rejection of the band, or "".
+func (v *view) rejects(bars []market.Candle, c int, bandLow, bandHigh float64) string {
+	bar := bars[c]
+	rng := bar.High - bar.Low
+	if rng > 0 {
+		if v.dir == market.Buy {
+			lower := minFloat(bar.Open, bar.Close) - bar.Low
+			if bar.Close > bandHigh+epsilonPrice && bar.Close > bar.Open && lower/rng >= v.cfg.MinimumWickRatio {
+				return patternWickRejection
+			}
+		} else {
+			upper := bar.High - maxFloat(bar.Open, bar.Close)
+			if bar.Close < bandLow-epsilonPrice && bar.Close < bar.Open && upper/rng >= v.cfg.MinimumWickRatio {
+				return patternWickRejection
+			}
 		}
 	}
-	if len(touchIndexes) == 0 {
-		return nil
+	if c > 0 && engulfing(bar, bars[c-1], string(v.dir), v.atr, v.cfg.EngulfingMinimumRangeATR) {
+		return patternEngulfing
 	}
-	grabGrade := make(map[int]string, len(p.Grabs))
-	for _, g := range p.Grabs {
-		if confirmEarliest <= g.Index && g.Index <= last {
-			grabGrade[g.Index] = g.Grade
+	return ""
+}
+
+// confirm looks for the latest rejection of the band on the execution bars. When there is a touch to confirm but no rejection it returns
+// refusedNoRejection; when the latest rejection is older than the allowed age, refusedStaleConfirmation; when there has been no touch in reach, nothing
+// (the gap is simply not in play).
+func (v *view) confirm(in instance, bandLow, bandHigh, structLow, structHigh float64) (*confirmation, string) {
+	bars := v.frame.Bars
+	last := len(bars) - 1
+	window := v.cfg.ConfirmationWindowBars
+	earliest := maxInt(in.TouchableFrom, 0)
+	reach := maxInt(earliest, last-(window-1)-v.cfg.ConfirmationMaxAgeBars)
+	touched := false
+	for i := reach; i <= last; i++ {
+		if touches(bars[i], v.dir, bandLow, bandHigh, structLow, structHigh) {
+			touched = true
+			break
 		}
 	}
-	// The latest valid confirmation, so a stale touch without a fresh confirmation never executes.
-	for ci := last; ci >= confirmEarliest; ci-- {
+	if !touched {
+		return nil, ""
+	}
+	for c := last; c >= earliest; c-- {
 		touchIndex := -1
-		for _, ti := range touchIndexes {
-			if ti <= ci {
-				touchIndex = ti
+		for t := maxInt(earliest, c-window+1); t <= c; t++ {
+			if touches(bars[t], v.dir, bandLow, bandHigh, structLow, structHigh) {
+				touchIndex = t // the latest touch at or before the rejection, inside its window
 			}
 		}
 		if touchIndex < 0 {
 			continue
 		}
-		bar := candles[ci]
-		var kind string
-		switch {
-		case grabGrade[ci] == "A" || grabGrade[ci] == "B":
-			kind = patternSweepReclaim
-		case wickRejection(bar, p.Direction) && p.HasCHoCH:
-			kind = patternRejectionCHoCH
-		case strongReclaim(bar, p.Direction, p.Low, p.High):
-			kind = patternStrongReclaim
-		case wickRejection(bar, p.Direction):
-			kind = patternWickRejection
-		case ci > 0 && engulfing(bar, candles[ci-1], p.Direction, p.ATR, p.EngulfingMinimumRangeATR):
-			kind = patternEngulfing
-		}
+		kind := v.rejects(bars, c, bandLow, bandHigh)
 		if kind == "" {
 			continue
 		}
-		return &confirmation{Type: kind, TouchIndex: touchIndex, ConfirmationIndex: ci, TouchTime: candles[touchIndex].Time, ConfirmationTime: candles[ci].Time}
+		if last-c > v.cfg.ConfirmationMaxAgeBars {
+			return nil, refusedStaleConfirmation
+		}
+		return &confirmation{Type: kind, TouchIndex: touchIndex, ConfirmationIndex: c, TouchTime: bars[touchIndex].Time, ConfirmationTime: bars[c].Time}, ""
 	}
-	return nil
-}
-
-// wickRejection: the rejecting wick is at least the body and the bar closes in its reaction-side third, in the reaction direction.
-func wickRejection(c market.Candle, direction string) bool {
-	rng := c.High - c.Low
-	if rng <= 0 {
-		return false
-	}
-	body := abs(c.Close - c.Open)
-	upper := c.High - maxFloat(c.Open, c.Close)
-	lower := minFloat(c.Open, c.Close) - c.Low
-	lowerThird := c.Low + rng/3
-	upperThird := c.High - rng/3
-	if direction == "SELL" {
-		return upper >= body && c.Close < c.Open && c.Close <= lowerThird
-	}
-	return lower >= body && c.Close > c.Open && c.Close >= upperThird
-}
-
-// strongReclaim: the wick pierces the band's far edge, then the bar closes back through the near edge in the reaction direction.
-func strongReclaim(c market.Candle, direction string, low, high float64) bool {
-	if direction == "BUY" {
-		swept := c.Low < low-epsilonPrice
-		reclaimed := c.Close >= low-epsilonPrice && c.Close > c.Open
-		return swept && reclaimed
-	}
-	swept := c.High > high+epsilonPrice
-	reclaimed := c.Close <= high+epsilonPrice && c.Close < c.Open
-	return swept && reclaimed
+	return nil, refusedNoRejection
 }
 
 // engulfing: this bar's body fully engulfs the prior bar's body, the prior bar was a doji or opposed the reaction, and (with an ATR) the bar has real

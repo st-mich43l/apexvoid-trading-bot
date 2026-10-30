@@ -11,7 +11,6 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // tolerance is the comparison slack of the entry and level tests.
@@ -105,31 +104,6 @@ func (v *view) zoneKey(z zoneBand) float64 {
 	return z.High()
 }
 
-func (v *view) grabKinds() (direction, side string) {
-	if v.dir == market.Buy {
-		return "bull", "sell"
-	}
-	return "bear", "buy"
-}
-
-// zoneGrab is the latest same-direction liquidity grab whose pool points into the band.
-func (v *view) zoneGrab(z zoneBand) *techniquezone.Grab {
-	wantDirection, wantSide := v.grabKinds()
-	for i := len(v.frame.Grabs) - 1; i >= 0; i-- {
-		grab := v.frame.Grabs[i]
-		if grab.Direction != wantDirection || grab.Pool.Side != wantSide {
-			continue
-		}
-		width := math.Max(z.High()-z.Low(), 0)
-		tol := math.Max(grab.Pool.Band, math.Max(width, v.cfg.PipSize))
-		if z.Side == "demand" && grab.Pool.Side == "sell" && z.Low()-tol <= grab.Pool.Level && grab.Pool.Level <= z.High() ||
-			z.Side == "supply" && grab.Pool.Side == "buy" && z.Low() <= grab.Pool.Level && grab.Pool.Level <= z.High()+tol {
-			return &grab
-		}
-	}
-	return nil
-}
-
 // recentCHoCH: a change of character in the trade direction within the last lookback bars.
 func (v *view) recentCHoCH(lookback int) bool {
 	earliest := maxInt(0, len(v.frame.Bars)-maxInt(1, lookback)-1)
@@ -143,19 +117,6 @@ func (v *view) recentCHoCH(lookback int) bool {
 		}
 	}
 	return false
-}
-
-// reactionFrom looks for a confirmed reaction off the band on the execution bars; no bar before minIndex (the first bar that can touch the gap) counts.
-func (v *view) reactionFrom(low, high float64, grab *techniquezone.Grab, minIndex int) *confirmation {
-	lookback := maxInt(1, v.cfg.ReactionLookbackBars)
-	params := confirmParams{
-		MinIndex: minIndex, Direction: string(v.dir), Low: low, High: high, TouchLookback: lookback, ConfirmLookback: lookback,
-		HasCHoCH: v.recentCHoCH(lookback), ATR: v.atr, EngulfingMinimumRangeATR: v.cfg.EngulfingMinimumRangeATR,
-	}
-	if grab != nil {
-		params.Grabs = []grabRef{{Index: grab.Index, Grade: grab.Grade}}
-	}
-	return evaluateConfirmation(v.frame.Bars, params)
 }
 
 func (v *view) fibTouch(level float64) bool {
@@ -224,14 +185,19 @@ func (r *result) confluenceContext() *opportunity.ConfluenceContext {
 	}
 }
 
-// decision is one gap's confirmed reaction on the bar.
+// decision is one gap's confirmed reaction on the bar, with the geometry it was judged on.
 type decision struct {
-	inst      instance
-	direction market.Direction
-	v         *view
-	conf      *confirmation
-	res       *result
-	id        string
+	inst         instance
+	direction    market.Direction
+	v            *view
+	conf         *confirmation
+	res          *result
+	id           string
+	reference    float64 // the proximal edge of the entry band
+	invalidation float64
+	anchored     bool   // the reaction's own extreme set the stop
+	budgetCode   string // stop-budget evidence ("" without a budget)
+	room         roomResult
 }
 
 func directionOf(in instance) market.Direction {
@@ -249,25 +215,21 @@ func (in instance) band() zoneBand {
 	return zoneBand{Bottom: in.Low, Top: in.High, Side: side, Score: in.Score, Touches: in.Touches}
 }
 
-// factorsFor are the confluence factors the confirmation actually showed.
-func (v *view) factorsFor(z zoneBand, kind string) confluence.Factors {
-	factors := confluence.Factors{
+// factorsFor are the confluence factors the confirmation measurably showed: the wick of the rejecting bar, its engulfing body or the gap's own middle
+// candle being a body of at least one structure ATR, the higher timeframe bias and the gap's touches; the rejecting bar closing through the latest
+// execution-frame swing in the trade direction that was already confirmed before it is the structural agreement. (The fibonacci touch is added by finish.)
+func (v *view) factorsFor(in instance, z zoneBand, conf *confirmation) confluence.Factors {
+	return confluence.Factors{
 		HTFAligned: v.htfAligned(), Touches: z.Touches,
-		WickRejection:       kind == patternWickRejection,
-		DisplacementGrade:   kind == patternEngulfing,
-		StructuralAgreement: kind == patternSweepReclaim || kind == patternStrongReclaim,
+		WickRejection:       conf.Type == patternWickRejection,
+		DisplacementGrade:   conf.Type == patternEngulfing || v.middleBodyATR(in) >= 1.0,
+		StructuralAgreement: v.confirmedThroughRecentSwing(conf.ConfirmationIndex),
 	}
-	if kind == patternRejectionCHoCH {
-		factors.WickRejection, factors.CHoCH = true, true
-	}
-	return factors
 }
 
-// publish decides one gap: entry validity, the reaction after the gap formed, the qualification.
-func (s *Strategy) publish(base *view, in instance) *decision {
-	if in.Mitigated && in.Touches > retestMaxTouches {
-		return nil
-	}
+// publish decides one gap: entry validity, the measured confirmation after the gap formed, the qualification, the stop and the stop budget, then room and
+// leg extension. refuse is told why a gap that was in play did not publish.
+func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) *decision {
 	direction := directionOf(in)
 	v := base.withDirection(direction)
 	z := in.band()
@@ -275,15 +237,38 @@ func (s *Strategy) publish(base *view, in instance) *decision {
 	if !v.entryValid(z) {
 		return nil
 	}
-	conf := v.reactionFrom(structLow, structHigh, v.zoneGrab(z), in.TouchableFrom)
+	conf, reason := v.confirm(in, z.Low(), z.High(), structLow, structHigh)
 	if conf == nil {
+		if reason != "" {
+			refuse(reason)
+		}
 		return nil
 	}
-	res := v.finish(v.zoneKey(z), z, v.factorsFor(z, conf.Type), structLow, structHigh)
+	res := v.finish(v.zoneKey(z), z, v.factorsFor(in, z, conf), structLow, structHigh)
 	if res == nil {
 		return nil
 	}
-	return &decision{inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in)}
+	reference := res.zone.High()
+	if direction == market.Sell {
+		reference = res.zone.Low()
+	}
+	buffer := s.cfg.InvalidationBufferATR * v.atr
+	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, conf, direction, res.structuralLow, res.structuralHigh, buffer)
+	budgetCode, ok := s.cfg.StopBudget.Apply(reference, invalidation)
+	if !ok {
+		return nil
+	}
+	room := v.room(in, reference, math.Abs(reference-invalidation))
+	if len(room.Reasons) > 0 {
+		for _, r := range room.Reasons {
+			refuse(r)
+		}
+		return nil
+	}
+	return &decision{
+		inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in),
+		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
+	}
 }
 
 // instanceID is the structure's stable identity: technique, side, the open time of the bar that completed the gap on the execution frame, and the
@@ -300,11 +285,11 @@ func (v *view) instanceID(in instance) string {
 }
 
 // best is the single best confirmed reaction among instances: highest stars, nearest entry on a tie.
-func (s *Strategy) best(base *view, instances []instance) *decision {
+func (s *Strategy) best(base *view, instances []instance, refuse func(in instance, reason string)) *decision {
 	var best *decision
 	bestDistance := math.Inf(1)
 	for _, in := range instances {
-		d := s.publish(base, in)
+		d := s.publish(base, in, func(reason string) { refuse(in, reason) })
 		if d == nil {
 			continue
 		}
