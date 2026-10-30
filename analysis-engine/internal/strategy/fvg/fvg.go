@@ -1,14 +1,6 @@
-// Package fvg implements FVGStrategy.
-// (apexvoid-bot-prompts/rebuild-strategies.md §18), consuming the
-// canonical FVG primitive internal/zone already builds (gap bounds,
-// direction, origin, fill percentage, mitigation — the primitive owns
-// the geometry; this package owns tradeability).
-//
-// Thesis: a still-valid, currently-relevant fair value gap is a standing
-// imbalance-fill reaction zone in whichever direction its own Side
-// implies. Entry is the gap's own band; invalidation is a confirmed
-// close through the gap's far edge; target is the nearest liquidity
-// pool on the trade side.
+// Package fvg is the fair value gap strategy. It owns its whole mechanism: what a gap is and when it is dead (structure.go), how a reaction off it is
+// confirmed (confirm.go), whether the entry is valid and the qualification (decision.go), and the candidate it publishes (candidate.go). It reads the
+// market only through the closed bars and facts of the frames in the context.
 package fvg
 
 import (
@@ -16,19 +8,17 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
 const ID strategy.StrategyID = "fvg"
-const Version = "v6"
+const Version = "v7"
 
 const (
 	structureVersion = "v2"
@@ -37,29 +27,14 @@ const (
 	configVersion    = 3
 )
 
-// Config is FVG's own parsed technical configuration.
-type Config struct {
-	MinimumStrength          float64
-	MinimumGapATR            float64
-	InvalidationBufferATR    float64
-	MinimumTargetDistanceATR float64
-	ExpiryHours              float64
-	// Reaction is the shared legacy confirmation tuning (see strategyutil).
-	Reaction strategyutil.ReactionConfig
-	// Technique is the legacy Python technique validation (see strategyutil).
-	Technique strategyutil.TechniqueGeometry
-	// Legacy qualifies the confirmed reaction through the frozen detector contract.
-	Legacy strategyutil.LegacyDetectorSettings
-	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
-	StopBudget strategyutil.StopBudget
-}
-
-// Strategy is FVGStrategy.
+// Strategy is the fair value gap strategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
 	cfg         Config
-	timeframe   market.Timeframe
 	fingerprint string
+
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -70,258 +45,72 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fvg: %w", err)
 	}
-	s := &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}
+	s := &Strategy{cfg: parsed, fingerprint: configFingerprint(cfg)}
 	s.cfg.StopBudget.Refusals = &s.RefusalCounter
 	return s, nil
 }
 
-func parseConfig(params map[string]any) (Config, error) {
-	minimumStrength, err := requireFloat(params, "minimum_strength")
-	if err != nil {
-		return Config{}, err
-	}
-	minimumGap, err := requireFloat(params, "minimum_gap_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	invalidationBuffer, err := requireFloat(params, "invalidation_buffer_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	minimumTargetDistance, err := requireFloat(params, "minimum_target_distance_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	expiryHours, err := requireFloat(params, "expiry_hours")
-	if err != nil {
-		return Config{}, err
-	}
-	if minimumGap < 0 {
-		return Config{}, fmt.Errorf("minimum_gap_atr must be >= 0")
-	}
-	if invalidationBuffer <= 0 {
-		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
-	}
-	if expiryHours <= 0 {
-		return Config{}, fmt.Errorf("expiry_hours must be > 0")
-	}
-	reactionConfig, err := strategyutil.ParseReactionConfig(params)
-	if err != nil {
-		return Config{}, err
-	}
-	techniqueConfig, err := strategyutil.ParseTechniqueGeometry(params)
-	if err != nil {
-		return Config{}, err
-	}
-	legacyConfig, err := strategyutil.ParseLegacyDetectorSettings(params)
-	if err != nil {
-		return Config{}, err
-	}
-	stopBudget, err := strategyutil.ParseStopBudget(params)
-	if err != nil {
-		return Config{}, err
-	}
-	return Config{
-		StopBudget:      stopBudget,
-		Legacy:          legacyConfig,
-		MinimumStrength: minimumStrength, MinimumGapATR: minimumGap, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig,
-	}, nil
-}
-
-func requireFloat(params map[string]any, key string) (float64, error) {
-	raw, ok := params[key]
-	if !ok {
-		return 0, fmt.Errorf("missing required parameter %q", key)
-	}
-	switch v := raw.(type) {
-	case float64:
-		return v, nil
-	case int:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("parameter %q is not numeric (got %T)", key, raw)
-	}
-}
-
 func (s *Strategy) ID() strategy.StrategyID { return ID }
 
-func (s *Strategy) RequiredTimeframes() []market.Timeframe {
-	return []market.Timeframe{s.timeframe}
-}
+// RequiredTimeframes is M5 alone: the registry evaluates a strategy when one of its required frames closes, and a decision is made on a closed M5 bar. The
+// structure frames are read from the context when they exist.
+func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
-// Evaluate emits the resting-gap observations and, separately, the confirmed
-// reaction the frozen FVG publisher (technique_detectors.fvg_technique_reaction)
-// decides on the frame's technique instances.
+// Evaluate returns the confirmed reaction off the best gap of the structure frames (M15 and H1 by default). M5 confirms and executes; it never defines a
+// gap.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
-	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueFVG, "", strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_fvg_zone_confirmed", ConfirmedEvidence: "m5_fvg_rejection_confirmed",
-		InvalidationLabel: "fvg_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
-		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
-		Versions: opportunity.AnalysisProvenance{
-			StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-			ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-		},
-	})...)
-}
-
-func (s *Strategy) resting(ctx *context.MarketContext) []opportunity.Candidate {
-	tfCtx, ok := ctx.Timeframes[s.timeframe]
+	base, ok := newView(ctx, &s.cfg)
 	if !ok {
 		return nil
 	}
-	atr := ctx.Volatility.ATR
-	if atr <= 0 {
+	refusals := map[strategy.Refusal]int64{}
+	defer s.addRefusals(refusals)
+	var instances []instance
+	for _, tf := range s.cfg.StructureTimeframes {
+		frameContext := ctx.Timeframes[tf]
+		if frameContext == nil || frameContext.Legacy == nil {
+			continue
+		}
+		found := s.structureInstances(frameContext.Legacy, tf, func(reason string) { refusals[strategy.Refusal{Reason: reason, Timeframe: tf}]++ })
+		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found)...)
+	}
+	d := s.best(base, instances, func(in instance, reason string) {
+		refusals[strategy.Refusal{Reason: reason, Timeframe: in.Timeframe}]++
+	})
+	if d == nil {
 		return nil
 	}
-
-	var candidates []opportunity.Candidate
-	for _, z := range tfCtx.Zones.Zones {
-		if z.Kind != zone.KindFVG {
-			continue
-		}
-		if z.State != zone.StateFresh && z.State != zone.StateTouched {
-			continue
-		}
-		if z.Relevance != zone.Immediate && z.Relevance != zone.Nearby {
-			continue
-		}
-		if z.Strength < s.cfg.MinimumStrength {
-			continue
-		}
-		// Strength blends gap size with the middle candle's body, so a large
-		// displacement candle can carry a gap that is only a fraction of ATR.
-		// A gap that small is noise, not an imbalance worth trading.
-		if float64(z.High-z.Low) < s.cfg.MinimumGapATR*atr {
-			continue
-		}
-
-		direction := z.Side.Direction()
-		entryLow, entryHigh := float64(z.Low), float64(z.High)
-
-		var invalidationPrice float64
-		var poolSide liquidity.LiquiditySide
-		var referencePrice float64
-		if direction == market.Buy {
-			invalidationPrice = entryLow - s.cfg.InvalidationBufferATR*atr
-			poolSide = liquidity.LiquidityBuySide
-			referencePrice = entryHigh
-		} else {
-			invalidationPrice = entryHigh + s.cfg.InvalidationBufferATR*atr
-			poolSide = liquidity.LiquiditySellSide
-			referencePrice = entryLow
-		}
-
-		targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, poolSide, referencePrice, s.cfg.MinimumTargetDistanceATR*atr, direction)
-		if !ok {
-			continue
-		}
-		targetPrice := targetPool.High
-		if direction == market.Sell {
-			targetPrice = targetPool.Low
-		}
-
-		createdAt := zoneReferenceTime(z)
-		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
-
-		setupKey := fmt.Sprintf("zone:%s", z.ID)
-		id, err := opportunity.DeterministicID(opportunity.Identity{
-			Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: direction, SetupKey: setupKey,
-		})
-		if err != nil {
-			continue
-		}
-
-		quality := computeQuality(z)
-
-		candidate := opportunity.Candidate{
-			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction:    direction,
-			StructuralID: z.ID,
-			Entry:        opportunity.EntryZone{Low: entryLow, High: entryHigh},
-			Invalidation: market.PriceLevel{
-				Price: market.Price(invalidationPrice), Label: "fvg_invalidated",
-			},
-			Targets: []opportunity.Target{{
-				Price: market.PriceLevel{Price: targetPrice, Label: "nearest_opposing_liquidity"},
-			}},
-			Evidence: []opportunity.Evidence{
-				{Code: "m5_fvg_" + z.State.String()},
-				{Code: "m5_fvg_relevance_" + z.Relevance.String()},
-				{Code: "m5_fvg_side_" + z.Side.String()},
-			},
-			Quality:   quality,
-			CreatedAt: createdAt, ExpiresAt: expiresAt,
-			Provenance: opportunity.AnalysisProvenance{
-				StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-				ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-			},
-		}
-		candidates = append(candidates, candidate)
+	candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d)
+	if !ok {
+		return nil
 	}
-	return candidates
+	return []opportunity.Candidate{candidate}
 }
 
-func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64, direction market.Direction) (liquidity.Pool, bool) {
-	var matches []liquidity.Pool
-	for _, p := range pools {
-		if p.Side != side {
-			continue
-		}
-		mid := (float64(p.Low) + float64(p.High)) / 2
-		var distance float64
-		if direction == market.Buy {
-			distance = mid - referencePrice
-		} else {
-			distance = referencePrice - mid
-		}
-		if distance < minimumDistance {
-			continue
-		}
-		matches = append(matches, p)
+func (s *Strategy) addRefusals(found map[strategy.Refusal]int64) {
+	if len(found) == 0 {
+		return
 	}
-	if len(matches) == 0 {
-		return liquidity.Pool{}, false
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
 	}
-	sort.Slice(matches, func(i, j int) bool {
-		mi := (float64(matches[i].Low) + float64(matches[i].High)) / 2
-		mj := (float64(matches[j].Low) + float64(matches[j].High)) / 2
-		if direction == market.Buy {
-			return mi < mj
-		}
-		return mi > mj
-	})
-	return matches[0], true
+	for k, n := range found {
+		s.refusals[k] += n
+	}
 }
 
-func zoneReferenceTime(z zone.Zone) int64 {
-	if z.LastTouchedAt != nil && *z.LastTouchedAt > z.CreatedAt {
-		return *z.LastTouchedAt
-	}
-	return z.CreatedAt
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
 }
 
-func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	// A resting zone has had no reaction, so its one measurable dimension is how much of it is left: every touch spends resting
-	// interest (a gap's touches are fill, not validation). The engine's technique-zone adapter gives every zone a Strength of 1 and
-	// a Relevance of Immediate (it has neither), so neither is scored. Resting zones are not executable and are not comparable with
-	// confirmed ones, which are scored by the full model of strategyutil.ZoneFamilyQuality.
-	m := quality.New("fvg.resting.quality.v1")
-	m.Score("gap_fill", quality.Fall(float64(z.TouchCount), 0, 4))
-	m.Measure("zone_touches", float64(z.TouchCount))
-	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
-}
-
-func clamp01(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
-}
-
+// configFingerprint is the strategy's version-pinned parameter digest.
 func configFingerprint(cfg strategy.Config) string {
 	keys := make([]string, 0, len(cfg.Parameters))
 	for k := range cfg.Parameters {

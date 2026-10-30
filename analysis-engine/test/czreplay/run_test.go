@@ -255,9 +255,9 @@ func doReplayCapture(t testing.TB, c Capture, capture *replaycapture.Capture, o 
 	fingerprint := strategyutil.Fingerprint("confluence_zone", "v2", map[string]any{"frozen": true})
 	seen := map[string]bool{}
 	var others []string
-	// The frozen v2 reproduction (models B and C) reads the engine's technique instances, which the fvg v6 and order_block v6 definitions filter; this certification is about
+	// The frozen v2 reproduction (models B and C) reads the engine's technique instances, which the order_block v6 definition filters; this certification is about
 	// Confluence Zone v3 and the other strategies as they stood, so the definition is removed (its own effect is measured in test/fvgdefinition).
-	options := replaycapture.Options{WithoutFVGDefinition: true, WithoutOBDefinition: true}
+	options := replaycapture.Options{WithoutOBDefinition: true}
 	if len(o.overrides) > 0 {
 		options.StrategyParameters = map[string]map[string]any{"confluence_zone": o.overrides}
 	}

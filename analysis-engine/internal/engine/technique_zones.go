@@ -28,25 +28,13 @@ func productionTechniqueZoneSettings() TechniqueZoneSettings {
 var techniqueChain = techniquezone.ProductionChainSettings()
 
 // zoneDefinitionTechnique is the technique settings the two instance sources the zone strategies read (the execution frame's and the higher frames')
-// judge a confirmed zone with: the shared settings plus the fvg strategy's gap definition (strategies.fvg.confirmed_minimum_gap_atr,
-// confirmed_minimum_displacement_body_atr, confirmed_minimum_displacement_body_ratio; docs/strategies/fvg-definition.md) and the order_block strategy's
-// close-break rule (strategies.order_block.confirmed_break_buffer_atr; docs/strategies/order-block-definition.md). The shared settings themselves are left
+// judge a confirmed zone with: the shared settings plus the order_block strategy's close-break rule (strategies.order_block.confirmed_break_buffer_atr; docs/strategies/order-block-definition.md). The shared settings themselves are left
 // alone on purpose: they also feed the Confluence Zone facts (structuralInstanceSource) and the zone book, which must not change. Absent keys leave a
 // definition off.
 func zoneDefinitionTechnique(settings Settings) techniquezone.TechniqueSettings {
 	technique := settings.TechniqueZones.Technique
 	for _, cfg := range settings.Strategies {
 		switch cfg.ID {
-		case "fvg":
-			if v, ok := cfg.Parameters["confirmed_minimum_gap_atr"].(float64); ok && v > 0 {
-				technique.FVGMinGapATR = v
-			}
-			if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_atr"].(float64); ok && v > 0 {
-				technique.FVGMinDisplacementBodyATR = v
-			}
-			if v, ok := cfg.Parameters["confirmed_minimum_displacement_body_ratio"].(float64); ok && v > 0 {
-				technique.FVGMinDisplacementBodyRatio = v
-			}
 		case "order_block":
 			if v, ok := cfg.Parameters["confirmed_break_buffer_atr"].(float64); ok && v > 0 {
 				technique.OBBreakBufferATR = v
@@ -74,12 +62,6 @@ func withoutParameters(settings *Settings, id string, names ...string) {
 		}
 		settings.Strategies[i].Parameters = params
 	}
-}
-
-// WithoutFVGDefinition removes the fair value gap definition parameters from the fvg strategy, leaving the confirmed path exactly as the frozen Python
-// publisher ran it (a gap of one pip, no displacement candle). The parity replays use it (replaycapture.Options.WithoutStopBudget implies it).
-func WithoutFVGDefinition(settings *Settings) {
-	withoutParameters(settings, "fvg", "confirmed_minimum_gap_atr", "confirmed_minimum_displacement_body_atr", "confirmed_minimum_displacement_body_ratio")
 }
 
 // WithoutOBDefinition removes the order block definition from the order_block strategy: the close-break rule (confirmed_break_buffer_atr) and the touch limit

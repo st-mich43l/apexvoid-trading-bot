@@ -358,7 +358,8 @@ func TestEngine_ParityTechniqueZonesDriveTheZoneStrategies(t *testing.T) {
 			}
 		}
 	}
-	for _, id := range []opportunity.StrategyID{"confluence_zone", "demand", "fvg", "ifvg", "order_block", "supply"} {
+	// fvg is not on the parity technique zones any more: v7 finds its own gaps on M15/H1 (test/fvgv7).
+	for _, id := range []opportunity.StrategyID{"confluence_zone", "demand", "ifvg", "order_block", "supply"} {
 		if counts[id] == 0 {
 			t.Errorf("canonical zone strategy %s produced no opportunity on the production XAU replay", id)
 		}

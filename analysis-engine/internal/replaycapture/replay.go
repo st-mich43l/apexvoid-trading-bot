@@ -54,9 +54,6 @@ type Options struct {
 	// WithoutStopBudget replay implies it: the frozen Python publisher had neither the stop budget nor the sweep rule. The measurement test sets it on
 	// its own to see the budgeted engine with and without the rule.
 	WithoutKeyLevelSweep bool
-	// WithoutFVGDefinition replays the fvg strategy without the confirmed-path gap definition (engine.WithoutFVGDefinition). Every WithoutStopBudget replay
-	// implies it: the frozen Python publisher accepted any gap of one pip. The measurement test sets it on its own to compare the definition off and on.
-	WithoutFVGDefinition bool
 	// WithoutOBDefinition replays the order_block strategy without the confirmed-path close-break rule and the touch limit (engine.WithoutOBDefinition).
 	// Every WithoutStopBudget replay implies it.
 	WithoutOBDefinition bool
@@ -93,9 +90,6 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	}
 	if opts.WithoutStopBudget || opts.WithoutKeyLevelSweep {
 		engine.WithoutKeyLevelSweepRequirement(&settings)
-	}
-	if opts.WithoutStopBudget || opts.WithoutFVGDefinition {
-		engine.WithoutFVGDefinition(&settings)
 	}
 	if opts.WithoutStopBudget || opts.WithoutOBDefinition {
 		engine.WithoutOBDefinition(&settings)

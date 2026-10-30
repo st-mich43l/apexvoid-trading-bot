@@ -20,7 +20,7 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `supply` | v6 | M5, M15, H1 | confirmed rejection of a supply zone; zones touched more than 2 times are spent | `test/techniqueparity` golden | [supply](supply.md) |
 | `demand` | v6 | M5, M15, H1 | confirmed bounce from a demand zone; same touch cap | `test/techniqueparity` golden | [demand](demand.md) |
 | `order_block` | v6 | M5, M15, H1 | confirmed reaction at the last opposite candle before a displacement that broke structure; dead once a close of its own frame goes through its far edge ([order-block-definition](order-block-definition.md)) | `test/techniqueparity` golden | [order_block](order_block.md) |
-| `fvg` | v6 | M5, M15, H1 | confirmed reaction at a real fair value gap (≥ 0.5 ATR of its own frame) | `test/techniqueparity` golden | [fvg](fvg.md), [definition](fvg-definition.md) |
+| `fvg` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at a real fair value gap, with room and no leg-extreme entry | `test/fvgv7` | [fvg](fvg.md) |
 | `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | contract tests, `test/ifvgreplay` | [ifvg](ifvg.md) |
 | `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | fixtures, `test/crtreplay` | [crt](crt.md) |
 | `break_retest` | v3 | M5 | accepted break of its own key level or trendline, fresh retest, rejection | contract tests, `test/brreplay` | [break_retest](break_retest.md) |
@@ -42,8 +42,10 @@ with no claim of better outcomes.
 
 ## The shared confirmation spine
 
-Every zone, level and line strategy except CRT, iFVG, Break & Retest and Impulse
-Pullback confirms through the same code in `internal/strategyutil`:
+Every zone, level and line strategy except CRT, iFVG, Break & Retest, Impulse
+Pullback and **fvg** (v7: it owns its structure, confirmation, room and candidate;
+`test/architecture/strategy_ownership_test.go` keeps it off the spine) confirms through
+the same code in `internal/strategyutil`:
 
 ```mermaid
 flowchart LR
