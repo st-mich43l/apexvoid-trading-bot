@@ -1,5 +1,5 @@
-// Package reference is the frozen master implementation of the supply strategy (v6), vendored so that test/supplymigration can prove the self-contained
-// package decides identically. Deleted in the rebuild commit. Original header: Package supply implements SupplyStrategy.
+// Package reference is the frozen master implementation of the supply strategy (v6), vendored so that test/supplyv7 can run the strategy as it ran before the v7
+// rebuild (the "before" of the measurement). Original header: Package supply implements SupplyStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), one of the two
 // strategies the catalog split the original "Supply Demand"
 // detector into. Supply and demand share a canonical primitive

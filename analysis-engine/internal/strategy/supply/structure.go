@@ -8,7 +8,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
-// The supply and demand zones and their lifecycle, defined here and judged on the bars of the frame the zone was found on. These constants were the shared technique
+// The supply zone and its lifecycle, defined here and judged on the bars of the frame the zone was found on. These constants were the shared technique
 // settings (techniquezone.ProductionTechniqueSettings and the legacy read's displacement leaves) the confirmed path inherited; the strategy now owns them.
 const (
 	epsilonATRFraction       = 0.05
@@ -16,16 +16,16 @@ const (
 	invalidationToleranceATR = 0.5
 	sweepReclaimBars         = 6
 	maxBreakEpisodes         = 2
-	maximumZoneATR           = 3.0 // a zone wider than this share of its frame's ATR is a region, not a zone
-	momentumBodyFraction     = 0.6 // the body share a displacement candle must have
-	displacementATRMult      = 1.5 // a displacement leg moves at least this share of the ATR
-	baseCandles              = 3   // the zone is the range of this many candles before the departure
+	baseCandles              = 3 // the zone is the range of this many candles before the departure
 )
+
+// Refusal reason of this strategy, counted by the engine as strategy_refused{strategy="supply", reason}.
+const refusedNoTargetRoom = "no_target_room" // the nearest obstacle is closer than minimum_target_r x the risk
 
 // zoneBand is a price band with the facts the qualification reads.
 type zoneBand struct {
 	Bottom, Top float64
-	Side        string // "demand" (buy) | "supply" (sell)
+	Side        string // "supply"
 	Score       float64
 	Touches     int
 }
@@ -39,11 +39,11 @@ type leg struct {
 	Direction  string // "up" | "down"
 }
 
-// zone is one zone on a frame: the range of the candles before a strong departure (down: supply, up: demand).
+// zone is one supply zone on a frame: the range of the candles before a strong downward departure.
 type zone struct {
-	Side       string // "buy" (demand) | "sell" (supply)
 	Low, High  float64
 	Origin     int // index of the last base candle on its frame
+	LegStart   int // index of the first candle of the departure leg
 	BreakIndex int // the last candle of the departure leg
 	Touches    int
 	Mitigated  bool
@@ -53,18 +53,21 @@ type zone struct {
 
 // instance is a zone that passed the lifecycle tests: its entry band (clipped to the proximal slice when wide), the whole zone, and where it lives.
 type instance struct {
-	Side           string
 	Low, High      float64 // the entry band
 	StructuralLow  float64
 	StructuralHigh float64
 	EntryClipped   bool
-	OriginIndex    int // on the execution frame once bound; on its own frame before
+	OriginIndex    int // the zone's last base candle on the execution frame, once bound
 	OriginTime     int64
 	TouchableFrom  int
 	Touches        int
 	Mitigated      bool
 	Score          float64
-	Timeframe      market.Timeframe // "" for an execution-frame zone
+	Timeframe      market.Timeframe
+	Frame          *analysiscontext.LegacyFrame // the frame the zone was found on
+	FrameOrigin    int                          // the zone's last base candle on that frame
+	FrameConfirmed int                          // the last candle of the departure on that frame
+	LegStart       int                          // the departure's first candle on that frame
 }
 
 func (i instance) structural() (float64, float64) {
@@ -100,8 +103,8 @@ func atrAt(series []float64, i int, fallback float64) float64 {
 	return fallback
 }
 
-// displacement finds the legs: runs of same-direction candles whose net move clears displacementATRMult x ATR and whose bodies are mostly strong.
-func displacement(bars []market.Candle, atr []float64) []leg {
+// displacement finds the legs: runs of same-direction candles whose net move clears displacement_atr_mult x ATR and whose bodies are mostly strong.
+func (s *Strategy) displacement(bars []market.Candle, atr []float64) []leg {
 	var legs []leg
 	start, dir := -1, ""
 	flush := func(end int) {
@@ -113,12 +116,12 @@ func displacement(bars []market.Candle, atr []float64) []leg {
 		if dir == "up" {
 			size = close - open
 		}
-		if size < atrAt(atr, end, 1)*displacementATRMult {
+		if size < atrAt(atr, end, 1)*s.cfg.DisplacementATRMult {
 			return
 		}
 		strong := 0
 		for i := start; i <= end; i++ {
-			if bodyFraction(bars[i]) >= momentumBodyFraction {
+			if bodyFraction(bars[i]) >= s.cfg.MomentumBodyFraction {
 				strong++
 			}
 		}
@@ -144,12 +147,12 @@ func displacement(bars []market.Candle, atr []float64) []leg {
 	return legs
 }
 
-// detectZones builds the zones of a frame: for every strong departure, the range (wicks included) of the baseCandles candles before it. A zone price already
-// closed through (above a supply zone's high, below a demand zone's low) is dead for good and carries at least one touch.
-func detectZones(bars []market.Candle, atr []float64) []zone {
+// detectZones builds the supply zones of a frame: for every strong downward departure, the range (wicks included) of the baseCandles candles before it. A
+// zone price already closed through (above its high) is dead for good and carries at least one touch.
+func (s *Strategy) detectZones(bars []market.Candle, atr []float64) []zone {
 	var zones []zone
-	for _, l := range displacement(bars, atr) {
-		if l.Start <= 0 {
+	for _, l := range s.displacement(bars, atr) {
+		if l.Direction != "down" || l.Start <= 0 {
 			continue
 		}
 		baseStart := maxInt(0, l.Start-baseCandles)
@@ -160,12 +163,8 @@ func detectZones(bars []market.Candle, atr []float64) []zone {
 		for i := baseStart; i < l.Start; i++ {
 			low, high = math.Min(low, bars[i].Low), math.Max(high, bars[i].High)
 		}
-		side := "sell"
-		if l.Direction == "up" {
-			side = "buy"
-		}
-		z := zone{Side: side, Low: low, High: high, Origin: l.Start - 1, BreakIndex: l.End}
-		if closedBeyond(z, bars) {
+		z := zone{Low: low, High: high, Origin: l.Start - 1, LegStart: l.Start, BreakIndex: l.End}
+		if closedAbove(z, bars) {
 			z.Touches, z.Mitigated = 1, true
 		}
 		zones = append(zones, z)
@@ -173,11 +172,10 @@ func detectZones(bars []market.Candle, atr []float64) []zone {
 	return zones
 }
 
-// closedBeyond reports whether any close after the zone's last base candle is strictly beyond its far edge.
-func closedBeyond(z zone, bars []market.Candle) bool {
+// closedAbove reports whether any close after the zone's last base candle is strictly above its high.
+func closedAbove(z zone, bars []market.Candle) bool {
 	for i := maxInt(0, z.Origin+1); i < len(bars); i++ {
-		c := bars[i].Close
-		if z.Side == "sell" && c > z.High || z.Side == "buy" && c < z.Low {
+		if bars[i].Close > z.High {
 			return true
 		}
 	}
@@ -209,7 +207,6 @@ func attachScores(zones []zone, frame *analysiscontext.LegacyFrame) {
 	type key struct {
 		origin    int
 		low, high float64
-		side      string
 	}
 	type scored struct {
 		score float64
@@ -217,20 +214,19 @@ func attachScores(zones []zone, frame *analysiscontext.LegacyFrame) {
 	}
 	found := map[key][]scored{}
 	for rank, z := range frame.TechniqueZones {
+		if z.Side != "supply" {
+			continue
+		}
 		for _, source := range z.Sources {
 			if source == "supply_demand" {
-				k := key{z.OriginIndex, z.Bottom, z.Top, z.Side}
+				k := key{z.OriginIndex, z.Bottom, z.Top}
 				found[k] = append(found[k], scored{z.Score, rank})
 				break
 			}
 		}
 	}
 	for k := range zones {
-		side := "supply"
-		if zones[k].Side == "buy" {
-			side = "demand"
-		}
-		id := key{zones[k].Origin, zones[k].Low, zones[k].High, side}
+		id := key{zones[k].Origin, zones[k].Low, zones[k].High}
 		zones[k].rank = math.MaxInt32
 		if list := found[id]; len(list) > 0 {
 			zones[k].Score, zones[k].rank = list[0].score, list[0].rank
@@ -261,9 +257,9 @@ func medianATR(series []float64) float64 {
 	return (clean[n/2-1] + clean[n/2]) / 2
 }
 
-// notInvalidated: price never accepted beyond the zone's far edge. A close beyond it by more than the tolerance starts an episode, forgiven when a close
-// returns inside within sweepReclaimBars; more than maxBreakEpisodes forgiven episodes kill it.
-func notInvalidated(side string, low, high float64, bars []market.Candle, origin int, atr, pip float64) bool {
+// notInvalidated: price never accepted above the zone's high. A close above it by more than the tolerance starts an episode, forgiven when a close returns
+// inside within sweepReclaimBars; more than maxBreakEpisodes forgiven episodes kill it.
+func notInvalidated(high float64, bars []market.Candle, origin int, atr, pip float64) bool {
 	if len(bars) == 0 || origin < 0 {
 		return true
 	}
@@ -273,26 +269,13 @@ func notInvalidated(side string, low, high float64, bars []market.Candle, origin
 	episodes := 0
 	index := maxInt(0, origin+1)
 	for index < count {
-		close := bars[index].Close
-		var beyond bool
-		if side == "buy" {
-			beyond = close < low-tolerance
-		} else {
-			beyond = close > high+tolerance
-		}
-		if !beyond {
+		if !(bars[index].Close > high+tolerance) {
 			index++
 			continue
 		}
 		reclaimedAt := -1
 		for probe := index + 1; probe < minInt(count, index+1+sweepReclaimBars); probe++ {
-			var back bool
-			if side == "buy" {
-				back = bars[probe].Close >= low
-			} else {
-				back = bars[probe].Close <= high
-			}
-			if back {
+			if bars[probe].Close <= high {
 				reclaimedAt = probe
 				break
 			}
@@ -310,70 +293,53 @@ func notInvalidated(side string, low, high float64, bars []market.Candle, origin
 }
 
 // spent: a zone that was touched and has either taken too many touches or been invalidated.
-func spent(mitigated bool, touches int, side string, low, high float64, bars []market.Candle, origin int, atr, pip float64) bool {
+func spent(mitigated bool, touches int, high float64, bars []market.Candle, origin int, atr, pip float64) bool {
 	if !mitigated {
 		return false
 	}
 	if touches <= 0 || touches > retestMaxTouches {
 		return true
 	}
-	return !notInvalidated(side, low, high, bars, origin, atr, pip)
+	return !notInvalidated(high, bars, origin, atr, pip)
 }
 
-// proximalRetest: price is at the zone, or within the tolerance of its proximal edge (a supply zone's low, a demand zone's high).
-func proximalRetest(side string, low, high, price, atr, pip float64) bool {
-	e := epsilon(pip, atr)
-	proximal := low
-	if side == "buy" {
-		proximal = high
-	}
-	return math.Abs(price-proximal) <= e || (low-e <= price && price <= high+e)
-}
-
-// clipEntry cuts a zone wider than maxWidth to its proximal slice (a buy keeps the top, a sell the bottom).
-func clipEntry(side string, low, high, maxWidth float64) (float64, float64, bool) {
+// clipEntry cuts a zone wider than maxWidth to its proximal (lower) slice.
+func clipEntry(low, high, maxWidth float64) (float64, float64, bool) {
 	if math.IsNaN(low) || math.IsNaN(high) || high <= low || math.IsNaN(maxWidth) || maxWidth <= 0 || high-low <= maxWidth+1e-12 {
 		return low, high, false
 	}
-	if side == "sell" {
-		return low, low + maxWidth, true
-	}
-	return high - maxWidth, high, true
+	return low, low + maxWidth, true
 }
 
-// frameInstances are the zones of one frame that pass every lifecycle test. proximity is true for the execution frame (price must be at the zone now)
-// and false for a higher frame, whose zone is judged as a fact and traded when M5 price reaches it.
-func (s *Strategy) frameInstances(frame *analysiscontext.LegacyFrame, proximity bool) []instance {
+// structureInstances are the supply zones of one structure frame that are still zones: not spent, not invalidated, a real width. Where price is now is not
+// asked here (a structure is a fact).
+func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe) []instance {
 	bars := frame.Bars
 	if len(bars) < 10 {
 		return nil
 	}
 	atr := medianATR(frame.ATR)
-	price := bars[len(bars)-1].Close
-	zones := detectZones(bars, frame.ATR)
+	zones := s.detectZones(bars, frame.ATR)
 	markTouches(zones, bars)
 	attachScores(zones, frame)
 	pip := s.cfg.PipSize
 	var out []instance
 	for _, z := range zones {
-		if spent(z.Mitigated, z.Touches, z.Side, z.Low, z.High, bars, z.Origin, atr, pip) {
+		if spent(z.Mitigated, z.Touches, z.High, bars, z.Origin, atr, pip) {
 			continue
 		}
 		in := instance{
-			Side: z.Side, Low: z.Low, High: z.High, OriginIndex: z.Origin, TouchableFrom: maxInt(z.Origin, z.BreakIndex) + 1,
-			Touches: z.Touches, Mitigated: z.Mitigated, Score: z.Score,
+			Low: z.Low, High: z.High, Touches: z.Touches, Mitigated: z.Mitigated, Score: z.Score, Timeframe: tf, Frame: frame,
+			FrameOrigin: z.Origin, FrameConfirmed: maxInt(z.Origin, z.BreakIndex), LegStart: z.LegStart,
 		}
-		if low, high, clipped := clipEntry(z.Side, z.Low, z.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
+		if low, high, clipped := clipEntry(z.Low, z.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = z.Low, z.High, true
 			in.Low, in.High = low, high
 		}
-		if spent(in.Mitigated, in.Touches, in.Side, in.Low, in.High, bars, z.Origin, atr, pip) || !notInvalidated(in.Side, in.Low, in.High, bars, z.Origin, atr, pip) {
+		if spent(in.Mitigated, in.Touches, in.High, bars, z.Origin, atr, pip) || !notInvalidated(in.High, bars, z.Origin, atr, pip) {
 			continue
 		}
-		if proximity && !proximalRetest(in.Side, in.Low, in.High, price, atr, pip) {
-			continue
-		}
-		if atr > 0 && in.High-in.Low > math.Max(0, maximumZoneATR)*atr {
+		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
 			continue
 		}
 		out = append(out, in)
@@ -381,30 +347,30 @@ func (s *Strategy) frameInstances(frame *analysiscontext.LegacyFrame, proximity 
 	return out
 }
 
-// bind maps a higher frame's zones onto the execution frame by TIME: the origin to the first execution bar opening at or after the higher bar that holds the
-// zone's last base candle, and the first bar that may touch it to the first execution bar opening at or after the close of the higher bar that ended the
+// bind maps a structure frame's zones onto the execution frame by TIME: the origin to the first execution bar opening at or after the structure bar that holds
+// the zone's last base candle, and the first bar that may touch it to the first execution bar opening at or after the close of the structure bar that ended the
 // departure. A zone older than the execution window cannot be anchored there and is dropped.
-func bind(tf market.Timeframe, higherBars, execBars []market.Candle, zones []instance) []instance {
+func bind(tf market.Timeframe, structureBars, execBars []market.Candle, zones []instance) []instance {
 	if len(execBars) == 0 {
 		return nil
 	}
 	minutes, known := tf.Minutes()
 	var out []instance
 	for _, in := range zones {
-		if in.OriginIndex < 0 || in.OriginIndex >= len(higherBars) {
+		if in.FrameOrigin < 0 || in.FrameOrigin >= len(structureBars) {
 			continue
 		}
-		originTime := higherBars[in.OriginIndex].Time
+		originTime := structureBars[in.FrameOrigin].Time
 		index := sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= originTime })
 		if index >= len(execBars) || execBars[0].Time > originTime {
 			continue
 		}
 		touchable := 0
-		if formed := in.TouchableFrom - 1; in.TouchableFrom > 0 && formed < len(higherBars) && known {
-			closed := higherBars[formed].Time + int64(minutes)*60
+		if in.FrameConfirmed >= 0 && in.FrameConfirmed < len(structureBars) && known {
+			closed := structureBars[in.FrameConfirmed].Time + int64(minutes)*60
 			touchable = sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= closed })
 		}
-		in.OriginIndex, in.OriginTime, in.Timeframe, in.TouchableFrom = index, originTime, tf, touchable
+		in.OriginIndex, in.OriginTime, in.TouchableFrom = index, originTime, touchable
 		out = append(out, in)
 	}
 	return out

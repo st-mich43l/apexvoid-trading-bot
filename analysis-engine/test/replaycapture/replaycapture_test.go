@@ -375,7 +375,8 @@ func TestEveryConfirmedReactionCarriesItsCausalFacts(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	if len(keys) != 2 || keys[0] != "demand" || keys[1] != "supply" {
-		t.Fatalf("the real capture must yield confirmed reactions for both reviewed scopes, got %v", byStrategy)
+	// supply (v7) finds its zones on M15/H1 only and refuses an entry with no room: this capture yields none for it (its own evidence is test/supplyv7).
+	if byStrategy["demand"] == 0 {
+		t.Fatalf("the real capture must yield confirmed demand reactions, got %v", byStrategy)
 	}
 }
