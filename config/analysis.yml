@@ -250,7 +250,7 @@ analysis:
       # v7 (docs/strategies/supply.md): self-contained, SELL only. A zone is found on M15/H1 (the range of the candles before a strong downward departure), M5
       # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="supply"}). Nothing
       # else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared confluence rubric are injected by the engine.
-      version: v7
+      version: v8
       enabled: true
       structure_timeframes: [M15, H1]
       # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
@@ -306,7 +306,7 @@ analysis:
       # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as
       # strategy_refused{strategy="order_block"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v7
+      version: v8
       enabled: true
       structure_timeframes: [M15, H1]
       # The block: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least momentum_body_fraction
@@ -341,7 +341,7 @@ analysis:
       # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as
       # strategy_refused{strategy="fvg"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v7
+      version: v8
       enabled: true
       structure_timeframes: [M15, H1]
       # The gap definition (the contract iFVG v3 uses): the structural gap is at least minimum_gap_atr of the ATR of its own frame, the middle candle's body at

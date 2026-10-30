@@ -49,6 +49,9 @@ type SymbolWorker struct {
 
 	// legacyFrames caches each timeframe's detector-contract read by its
 	// latest closed bar.
+	// health counts a short or holed candle history (history_health.go).
+	health historyHealth
+
 	legacyFrames map[market.Timeframe]legacyFrameCache
 	legacyWeekly legacyWeeklyCache
 
@@ -134,6 +137,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 
 	tfh := w.state.History.For(event.Timeframe)
 	candles := tfh.Snapshot()
+	w.health.observe(w, event.Timeframe, candleTimes(candles))
 
 	doneInd := w.telemetry.Time(telemetry.PhaseIndicator, symbolLabel, tfLabel)
 	atrSeries, err := indicator.CanonicalATR(candles, w.settings.ATR.Length, w.settings.ATR.Algorithm)
@@ -614,4 +618,12 @@ func stringSlicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func candleTimes(candles []market.Candle) []int64 {
+	out := make([]int64, len(candles))
+	for i, c := range candles {
+		out[i] = c.Time
+	}
+	return out
 }

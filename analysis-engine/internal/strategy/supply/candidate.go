@@ -94,9 +94,6 @@ func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.St
 		timeframe = d.inst.Timeframe
 	}
 	formedAt := d.inst.OriginTime
-	if bars := d.v.frame.Bars; formedAt == 0 && d.inst.OriginIndex >= 0 && d.inst.OriginIndex < len(bars) {
-		formedAt = bars[d.inst.OriginIndex].Time
-	}
 	return &opportunity.StructureZone{Timeframe: timeframe, Low: low, High: high, FormedAt: formedAt}
 }
 
@@ -117,8 +114,9 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 		if d.conf.TouchIndex < end {
 			end = d.conf.TouchIndex
 		}
-		start := maxInt(0, d.inst.OriginIndex)
-		if stop := minInt(end, start+9); start < stop {
+		// The departure is read on the M5 bars right after the origin: unknown once the origin has left the M5 window.
+		start := d.inst.OriginIndex
+		if stop := minInt(end, start+9); start >= 0 && start < stop {
 			best := 0.0
 			for _, b := range bars[start:stop] {
 				best = math.Max(best, lo-b.Low)
