@@ -26,16 +26,13 @@ type realCase struct {
 	newlyOffered      bool
 }
 
+// fvg is not here: v7 owns its structure frames and confirmation and is covered by test/fvgv7.
 var realCases = []realCase{
 	// XAU
-	{"replay-xau-production-capture-20261012.json", "fvg", market.Sell, 1791549600, market.H1, 64.9, "structural", true},          // 10-09 12:40 H1 FVG, wick rejection
 	{"replay-xau-production-capture-20260921.json", "order_block", market.Sell, 1789458600, market.M15, 61.6, "structural", true}, // 09-15 07:50 M15 OB, engulfing
-	{"replay-xau-production-capture-20260921.json", "fvg", market.Buy, 1789434000, market.M15, 58.5, "structural", true},          // 09-15 01:00 M15 FVG, strong reclaim
 	{"replay-xau-production-capture-20261012.json", "order_block", market.Buy, 1791782100, market.H1, 77.5, "refused", true},      // 10-12 05:15 H1 OB: honest stop over the 70 pip cap
 	// EURUSD
-	{"replay-eurusd-production-capture-20261006.json", "fvg", market.Buy, 1790754900, market.M15, 7.1, "floor", true},          // 09-30 07:55 M15 FVG
 	{"replay-eurusd-production-capture-20261006.json", "order_block", market.Buy, 1790733600, market.M15, 5.7, "floor", false}, // 09-30 02:00 M15 OB
-	{"replay-eurusd-production-capture-20261006.json", "fvg", market.Sell, 1791180300, market.H1, 44.8, "refused", false},      // 10-05 06:05 H1 FVG: 44.8 pips against the 20 pip cap
 }
 
 type found struct {
@@ -69,7 +66,7 @@ func replayCases(t *testing.T, doc *config.Document, name string, cases []realCa
 		index[b.Time] = i
 	}
 	out := map[int64]map[string]*found{}
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutFVGDefinition: true, WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
 		for _, c := range e.Candidates {
 			if c.Reaction == nil {
 				continue

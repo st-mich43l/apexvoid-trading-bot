@@ -1,5 +1,5 @@
-// Package reference is the frozen master implementation of the fvg strategy (v6), vendored so that test/fvgmigration can prove the self-contained
-// package decides identically. Deleted in the rebuild commit. Original header: Package fvg implements FVGStrategy.
+// Package reference is the frozen master implementation of the fvg strategy (v6), vendored so that test/fvgv7 can run the strategy as it ran before the v7 rebuild
+// (the "before" of the regression and the measurement). Original header: Package fvg implements FVGStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §18), consuming the
 // canonical FVG primitive internal/zone already builds (gap bounds,
 // direction, origin, fill percentage, mitigation — the primitive owns
@@ -155,6 +155,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // reaction the frozen FVG publisher (technique_detectors.fvg_technique_reaction)
 // decides on the frame's technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
+	ctx = withMasterDefinition(ctx)
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueFVG, "", strategyutil.TechniqueSpec{
 		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_fvg_zone_confirmed", ConfirmedEvidence: "m5_fvg_rejection_confirmed",
 		InvalidationLabel: "fvg_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,

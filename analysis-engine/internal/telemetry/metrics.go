@@ -83,14 +83,11 @@ const (
 	// strictly beyond the reaction band's far edge. Labels are symbol+timeframe.
 	CounterStrategyKeyLevelUnsweptRefused Counter = "strategy_key_level_unswept_refused"
 
-	// CounterFVGDefinitionRefused counts fair value gaps the confirmed path
-	// refused because they fail the gap definition (a gap thinner than the
-	// configured share of its own frame's ATR, a weak or wrong-way middle
-	// candle: docs/strategies/fvg-definition.md). Labels: symbol, the structure
-	// timeframe the gap was found on, and the reason (gap_small,
-	// displacement_weak, displacement_direction), recorded with CountReason.
-	// An instance is counted once per evaluation.
-	CounterFVGDefinitionRefused Counter = "fvg_definition_refused"
+	// CounterStrategyRefused counts the structures a strategy that owns its mechanism refused, by the strategy's own reason code (fvg v7: gap_small,
+	// displacement_weak, displacement_direction, gap_closed_through, no_rejection, stale_confirmation, no_target_room, entry_at_leg_extreme). Labels: symbol,
+	// strategy, the timeframe the structure was found on and the reason, recorded with CountStrategyRefusal. A structure is counted once per evaluation;
+	// the counter never blocks an evaluation. It replaces fvg_definition_refused.
+	CounterStrategyRefused Counter = "strategy_refused"
 
 	// CounterOBDefinitionRefused counts order blocks the confirmed path
 	// refused because a close of their own frame went beyond their far edge
@@ -151,6 +148,7 @@ type key struct {
 	symbol    string
 	timeframe string
 	reason    string // set only by CountReason: a bounded, fixed set per counter
+	strategy  string // set only by CountStrategyRefusal
 }
 
 // Recorder is a concurrency-safe in-process metrics store — deliberately
@@ -209,6 +207,15 @@ func (r *Recorder) CountReason(counter Counter, symbol, timeframe, reason string
 	r.counts[k] += n
 }
 
+// CountStrategyRefusal counts a structure a strategy refused, by the strategy, the timeframe the structure was found on and the strategy's own reason code
+// (CounterStrategyRefused).
+func (r *Recorder) CountStrategyRefusal(symbol, strategy, structureTimeframe, reason string, n int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := key{label: string(CounterStrategyRefused), symbol: symbol, timeframe: structureTimeframe, reason: reason, strategy: strategy}
+	r.counts[k] += n
+}
+
 // DurationSample is one Snapshot row for a duration metric.
 type DurationSample struct {
 	Phase          string
@@ -224,6 +231,7 @@ type CountSample struct {
 	Symbol    string
 	Timeframe string
 	Reason    string // empty unless the counter is recorded with CountReason
+	Strategy  string // empty unless the counter is recorded with CountStrategyRefusal
 	Count     int64
 }
 
@@ -248,7 +256,7 @@ func (r *Recorder) Snapshot() ([]DurationSample, []CountSample) {
 	counts := make([]CountSample, 0, len(r.counts))
 	for k, c := range r.counts {
 		counts = append(counts, CountSample{
-			Counter: k.label, Symbol: k.symbol, Timeframe: k.timeframe, Reason: k.reason, Count: c,
+			Counter: k.label, Symbol: k.symbol, Timeframe: k.timeframe, Reason: k.reason, Strategy: k.strategy, Count: c,
 		})
 	}
 	return durations, counts

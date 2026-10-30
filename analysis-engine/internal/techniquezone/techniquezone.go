@@ -1052,14 +1052,6 @@ type TechniqueSettings struct {
 	MaxZoneATR     float64
 	FVGMaxATR      float64
 	FVGMinPips     float64
-	// FVGMinGapATR, FVGMinDisplacementBodyATR and FVGMinDisplacementBodyRatio define a fair value gap for the CONFIRMED path on every timeframe
-	// (docs/strategies/fvg-definition.md): the structural gap is at least FVGMinGapATR of the ATR of the frame it was found on as of the gap's third
-	// candle, the middle candle's body is at least FVGMinDisplacementBodyATR of that ATR and at least FVGMinDisplacementBodyRatio of its own range, and
-	// the middle candle closed in the gap's direction. Each is skipped when it is 0; ProductionTechniqueSettings leaves all three at 0, so the frozen
-	// Python parity collections are unchanged.
-	FVGMinGapATR                float64
-	FVGMinDisplacementBodyATR   float64
-	FVGMinDisplacementBodyRatio float64
 	// OBBreakBufferATR defines when a CONFIRMED-path order block is dead (docs/strategies/order-block-definition.md): any close of the frame the block
 	// was found on, after the block's own candle, beyond its far edge (demand: below the low, supply: above the high) by more than OBBreakBufferATR of the
 	// frame's ATR at that bar retires it for good. No reclaim forgiveness and no episode budget: a wick that closes back inside is the sweep, a close is
@@ -1331,54 +1323,10 @@ func discoverIFVG(fvgZones []Zone, bars []market.Candle, entryMax float64) []Ins
 	return out
 }
 
-// The reasons a fair value gap is refused by the definition above, in the order they are judged.
 const (
-	FVGRefusedGapSmall              = "gap_small"
-	FVGRefusedDisplacementWeak      = "displacement_weak"
-	FVGRefusedDisplacementDirection = "displacement_direction"
 	// OBRefusedClosedThrough is the order block definition's refusal reason: a close of the block's own frame went beyond its far edge by more than the buffer.
 	OBRefusedClosedThrough = "ob_closed_through"
 )
-
-// fvgDefinitionRefusal judges a fair value gap on its own three candles and on the ATR of the frame it comes from AS OF its third candle, so it reads
-// nothing after the gap formed. It returns "" when the gap passes (or when no definition setting is on) and otherwise the first reason it fails. atrSeries
-// is that frame's ATR series aligned with bars; without it (or without a value at the third candle) the scalar ATR the caller judged the frame with is used.
-func fvgDefinitionRefusal(in Instance, bars []market.Candle, atr float64, atrSeries []float64, s TechniqueSettings) string {
-	displacement := s.FVGMinDisplacementBodyATR > 0 || s.FVGMinDisplacementBodyRatio > 0
-	if s.FVGMinGapATR <= 0 && !displacement {
-		return ""
-	}
-	o := in.OriginIndex
-	if o < 2 || o >= len(bars) {
-		return ""
-	}
-	frameATR := atr
-	if len(atrSeries) == len(bars) && !math.IsNaN(atrSeries[o]) && atrSeries[o] > 0 {
-		frameATR = atrSeries[o]
-	}
-	low, high := in.Low, in.High
-	if in.EntryClipped {
-		low, high = in.StructuralLow, in.StructuralHigh
-	}
-	if s.FVGMinGapATR > 0 && high-low+1e-9 < s.FVGMinGapATR*frameATR {
-		return FVGRefusedGapSmall
-	}
-	if !displacement {
-		return ""
-	}
-	middle := bars[o-1]
-	body, span := math.Abs(middle.Close-middle.Open), middle.High-middle.Low
-	if s.FVGMinDisplacementBodyATR > 0 && body+1e-9 < s.FVGMinDisplacementBodyATR*frameATR {
-		return FVGRefusedDisplacementWeak
-	}
-	if s.FVGMinDisplacementBodyRatio > 0 && (span <= 0 || body/span+1e-9 < s.FVGMinDisplacementBodyRatio) {
-		return FVGRefusedDisplacementWeak
-	}
-	if (in.Side == "buy" && !(middle.Close > middle.Open)) || (in.Side == "sell" && !(middle.Close < middle.Open)) {
-		return FVGRefusedDisplacementDirection
-	}
-	return ""
-}
 
 // obClosedThroughRefusal reports OBRefusedClosedThrough when any close after the order block's own candle, up to the frame's last closed bar, is beyond
 // the block's far edge by more than OBBreakBufferATR of the frame's ATR AT THAT BAR (atrSeries[i]; the scalar ATR only where the series is missing). The far
@@ -1445,12 +1393,6 @@ func validateInstanceWithATR(in Instance, bars []market.Candle, price, atr float
 	if in.Technique == "order_block" {
 		if in.BodyFrac < s.MomentumBodyFrac || !in.HasBOS {
 			return false, ""
-		}
-	}
-	if in.Technique == "fvg" {
-		// Judged last, so a refusal here is a gap every other test would have offered to the strategy.
-		if reason := fvgDefinitionRefusal(in, bars, atr, atrSeries, s); reason != "" {
-			return false, reason
 		}
 	}
 	if in.Technique == "order_block" {

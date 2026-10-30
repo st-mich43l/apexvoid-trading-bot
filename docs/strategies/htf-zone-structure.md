@@ -1,5 +1,7 @@
 # Zone strategies find their setup on M15/H1 structure, confirmed and executed on M5
 
+> `fvg` has since moved out of this shared path: v7 owns its structure frames (`structure_timeframes`), confirmation, room and candidate in its own package ([fvg](fvg.md)). The text below describes the shared path `supply`, `demand` and `order_block` still use.
+
 Owner direction, 2026-10-24: setups are found on M15/H1 structure; M5 is used only to confirm and execute, or where a strategy's thesis genuinely needs M5. This change applies it to `supply`, `demand`, `order_block` and `fvg`
 (versions supply v6, demand v6, order_block v5, fvg v5). It builds on the reaction-anchored stop (#810) and the stop budget (#811): a structural stop wider than the instrument cap is refused in the detector, so a wide H1 zone is never rescued downstream by a deeper entry.
 

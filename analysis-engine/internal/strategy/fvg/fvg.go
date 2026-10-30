@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -17,7 +18,7 @@ import (
 )
 
 const ID strategy.StrategyID = "fvg"
-const Version = "v6"
+const Version = "v7"
 
 const (
 	structureVersion = "v2"
@@ -31,6 +32,9 @@ type Strategy struct {
 	strategyutil.RefusalCounter
 	cfg         Config
 	fingerprint string
+
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -48,33 +52,61 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 
 func (s *Strategy) ID() strategy.StrategyID { return ID }
 
+// RequiredTimeframes is M5 alone: the registry evaluates a strategy when one of its required frames closes, and a decision is made on a closed M5 bar. The
+// structure frames are read from the context when they exist.
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
-// Evaluate returns the confirmed reaction off the best gap of the execution frame and, separately, off the best gap of the configured higher frames:
-// a higher-frame decision never competes with the execution frame's.
+// Evaluate returns the confirmed reaction off the best gap of the structure frames (M15 and H1 by default). M5 confirms and executes; it never defines a
+// gap.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	base, ok := newView(ctx, &s.cfg)
 	if !ok {
 		return nil
 	}
-	exec := s.frameInstances(base.frame, true, nil)
-	var higher []instance
-	for _, tf := range s.cfg.HigherTimeframes {
+	refusals := map[strategy.Refusal]int64{}
+	defer s.addRefusals(refusals)
+	var instances []instance
+	for _, tf := range s.cfg.StructureTimeframes {
 		frameContext := ctx.Timeframes[tf]
 		if frameContext == nil || frameContext.Legacy == nil {
 			continue
 		}
-		higher = append(higher, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, s.frameInstances(frameContext.Legacy, false, nil))...)
+		found := s.structureInstances(frameContext.Legacy, tf, func(reason string) { refusals[strategy.Refusal{Reason: reason, Timeframe: tf}]++ })
+		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found)...)
 	}
-	var out []opportunity.Candidate
-	for _, d := range []*decision{s.best(base, exec), s.best(base, higher)} {
-		if d == nil {
-			continue
-		}
-		if candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d); ok {
-			out = append(out, candidate)
-		}
+	d := s.best(base, instances, func(in instance, reason string) {
+		refusals[strategy.Refusal{Reason: reason, Timeframe: in.Timeframe}]++
+	})
+	if d == nil {
+		return nil
 	}
+	candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d)
+	if !ok {
+		return nil
+	}
+	return []opportunity.Candidate{candidate}
+}
+
+func (s *Strategy) addRefusals(found map[strategy.Refusal]int64) {
+	if len(found) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	for k, n := range found {
+		s.refusals[k] += n
+	}
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
 	return out
 }
 

@@ -90,7 +90,7 @@ Rule A also retires the SELL of 29 Oct at 01:20, not at 01:15: the 01:15 close i
 
 ## 4. Observability
 
-`ob_definition_refused` (symbol, structure timeframe, reason `ob_closed_through`), once per instance per evaluation, through the same ledger as `fvg_definition_refused` (now keyed by technique). `go_opportunity_structure_closed_through` (symbol, structure timeframe, strategy id in the reason label) on rule C. Neither blocks an evaluation. `engine.Settings.OnWithdrawn` / `replaycapture.Options.OnWithdrawn` expose rule C to replays.
+`ob_definition_refused` (symbol, structure timeframe, reason `ob_closed_through`), once per instance per evaluation, through the engine's refusal ledger (fvg v7 reports its own refusals as `strategy_refused`). `go_opportunity_structure_closed_through` (symbol, structure timeframe, strategy id in the reason label) on rule C. Neither blocks an evaluation. `engine.Settings.OnWithdrawn` / `replaycapture.Options.OnWithdrawn` expose rule C to replays.
 
 ## 5. Contract and Python
 
