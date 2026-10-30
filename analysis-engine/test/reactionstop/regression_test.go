@@ -27,8 +27,7 @@ var realCases = []realCase{
 	{"replay-eurusd-production-capture-20261014.json", "key_level", market.Buy, 1791925200, 1.1193, 1.1194},
 	// demand BUY strong_reclaim 2026-10-13 21:25.
 	{"replay-eurusd-production-capture-20261014.json", "demand", market.Buy, 1791926700, 1.11951, 1.11956},
-	// order_block BUY strong_reclaim, same bar.
-	{"replay-eurusd-production-capture-20261014.json", "order_block", market.Buy, 1791926700, 1.11951, 1.11969},
+	// order_block is not here: v7 finds blocks on M15 and H1 and this EURUSD strong_reclaim was an M5 block (test/obv7).
 	// supply SELL strong_reclaim 2026-10-14 06:35: the bar high 1.12098 was above the stop at 1.12094.
 	{"replay-eurusd-production-capture-20261014.json", "supply", market.Sell, 1791959700, 1.12098, 1.12094},
 	{"replay-gbpusd-production-capture-20261013.json", "flip_zone", market.Buy, 1791763500, 1.32394, 1.32397},
@@ -73,7 +72,7 @@ func TestRealCapturedSetupsNowStopBeyondTheReactionExtreme(t *testing.T) {
 				index[b.Time] = i
 			}
 			found := map[int]int{}
-			_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
+			_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
 				frame := e.Context.Timeframes[market.M5]
 				if frame == nil || frame.Legacy == nil {
 					return

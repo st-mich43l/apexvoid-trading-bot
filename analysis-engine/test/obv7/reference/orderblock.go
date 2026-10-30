@@ -1,5 +1,5 @@
-// Package reference is the frozen master implementation of the order_block strategy (v6), vendored so that test/obmigration can prove the self-contained
-// package decides identically. Deleted in the rebuild commit. Original header: Package orderblock implements OrderBlockStrategy.
+// Package reference is the frozen master implementation of the order_block strategy (v6), vendored so that test/obv7 can run the strategy as it ran before the v7
+// rebuild (the "before" of the regression and the measurement). Original header: Package orderblock implements OrderBlockStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §20), consuming the
 // canonical Order Block primitive internal/zone already builds (origin
 // candle/displacement/structure-break relationship — not "last bearish
@@ -64,6 +64,9 @@ type Strategy struct {
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
+	// breakBuffer is strategies.order_block.confirmed_break_buffer_atr as the master engine read it (0: the v6 close-break rule is off, which with
+	// maximum_zone_touches 0 is order_block v5, what production ran on 28-29 Oct).
+	breakBuffer float64
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -75,6 +78,11 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, fmt.Errorf("orderblock: %w", err)
 	}
 	s := &Strategy{cfg: parsed, timeframe: market.M5, fingerprint: configFingerprint(cfg)}
+	if raw, ok := cfg.Parameters["confirmed_break_buffer_atr"]; ok {
+		if v, isFloat := raw.(float64); isFloat && v > 0 {
+			s.breakBuffer = v
+		}
+	}
 	s.cfg.StopBudget.Refusals = &s.RefusalCounter
 	return s, nil
 }
@@ -157,6 +165,7 @@ func (s *Strategy) RequiredTimeframes() []market.Timeframe {
 // reaction the frozen publisher (technique_detectors) decides on the frame's
 // technique instances.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
+	ctx = withMasterDefinition(ctx, s.breakBuffer)
 	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueOrderBlock, "", strategyutil.TechniqueSpec{
 		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_order_block_confirmed", ConfirmedEvidence: "m5_order_block_rejection_confirmed",
 		InvalidationLabel: "order_block_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,

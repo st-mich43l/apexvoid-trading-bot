@@ -17,13 +17,15 @@ const (
 	invalidationToleranceATR = 0.5
 	sweepReclaimBars         = 6
 	maxBreakEpisodes         = 2
-	maximumZoneATR           = 3.0 // a block wider than this share of its frame's ATR is a region, not a block
-	momentumBodyFraction     = 0.6 // the body share a displacement candle and an order block's own candle must have
-	displacementATRMult      = 1.5 // a displacement leg moves at least this share of the ATR
 )
 
-// RefusalClosedThrough is the order block definition's refusal reason: a close of the block's own frame went beyond its far edge by more than the buffer.
-const refusedClosedThrough = "ob_closed_through"
+// Refusal reasons of this strategy, counted by the engine as strategy_refused{strategy="order_block", reason}.
+const (
+	// refusedClosedThrough: a close of the block's own frame went beyond its far edge by more than the buffer.
+	refusedClosedThrough = "ob_closed_through"
+	// refusedNoTargetRoom: the nearest obstacle is closer than minimum_target_r x the risk.
+	refusedNoTargetRoom = "no_target_room"
+)
 
 // zoneBand is a price band with the facts the qualification reads.
 type zoneBand struct {
@@ -47,6 +49,7 @@ type block struct {
 	Side       string // "buy" | "sell"
 	Low, High  float64
 	Origin     int // index of the block's own candle on its frame
+	LegStart   int // index of the first candle of the displacement leg that broke structure
 	BreakIndex int // the structure break that qualified the block
 	Touches    int
 	Mitigated  bool
@@ -61,13 +64,17 @@ type instance struct {
 	StructuralLow  float64
 	StructuralHigh float64
 	EntryClipped   bool
-	OriginIndex    int // on the execution frame once bound; on its own frame before
+	OriginIndex    int // the block's own candle on the execution frame, once bound
 	OriginTime     int64
 	TouchableFrom  int
 	Touches        int
 	Mitigated      bool
 	Score          float64
-	Timeframe      market.Timeframe // "" for an execution-frame block
+	Timeframe      market.Timeframe
+	Frame          *analysiscontext.LegacyFrame // the frame the block was found on
+	FrameOrigin    int                          // the block's own candle on that frame
+	FrameConfirmed int                          // the later of the block's candle and its structure break on that frame
+	LegStart       int                          // the displacement leg's first candle on that frame
 }
 
 func (i instance) structural() (float64, float64) {
@@ -109,7 +116,7 @@ func atrAt(series []float64, i int, fallback float64) float64 {
 }
 
 // displacement finds the legs: runs of same-direction candles whose net move clears displacementATRMult x ATR and whose bodies are mostly strong.
-func displacement(bars []market.Candle, atr []float64) []leg {
+func (s *Strategy) displacement(bars []market.Candle, atr []float64) []leg {
 	var legs []leg
 	start, dir := -1, ""
 	flush := func(end int) {
@@ -121,12 +128,12 @@ func displacement(bars []market.Candle, atr []float64) []leg {
 		if dir == "up" {
 			size = close - open
 		}
-		if size < atrAt(atr, end, 1)*displacementATRMult {
+		if size < atrAt(atr, end, 1)*s.cfg.DisplacementATRMult {
 			return
 		}
 		strong := 0
 		for i := start; i <= end; i++ {
-			if bodyFraction(bars[i]) >= momentumBodyFraction {
+			if bodyFraction(bars[i]) >= s.cfg.MomentumBodyFraction {
 				strong++
 			}
 		}
@@ -181,9 +188,9 @@ func lastOppositeCandle(bars []market.Candle, l leg) int {
 
 // detectBlocks builds the order blocks of a frame: for every displacement leg that broke structure, the body of the last opposite candle before it. A block
 // price already closed through (below a demand block's low, above a supply block's high) is dead for good and carries at least one touch.
-func detectBlocks(bars []market.Candle, atr []float64, breaks []techniquezone.Break) []block {
+func (s *Strategy) detectBlocks(bars []market.Candle, atr []float64, breaks []techniquezone.Break) []block {
 	var blocks []block
-	for _, l := range displacement(bars, atr) {
+	for _, l := range s.displacement(bars, atr) {
 		breakIndex, ok := causingBreak(l, breaks)
 		if !ok {
 			continue
@@ -197,7 +204,7 @@ func detectBlocks(bars []market.Candle, atr []float64, breaks []techniquezone.Br
 		if l.Direction == "up" {
 			side = "buy"
 		}
-		b := block{Side: side, Low: low, High: high, Origin: origin, BreakIndex: breakIndex}
+		b := block{Side: side, Low: low, High: high, Origin: origin, LegStart: l.Start, BreakIndex: breakIndex}
 		if closedBeyond(b, bars) {
 			b.Touches, b.Mitigated = 1, true
 		}
@@ -353,15 +360,6 @@ func spent(mitigated bool, touches int, side string, low, high float64, bars []m
 	return !notInvalidated(side, low, high, bars, origin, atr, pip)
 }
 
-func proximalRetest(side string, low, high, price, atr, pip float64) bool {
-	e := epsilon(pip, atr)
-	proximal := low
-	if side == "buy" {
-		proximal = high
-	}
-	return math.Abs(price-proximal) <= e || (low-e <= price && price <= high+e)
-}
-
 // clipEntry cuts a block wider than maxWidth to its proximal slice (a buy keeps the top, a sell the bottom).
 func clipEntry(side string, low, high, maxWidth float64) (float64, float64, bool) {
 	if math.IsNaN(low) || math.IsNaN(high) || high <= low || math.IsNaN(maxWidth) || maxWidth <= 0 || high-low <= maxWidth+1e-12 {
@@ -394,17 +392,16 @@ func (s *Strategy) closedThroughRefusal(in instance, bars []market.Candle, atr f
 	return false
 }
 
-// frameInstances are the order blocks of one frame that pass every lifecycle test and the definition. proximity is true for the execution frame (price must
-// be at the block now) and false for a higher frame, whose block is judged as a fact and traded when M5 price reaches it. refused is told about every block
-// the close-break rule refuses.
-func (s *Strategy) frameInstances(frame *analysiscontext.LegacyFrame, proximity bool, refused func(reason string)) []instance {
+// structureInstances are the order blocks of one structure frame that are still blocks: not spent, not invalidated, a real width, a real body, not closed
+// through. Where price is now is not asked here (a structure is a fact). refuse is told, once per block, why a block that reached the close-break rule did
+// not survive.
+func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, refuse func(reason string)) []instance {
 	bars := frame.Bars
 	if len(bars) < 10 {
 		return nil
 	}
 	atr := medianATR(frame.ATR)
-	price := bars[len(bars)-1].Close
-	blocks := detectBlocks(bars, frame.ATR, frame.Breaks)
+	blocks := s.detectBlocks(bars, frame.ATR, frame.Breaks)
 	markTouches(blocks, bars)
 	attachScores(blocks, frame)
 	pip := s.cfg.PipSize
@@ -414,8 +411,8 @@ func (s *Strategy) frameInstances(frame *analysiscontext.LegacyFrame, proximity 
 			continue
 		}
 		in := instance{
-			Side: b.Side, Low: b.Low, High: b.High, OriginIndex: b.Origin, TouchableFrom: maxInt(b.Origin, b.BreakIndex) + 1,
-			Touches: b.Touches, Mitigated: b.Mitigated, Score: b.Score,
+			Side: b.Side, Low: b.Low, High: b.High, Touches: b.Touches, Mitigated: b.Mitigated, Score: b.Score, Timeframe: tf, Frame: frame,
+			FrameOrigin: b.Origin, FrameConfirmed: maxInt(b.Origin, b.BreakIndex), LegStart: b.LegStart,
 		}
 		if low, high, clipped := clipEntry(b.Side, b.Low, b.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = b.Low, b.High, true
@@ -424,19 +421,14 @@ func (s *Strategy) frameInstances(frame *analysiscontext.LegacyFrame, proximity 
 		if spent(in.Mitigated, in.Touches, in.Side, in.Low, in.High, bars, b.Origin, atr, pip) || !notInvalidated(in.Side, in.Low, in.High, bars, b.Origin, atr, pip) {
 			continue
 		}
-		if proximity && !proximalRetest(in.Side, in.Low, in.High, price, atr, pip) {
+		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
 			continue
 		}
-		if atr > 0 && in.High-in.Low > math.Max(0, maximumZoneATR)*atr {
-			continue
-		}
-		if originBodyFraction(bars[b.Origin]) < momentumBodyFraction {
+		if originBodyFraction(bars[b.Origin]) < s.cfg.MomentumBodyFraction {
 			continue
 		}
 		if s.closedThroughRefusal(in, bars, atr, frame.ATR, b.Origin) {
-			if refused != nil {
-				refused(refusedClosedThrough)
-			}
+			refuse(refusedClosedThrough)
 			continue
 		}
 		out = append(out, in)
@@ -444,30 +436,30 @@ func (s *Strategy) frameInstances(frame *analysiscontext.LegacyFrame, proximity 
 	return out
 }
 
-// bind maps a higher frame's blocks onto the execution frame by TIME: the origin to the first execution bar opening at or after the higher bar that holds
-// the block's own candle, and the first bar that may touch it to the first execution bar opening at or after the close of the higher bar that confirmed it
-// (the later of the block's candle and its structure break). A block older than the execution window cannot be anchored there and is dropped.
-func bind(tf market.Timeframe, higherBars, execBars []market.Candle, blocks []instance) []instance {
+// bind maps a structure frame's blocks onto the execution frame by TIME: the origin to the first execution bar opening at or after the structure bar that
+// holds the block's own candle, and the first bar that may touch it to the first execution bar opening at or after the close of the structure bar that
+// confirmed it (the later of the block's candle and its structure break). A block older than the execution window cannot be anchored there and is dropped.
+func bind(tf market.Timeframe, structureBars, execBars []market.Candle, blocks []instance) []instance {
 	if len(execBars) == 0 {
 		return nil
 	}
 	minutes, known := tf.Minutes()
 	var out []instance
 	for _, in := range blocks {
-		if in.OriginIndex < 0 || in.OriginIndex >= len(higherBars) {
+		if in.FrameOrigin < 0 || in.FrameOrigin >= len(structureBars) {
 			continue
 		}
-		originTime := higherBars[in.OriginIndex].Time
+		originTime := structureBars[in.FrameOrigin].Time
 		index := sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= originTime })
 		if index >= len(execBars) || execBars[0].Time > originTime {
 			continue
 		}
 		touchable := 0
-		if formed := in.TouchableFrom - 1; in.TouchableFrom > 0 && formed < len(higherBars) && known {
-			closed := higherBars[formed].Time + int64(minutes)*60
+		if in.FrameConfirmed >= 0 && in.FrameConfirmed < len(structureBars) && known {
+			closed := structureBars[in.FrameConfirmed].Time + int64(minutes)*60
 			touchable = sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= closed })
 		}
-		in.OriginIndex, in.OriginTime, in.Timeframe, in.TouchableFrom = index, originTime, tf, touchable
+		in.OriginIndex, in.OriginTime, in.TouchableFrom = index, originTime, touchable
 		out = append(out, in)
 	}
 	return out

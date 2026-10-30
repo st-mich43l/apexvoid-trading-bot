@@ -10,13 +10,14 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
+const fixedRewardRisk = "fixed_reward_risk"
+
 const (
 	zoneEvidence      = "m5_order_block_confirmed"
 	confirmedEvidence = "m5_order_block_rejection_confirmed"
 	invalidationLabel = "order_block_invalidated"
 	// reactionExtremeEvidence marks a stop that the reaction's own traded extreme set (it lay beyond the whole block).
 	reactionExtremeEvidence = "invalidation_beyond_reaction_extreme"
-	fallbackTargetR         = 2.0
 )
 
 // reactionAnchoredInvalidation puts the stop beyond the whole block and beyond the extreme the bars from the touch to the confirmation traded, plus the
@@ -49,60 +50,15 @@ func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, dire
 	return extreme - buffer, true
 }
 
-// nearestOpposingTarget is the nearest unswept opposing liquidity at least the minimum distance from the entry; without one, a fixed reward:risk beyond
-// it.
-func (d *decision) nearestOpposingTarget(reference, invalidation, minimum float64) (float64, string, bool) {
-	want := "buy"
-	if d.direction == market.Sell {
-		want = "sell"
-	}
-	best, bestDistance := 0.0, math.Inf(1)
-	for _, pool := range d.v.frame.Pools {
-		if pool.Side != want {
-			continue
-		}
-		distance := pool.Level - reference
-		if d.direction == market.Sell {
-			distance = reference - pool.Level
-		}
-		if distance >= minimum && distance < bestDistance {
-			best, bestDistance = pool.Level, distance
-		}
-	}
-	if !math.IsInf(bestDistance, 1) {
-		return best, "nearest_opposing_liquidity", true
-	}
-	risk := math.Abs(reference - invalidation)
-	if risk <= 0 {
-		return 0, "", false
-	}
-	if d.direction == market.Sell {
-		return reference - fallbackTargetR*risk, "fixed_reward_risk", true
-	}
-	return reference + fallbackTargetR*risk, "fixed_reward_risk", true
-}
-
 // candidate builds the confirmed opportunity: the published (proximal) entry band, the stop beyond the whole block and the reaction's extreme, the
-// nearest opposing liquidity as the nominal target, and the decision's own reaction and confluence as evidence.
+// nearest opposing structure (or a fixed reward:risk when none stands in the way) as the target, and the decision's own reaction and confluence as evidence.
 func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Candidate, bool) {
 	v := d.v
 	atr := v.atr
 	low, high := d.res.zone.Low(), d.res.zone.High()
 	structLow, structHigh := d.res.structuralLow, d.res.structuralHigh
-	buffer := s.cfg.InvalidationBufferATR * atr
-	reference := high
-	if d.direction == market.Sell {
-		reference = low
-	}
-	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, d.conf, d.direction, structLow, structHigh, buffer)
-	budgetCode, publish := s.cfg.StopBudget.Apply(reference, invalidation)
-	if !publish {
-		return opportunity.Candidate{}, false
-	}
-	target, targetLabel, ok := d.nearestOpposingTarget(reference, invalidation, s.cfg.MinimumTargetDistanceATR*atr)
-	if !ok {
-		return opportunity.Candidate{}, false
-	}
+	reference, invalidation := d.reference, d.invalidation
+	target, targetLabel := d.room.Target, d.room.Label
 	conf := d.conf
 	formedAt, confirmedAt := conf.TouchTime, conf.ConfirmationTime
 	setupKey := fmt.Sprintf("zone:%s:rejection:%d:%d", d.id, conf.TouchTime, conf.ConfirmationTime)
@@ -110,13 +66,13 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	if d.inst.Timeframe != "" {
 		evidence = append(evidence, "htf_zone_"+lowerTimeframe(d.inst.Timeframe))
 	}
-	if anchored {
+	if d.anchored {
 		evidence = append(evidence, reactionExtremeEvidence)
 	}
-	if budgetCode != "" {
-		evidence = append(evidence, budgetCode)
+	if d.budgetCode != "" {
+		evidence = append(evidence, d.budgetCode)
 	}
-	scored := s.quality(d, reference, invalidation, target, targetLabel != "fixed_reward_risk", atr)
+	scored := s.quality(d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.symbol, Direction: d.direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: invalidationLabel,
@@ -203,5 +159,6 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	room, rewardRisk := quality.GeometryRoom(reference, invalidation, target, structural)
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
+	m.Measure("room_r", d.room.RoomR)
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }

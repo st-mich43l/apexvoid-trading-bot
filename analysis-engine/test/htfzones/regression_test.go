@@ -26,13 +26,14 @@ type realCase struct {
 	newlyOffered      bool
 }
 
-// fvg is not here: v7 owns its structure frames and confirmation and is covered by test/fvgv7.
+// fvg and order_block (v7) are not here except for the XAU blocks that still publish: v7 owns its structure frames and confirmation and is covered by test/fvgv7 and
+// test/obv7. The 30 Sep EURUSD M15 order block (5.7 pips, floor) is refused by the close-break rule (ob_closed_through) the strategy owns since v6; the replay used
+// to switch that rule off.
 var realCases = []realCase{
 	// XAU
 	{"replay-xau-production-capture-20260921.json", "order_block", market.Sell, 1789458600, market.M15, 61.6, "structural", true}, // 09-15 07:50 M15 OB, engulfing
 	{"replay-xau-production-capture-20261012.json", "order_block", market.Buy, 1791782100, market.H1, 77.5, "refused", true},      // 10-12 05:15 H1 OB: honest stop over the 70 pip cap
 	// EURUSD
-	{"replay-eurusd-production-capture-20261006.json", "order_block", market.Buy, 1790733600, market.M15, 5.7, "floor", false}, // 09-30 02:00 M15 OB
 }
 
 type found struct {
@@ -66,7 +67,7 @@ func replayCases(t *testing.T, doc *config.Document, name string, cases []realCa
 		index[b.Time] = i
 	}
 	out := map[int64]map[string]*found{}
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, OnEvaluation: func(e engine.Evaluation) {
 		for _, c := range e.Candidates {
 			if c.Reaction == nil {
 				continue

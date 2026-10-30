@@ -297,33 +297,40 @@ analysis:
       # entry validity and stop rules are unchanged.
       higher_timeframes: [M15, H1]
     order_block:
-      version: v6
+      # v7 (docs/strategies/order_block.md): self-contained. A block is found on M15/H1 (a displacement leg that broke structure, the body of the last opposite
+      # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as
+      # strategy_refused{strategy="order_block"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
+      # confluence rubric are injected by the engine.
+      version: v7
       enabled: true
+      structure_timeframes: [M15, H1]
+      # The block: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least momentum_body_fraction
+      # of their range, and that broke structure; the block is the body of the last opposite candle before it, which must have such a body itself.
+      displacement_atr_mult: 1.5
+      momentum_body_fraction: 0.6
       # Order block definition (docs/strategies/order-block-definition.md; production 28-29 Oct 2026): a block is dead for good once ANY close of its own frame,
       # after its own candle, is beyond its far edge by more than this share of that frame's ATR at the close. No reclaim forgiveness (a wick that closes back
-      # inside is the sweep and does not retire it). 0 switches the rule off. Shared by every instrument and timeframe; the shared analysis.techniques lifecycle
-      # (frozen-Python parity) is untouched.
+      # inside is the sweep and does not retire it). 0 switches the rule off. The engine reads the same key to withdraw a published block (rule C).
       confirmed_break_buffer_atr: 0.1
-      # A block touched more than this often is spent (the existing key supply and demand already use).
+      # A block touched more than this often is spent.
       maximum_zone_touches: 2
-      minimum_strength: 0.4
-      # 2026-09-30: production saw order blocks as small as 0.03 ATR (half
-      # of them under 0.5 ATR); same threshold as fvg/ifvg.
-      minimum_zone_atr: 0.5
-      invalidation_buffer_atr: 0.5
-      minimum_target_distance_atr: 1.0
-      expiry_hours: 24.0
-      # Legacy Python reaction confirmation (shared by every technique).
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
-      # Legacy Python technique validation (technique_geometry.py): price must be at
-      # the zone, width capped in ATR, entry clipped to its proximal slice.
-      epsilon_atr_fraction: 0.05
+      # A block wider than this share of its frame's ATR is a region, not a block; a wider entry band is clipped to its proximal slice (entry_max_width_price,
+      # replaced per instrument by the engine).
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
-      momentum_body_fraction: 0.6
-      # Also evaluate these timeframes' own order blocks against the M5 bars (see supply).
-      higher_timeframes: [M15, H1]
+      maximum_entry_atr: 2.0
+      # M5 confirmation: a touch of the block, then within reaction_lookback_bars one of the five reaction patterns.
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
+      invalidation_buffer_atr: 0.5
+      # Room: the nearest opposing obstacle (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the extreme of the leg that
+      # broke structure) must be at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
+      minimum_target_r: 1.0
+      fallback_target_r: 2.0
+      obstacle_pivot_bars: 2
+      confluence_floor: 2
+      fibonacci_enabled: true
+      expiry_hours: 24.0
     fvg:
       # v7 (docs/strategies/fvg.md): self-contained. The gap is found on M15/H1 (its definition judged on that frame as of its third candle), M5 confirms with a
       # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as

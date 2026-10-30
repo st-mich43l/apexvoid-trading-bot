@@ -1,5 +1,7 @@
 # order_block v6: a block is a block until a close breaks it
 
+> Since order_block v7 the definition (rules A and B, their wiring and the `ob_definition_refused` counter) lives in the strategy package, see [order_block](order_block.md); rule C (the engine withdrawing a published block) is unchanged and still reads `strategies.order_block.confirmed_break_buffer_atr`. The text below is the v6 record.
+
 Branch `agent/order-block-definition`, base `master` at `f02d62f9`. Go engine only, plus one new lifecycle reason code. No stop budget, ladder, sizing, enablement, arbitration, quality model, `min_confluence`, `maximum_entry_atr` or `expiry_hours` changed, and `analysis.techniques.*`, `ProductionTechniqueSettings` and `internal/zone` are untouched. It mirrors the fvg v6 pattern ([fvg-definition.md](fvg-definition.md)).
 
 ## 1. Evidence (production, 28-29 Oct 2026, XAU M5)
