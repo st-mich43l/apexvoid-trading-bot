@@ -96,13 +96,14 @@ For the zone family (`supply`, `demand`, `order_block`, `fvg`) Go also publishes
 timeframe (M5, M15 or H1), not the execution band in `entry`. The root card prints it as
 `Structure: FVG M15 · 4,152.30–4,154.40 · formed 14:15 UTC` (plus `Order zone: low–high` when the order is placed on
 a different band). No policy, identity or statistic reads it; an event without it renders as before. See
-[fvg definition](strategies/fvg-definition.md).
+[fvg](strategies/fvg.md).
 
-`analysis.strategies.supply`, `demand`, `order_block` and `fvg` carry
+`analysis.strategies.supply`, `demand` and `order_block` carry
 `higher_timeframes: [M15, H1]`: those frames' own zones are also evaluated against the
 M5 closed bars, judged on their own frame's bars and ATR, confirmed and executed on M5
 (see [HTF zone structure](strategies/htf-zone-structure.md)). Removing the key restores
-M5-only evaluation.
+M5-only evaluation. `fvg` (v7) owns its mechanism and names its frames with `structure_timeframes: [M15, H1]`
+(M5 only confirms and executes); its whole block is documented in [fvg](strategies/fvg.md).
 
 ## Sessions
 

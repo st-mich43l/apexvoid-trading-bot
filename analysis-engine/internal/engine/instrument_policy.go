@@ -65,6 +65,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	}
 	applyCRTGeometry(settings)
 	applyLegacyDetector(settings)
+	applyFVGScale(settings)
 	applyBreakRetestGeometry(settings)
 	applyIFVGGeometry(settings)
 	applyConfluenceZoneGeometry(settings)
@@ -412,9 +413,33 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 var legacyDetectorStrategies = map[string]bool{
 	"break_retest": true, "key_level": true,
 	// The technique publishers (technique_detectors.py) qualify through the same contract.
-	"supply": true, "demand": true, "order_block": true, "fvg": true, "ifvg": true, "crt": true, "confluence_zone": true, "flip_zone": true, "trendline": true,
+	"supply": true, "demand": true, "order_block": true, "ifvg": true, "crt": true, "confluence_zone": true, "flip_zone": true, "trendline": true,
 	// The XAU scalp strategies read the shared confluence rubric and instrument scale the same way CRT does.
 	"round_number": true, "asia_range": true, "shock_retest": true,
+}
+
+// applyFVGScale gives the fvg strategy, which owns its thresholds in strategies.fvg, the two things it must not own: the instrument scale (pip size, the
+// instrument's entry-band width) and the shared confluence rubric (scoring version, star ratios, weights, the fibonacci epsilon). It is idempotent.
+func applyFVGScale(settings *Settings) {
+	for i := range settings.Strategies {
+		if settings.Strategies[i].ID != "fvg" {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+10)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["pip_size"] = settings.LegacyRead.PipSize
+		params["entry_max_width_price"] = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
+		params["confluence_scoring_version"] = settings.Confluence.ScoringVersion
+		params["confluence_star_three_ratio"] = settings.Confluence.StarThreeRatio
+		params["confluence_star_two_ratio"] = settings.Confluence.StarTwoRatio
+		params["confluence_zone_quality_weight"] = settings.Confluence.ZoneQualityWeight
+		params["confluence_mad_score_weight"] = settings.Confluence.MADScoreWeight
+		params["fibonacci_confluence_weight"] = settings.Confluence.FibonacciWeight
+		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
+		settings.Strategies[i].Parameters = params
+	}
 }
 
 // applyLegacyDetector injects the shared frozen-detector thresholds, the

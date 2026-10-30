@@ -202,13 +202,15 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	for _, refused := range evaluation.UnsweptRefused {
 		w.telemetry.Count(telemetry.CounterStrategyKeyLevelUnsweptRefused, symbolLabel, tfLabel, int64(refused))
 	}
-	// The zones the confirmed path refused by the fair value gap and order block definitions, by the structure timeframe they were found on and the reason.
+	// The order blocks the confirmed path refused by the order block definition, by the structure timeframe they were found on and the reason.
 	for refusal, n := range w.refusals.drain() {
-		counter := telemetry.CounterFVGDefinitionRefused
-		if refusal.technique == "order_block" {
-			counter = telemetry.CounterOBDefinitionRefused
+		w.telemetry.CountReason(telemetry.CounterOBDefinitionRefused, symbolLabel, string(refusal.timeframe), refusal.reason, n)
+	}
+	// What a strategy that owns its mechanism refused, by its own reason (fvg v7).
+	for id, taken := range evaluation.Refusals {
+		for refusal, n := range taken {
+			w.telemetry.CountStrategyRefusal(symbolLabel, string(id), string(refusal.Timeframe), refusal.Reason, n)
 		}
-		w.telemetry.CountReason(counter, symbolLabel, string(refusal.timeframe), refusal.reason, n)
 	}
 
 	doneOpp := w.telemetry.Time(telemetry.PhaseOpportunity, symbolLabel, tfLabel)
