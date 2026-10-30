@@ -217,14 +217,19 @@ func (r *result) confluenceContext() *opportunity.ConfluenceContext {
 	}
 }
 
-// decision is one block's confirmed reaction on the bar.
+// decision is one block's confirmed reaction on the bar, with the geometry it was judged on.
 type decision struct {
-	inst      instance
-	direction market.Direction
-	v         *view
-	conf      *confirmation
-	res       *result
-	id        string
+	inst         instance
+	direction    market.Direction
+	v            *view
+	conf         *confirmation
+	res          *result
+	id           string
+	reference    float64 // the proximal edge of the entry band
+	invalidation float64
+	anchored     bool   // the reaction's own extreme set the stop
+	budgetCode   string // stop-budget evidence ("" without a budget)
+	room         roomResult
 }
 
 func directionOf(in instance) market.Direction {
@@ -256,8 +261,9 @@ func (v *view) factorsFor(z zoneBand, kind string) confluence.Factors {
 	return factors
 }
 
-// publish decides one block: entry validity, the reaction after the block formed, the qualification.
-func (s *Strategy) publish(base *view, in instance) *decision {
+// publish decides one block: entry validity, the reaction after the block formed, the qualification, the stop and the stop budget, then room. refuse is
+// told why a block that was in play did not publish.
+func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) *decision {
 	if in.Mitigated && in.Touches > retestMaxTouches {
 		return nil
 	}
@@ -279,7 +285,25 @@ func (s *Strategy) publish(base *view, in instance) *decision {
 	if res == nil {
 		return nil
 	}
-	return &decision{inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in)}
+	reference := res.zone.High()
+	if direction == market.Sell {
+		reference = res.zone.Low()
+	}
+	buffer := s.cfg.InvalidationBufferATR * v.atr
+	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, conf, direction, res.structuralLow, res.structuralHigh, buffer)
+	budgetCode, ok := s.cfg.StopBudget.Apply(reference, invalidation)
+	if !ok {
+		return nil
+	}
+	room := v.room(in, reference, math.Abs(reference-invalidation))
+	if room.Refused {
+		refuse(refusedNoTargetRoom)
+		return nil
+	}
+	return &decision{
+		inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in),
+		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
+	}
 }
 
 // instanceID is the structure's stable identity: technique, side, the open time of the order block's own candle on the execution frame, and the
@@ -296,11 +320,11 @@ func (v *view) instanceID(in instance) string {
 }
 
 // best is the single best confirmed reaction among instances: highest stars, nearest entry on a tie.
-func (s *Strategy) best(base *view, instances []instance) *decision {
+func (s *Strategy) best(base *view, instances []instance, refuse func(in instance, reason string)) *decision {
 	var best *decision
 	bestDistance := math.Inf(1)
 	for _, in := range instances {
-		d := s.publish(base, in)
+		d := s.publish(base, in, func(reason string) { refuse(in, reason) })
 		if d == nil {
 			continue
 		}

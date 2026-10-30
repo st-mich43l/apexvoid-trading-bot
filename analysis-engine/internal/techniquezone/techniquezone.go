@@ -1047,16 +1047,11 @@ func compositeZone(group []Zone) Zone {
 // TechniqueSettings mirrors technique_geometry.TechniqueGeometrySettings (the
 // fields the instance validation uses).
 type TechniqueSettings struct {
-	PipSize        float64
-	EpsilonATRFrac float64
-	MaxZoneATR     float64
-	FVGMaxATR      float64
-	FVGMinPips     float64
-	// OBBreakBufferATR defines when a CONFIRMED-path order block is dead (docs/strategies/order-block-definition.md): any close of the frame the block
-	// was found on, after the block's own candle, beyond its far edge (demand: below the low, supply: above the high) by more than OBBreakBufferATR of the
-	// frame's ATR at that bar retires it for good. No reclaim forgiveness and no episode budget: a wick that closes back inside is the sweep, a close is
-	// the break. 0 = off, which is every setting that does not name the key, the zone book, the Confluence Zone facts and the frozen-Python parity replays.
-	OBBreakBufferATR         float64
+	PipSize                  float64
+	EpsilonATRFrac           float64
+	MaxZoneATR               float64
+	FVGMaxATR                float64
+	FVGMinPips               float64
 	FVGEntryMaxWidthPrice    float64
 	MomentumBodyFrac         float64
 	RetestMaxTouches         int
@@ -1323,85 +1318,33 @@ func discoverIFVG(fvgZones []Zone, bars []market.Candle, entryMax float64) []Ins
 	return out
 }
 
-const (
-	// OBRefusedClosedThrough is the order block definition's refusal reason: a close of the block's own frame went beyond its far edge by more than the buffer.
-	OBRefusedClosedThrough = "ob_closed_through"
-)
-
-// obClosedThroughRefusal reports OBRefusedClosedThrough when any close after the order block's own candle, up to the frame's last closed bar, is beyond
-// the block's far edge by more than OBBreakBufferATR of the frame's ATR AT THAT BAR (atrSeries[i]; the scalar ATR only where the series is missing). The far
-// edge is the block's structural one when its entry band was clipped. It returns "" when the rule is off, for any other technique, or when no close broke it.
-func obClosedThroughRefusal(in Instance, bars []market.Candle, atr float64, atrSeries []float64, s TechniqueSettings) string {
-	if s.OBBreakBufferATR <= 0 || in.Technique != "order_block" {
-		return ""
-	}
-	o := in.OriginIndex
-	if o < 0 || o >= len(bars)-1 {
-		return ""
-	}
-	low, high := in.Low, in.High
-	if in.EntryClipped {
-		low, high = in.StructuralLow, in.StructuralHigh
-	}
-	aligned := len(atrSeries) == len(bars)
-	for i := o + 1; i < len(bars); i++ {
-		frameATR := atr
-		if aligned && atrSeries[i] > 0 && !math.IsNaN(atrSeries[i]) {
-			frameATR = atrSeries[i]
-		}
-		buffer := s.OBBreakBufferATR * frameATR
-		if in.Side == "buy" && bars[i].Close < low-buffer-1e-9 {
-			return OBRefusedClosedThrough
-		}
-		if in.Side == "sell" && bars[i].Close > high+buffer+1e-9 {
-			return OBRefusedClosedThrough
-		}
-	}
-	return ""
-}
-
 func validateInstance(in Instance, bars []market.Candle, price, atr float64, s TechniqueSettings) bool {
-	ok, _ := validateInstanceWithATR(in, bars, price, atr, nil, s)
-	return ok
-}
-
-// validateInstanceWithATR is validateInstance with the frame's ATR series, which the fair value gap definition needs; the second result is the reason a
-// gap that passed every other test was refused by that definition (never set for any other refusal).
-func validateInstanceWithATR(in Instance, bars []market.Candle, price, atr float64, atrSeries []float64, s TechniqueSettings) (bool, string) {
 	if zoneIsSpent(in.Mitigated, in.Touches, in.Side, in.Low, in.High, bars, in.OriginIndex, atr, s) {
-		return false, ""
+		return false
 	}
 	if !notInvalidated(in.Side, in.Low, in.High, bars, in.OriginIndex, atr, s) {
-		return false, ""
+		return false
 	}
 	if !s.IgnoreProximity && !proximalRetest(in.Side, in.Low, in.High, price, atr, s) {
-		return false, ""
+		return false
 	}
 	maxATR := s.MaxZoneATR
 	if in.Technique == "fvg" {
 		if in.High-in.Low < s.FVGMinPips*s.PipSize {
-			return false, ""
+			return false
 		}
 		maxATR = s.FVGMaxATR
 		if !fvgNotFullyFilled(in.Side, in.Low, in.High, bars, in.OriginIndex) {
-			return false, ""
+			return false
 		}
 	}
 	if !widthWithinATR(in.Low, in.High, atr, maxATR) {
-		return false, ""
+		return false
 	}
-	if in.Technique == "order_block" {
-		if in.BodyFrac < s.MomentumBodyFrac || !in.HasBOS {
-			return false, ""
-		}
+	if in.Technique == "order_block" && (in.BodyFrac < s.MomentumBodyFrac || !in.HasBOS) {
+		return false
 	}
-	if in.Technique == "order_block" {
-		// Judged last, like the gap definition: a block every other test would have offered to the strategy.
-		if reason := obClosedThroughRefusal(in, bars, atr, atrSeries, s); reason != "" {
-			return false, reason
-		}
-	}
-	return true, ""
+	return true
 }
 
 // SourceViews mirrors engine._zone_views for the technique zones: the order
@@ -1444,12 +1387,6 @@ func SourceViews(zones []Zone) (ob, sd, fvg []Zone) {
 // reaction requirement): every spent, invalidated, off-price, mis-sized or
 // weak-body structure is dropped; what is left is a zone price is at now.
 func CollectInstances(sdZones, obZones, fvgZones []Zone, bars []market.Candle, price, atr float64, s TechniqueSettings) []Instance {
-	return CollectInstancesWithATR(sdZones, obZones, fvgZones, bars, price, atr, nil, s, nil)
-}
-
-// CollectInstancesWithATR is CollectInstances with the frame's ATR series (aligned with bars) for the fair value gap definition, and an optional callback
-// told about every gap that definition refused (and why). With the series nil and no definition setting on it is CollectInstances.
-func CollectInstancesWithATR(sdZones, obZones, fvgZones []Zone, bars []market.Candle, price, atr float64, atrSeries []float64, s TechniqueSettings, refused func(Instance, string)) []Instance {
 	spent := func(z Zone) bool {
 		return zoneIsSpent(z.Mitigated, z.Touches, zoneSideToTradeSide(z.Side), z.Low(), z.High(), bars, z.OriginIndex, atr, s)
 	}
@@ -1477,11 +1414,8 @@ func CollectInstancesWithATR(sdZones, obZones, fvgZones []Zone, bars []market.Ca
 	pending = append(pending, discoverIFVG(fvgZones, bars, s.FVGEntryMaxWidthPrice)...)
 	var out []Instance
 	for _, in := range pending {
-		ok, reason := validateInstanceWithATR(in, bars, price, atr, atrSeries, s)
-		if ok {
+		if validateInstance(in, bars, price, atr, s) {
 			out = append(out, in)
-		} else if reason != "" && refused != nil {
-			refused(in, reason)
 		}
 	}
 	return out
@@ -1496,17 +1430,6 @@ func InstancesFromScoredZones(scored []Zone, bars []market.Candle, atr float64, 
 	}
 	obV, sdV, fvgV := SourceViews(scored)
 	return CollectInstances(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, atr, s)
-}
-
-// InstancesFromScoredZonesWithATR is InstancesFromScoredZones with the frame's ATR series, the scalar being its median as before. It exists for the fair
-// value gap definition (TechniqueSettings.FVGMin*), which judges a gap on the ATR as of its own third candle; refused, when set, is told about every gap
-// the definition refused. With no definition setting on it returns exactly what InstancesFromScoredZones does.
-func InstancesFromScoredZonesWithATR(scored []Zone, bars []market.Candle, atrSeries []float64, s TechniqueSettings, refused func(Instance, string)) []Instance {
-	if len(bars) == 0 {
-		return nil
-	}
-	obV, sdV, fvgV := SourceViews(scored)
-	return CollectInstancesWithATR(sdV, obV, fvgV, bars, bars[len(bars)-1].Close, ATRScalar(atrSeries, 1), atrSeries, s, refused)
 }
 
 // InstancesFromScoredZonesAsOf collects the instances as the zone chain would have
