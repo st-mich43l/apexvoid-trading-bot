@@ -247,10 +247,10 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 12.0
     supply:
-      # v7 (docs/strategies/supply.md): self-contained, SELL only. A zone is found on M15/H1 (the range of the candles before a strong downward departure), M5
+      # v9 (docs/strategies/supply.md): self-contained, SELL only. A zone is found on M15/H1 (the range of the candles before a strong downward departure), M5
       # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="supply"}). Nothing
       # else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared confluence rubric are injected by the engine.
-      version: v8
+      version: v9
       enabled: true
       structure_timeframes: [M15, H1]
       # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
@@ -274,33 +274,51 @@ analysis:
       minimum_target_r: 1.0
       fallback_target_r: 2.0
       obstacle_pivot_bars: 2
+      # The zone score (how much evidence sits under a zone) is owned here. A zone in the premium half of its structure frame's dealing range earns
+      # pd_position_score. The range is built from the frame's last confirmed swing high and low (fractals of structure_pivot_bars bars) and extended by every
+      # high and low since, so a breakout moves the range with price. A score input, never a gate.
+      structure_pivot_bars: 2
+      pd_position_score: 2.0
       confluence_floor: 2
       fibonacci_enabled: true
       expiry_hours: 24.0
     demand:
-      version: v6
+      # v7 (docs/strategies/demand.md): self-contained, BUY only. A zone is found on M15/H1 (the range of the candles before a strong upward departure), M5
+      # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="demand"}). The
+      # zone score is owned here too. Nothing else is read: the instrument scale (pip_size, round_step, entry_max_width_price, the stop envelope) and the shared
+      # confluence rubric are injected by the engine.
+      version: v7
       enabled: true
-      # See supply. Demand setups on zones touched 3+ times averaged -0.31R / -0.39R (dev / out of
-      # sample) against -0.08R / -0.22R on zones touched at most once.
+      structure_timeframes: [M15, H1]
+      # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
+      # momentum_body_fraction of their range.
+      displacement_atr_mult: 1.5
+      momentum_body_fraction: 0.6
+      # A zone already touched more than this many times is spent and does not publish (0 = no limit). 2026-10 replay, dev and out-of-sample halves: demand
+      # setups on zones touched 3+ times averaged -0.31R / -0.39R against -0.08R / -0.22R on zones touched at most once (docs/strategies/demand.md).
       maximum_zone_touches: 2
-      minimum_strength: 0.4
-      invalidation_buffer_atr: 0.5
-      minimum_target_distance_atr: 1.0
-      expiry_hours: 24.0
-      # Legacy Python reaction confirmation (shared by every technique).
-      reaction_lookback_bars: 3
-      engulfing_minimum_range_atr: 0.5
-      # Legacy Python technique validation (technique_geometry.py): price must be at
-      # the zone, width capped in ATR, entry clipped to its proximal slice.
-      epsilon_atr_fraction: 0.05
+      # A zone wider than this share of its frame's ATR is a region, not a zone; a wider entry band is clipped to its proximal slice (entry_max_width_price,
+      # replaced per instrument by the engine).
       maximum_zone_atr: 3.0
       entry_max_width_price: 5.0
-      # Also evaluate these timeframes' own supply/demand zones against the M5 bars
-      # (the frozen Python publishers read the M5 zone population only). The setup is
-      # found on the higher-timeframe structure, the M5 reaction confirms it and the M5
-      # price executes it (owner direction 2026-10-24); the M5 reaction confirmation,
-      # entry validity and stop rules are unchanged.
-      higher_timeframes: [M15, H1]
+      maximum_entry_atr: 2.0
+      # M5 confirmation: a touch of the zone, then within reaction_lookback_bars one of the five reaction patterns.
+      reaction_lookback_bars: 3
+      engulfing_minimum_range_atr: 0.5
+      invalidation_buffer_atr: 0.5
+      # Room: the nearest opposing obstacle above the entry (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the high of
+      # the departure) must be at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
+      minimum_target_r: 1.0
+      fallback_target_r: 2.0
+      obstacle_pivot_bars: 2
+      # The zone score (how much evidence sits under a zone) is owned here. A zone in the discount half of its structure frame's dealing range earns
+      # pd_position_score. The range is built from the frame's last confirmed swing high and low (fractals of structure_pivot_bars bars) and extended by every
+      # high and low since, so a breakout moves the range with price. A score input, never a gate.
+      structure_pivot_bars: 2
+      pd_position_score: 2.0
+      confluence_floor: 2
+      fibonacci_enabled: true
+      expiry_hours: 24.0
     order_block:
       # v7 (docs/strategies/order_block.md): self-contained. A block is found on M15/H1 (a displacement leg that broke structure, the body of the last opposite
       # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as

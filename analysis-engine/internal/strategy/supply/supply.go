@@ -19,7 +19,7 @@ import (
 )
 
 const ID strategy.StrategyID = "supply"
-const Version = "v8"
+const Version = "v9"
 
 const (
 	structureVersion = "v2"
@@ -67,12 +67,14 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	refusals := map[strategy.Refusal]int64{}
 	defer s.addRefusals(refusals)
 	var instances []instance
-	for _, tf := range s.cfg.StructureTimeframes {
+	var higher []band // this strategy's own zones on the frames processed so far (the longer periods first)
+	for _, tf := range s.frameOrder() {
 		frameContext := ctx.Timeframes[tf]
 		if frameContext == nil || frameContext.Legacy == nil {
 			continue
 		}
-		found := s.structureInstances(ctx, frameContext.Legacy, tf)
+		found, held := s.structureInstances(frameContext.Legacy, tf, base.frame.Bars, higher)
+		higher = append(higher, held...)
 		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found, s.cfg.BindWithinExecutionWindow)...)
 	}
 	d := s.best(base, instances, func(in instance, reason string) {
@@ -86,6 +88,17 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		return nil
 	}
 	return []opportunity.Candidate{candidate}
+}
+
+// frameOrder is the structure frames, the longest period first: a zone is scored against this strategy's zones on the frames above it.
+func (s *Strategy) frameOrder() []market.Timeframe {
+	order := append([]market.Timeframe(nil), s.cfg.StructureTimeframes...)
+	sort.SliceStable(order, func(i, j int) bool {
+		a, _ := order[i].Minutes()
+		b, _ := order[j].Minutes()
+		return a > b
+	})
+	return order
 }
 
 func (s *Strategy) addRefusals(found map[strategy.Refusal]int64) {

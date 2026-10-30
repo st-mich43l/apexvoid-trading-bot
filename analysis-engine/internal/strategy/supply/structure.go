@@ -48,6 +48,7 @@ type zone struct {
 	Touches    int
 	Mitigated  bool
 	Score      float64
+	Premium    bool
 }
 
 // instance is a zone that passed the lifecycle tests: its entry band (clipped to the proximal slice when wide), the whole zone, and where it lives.
@@ -63,6 +64,8 @@ type instance struct {
 	Mitigated      bool
 	Score          float64
 	Timeframe      market.Timeframe
+	Premium        bool                         // the zone is in the premium half of its frame's dealing range and earned the points for it
+	PDPosition     float64                      // where the zone's proximal edge sits in that range, 0 (low) to 1 (high); NaN without a range
 	Frame          *analysiscontext.LegacyFrame // the frame the zone was found on
 	FrameOrigin    int                          // the zone's last base candle on that frame
 	FrameConfirmed int                          // the last candle of the departure on that frame
@@ -276,18 +279,21 @@ func clipEntry(low, high, maxWidth float64) (float64, float64, bool) {
 }
 
 // structureInstances are the supply zones of one structure frame that are still zones: not spent, not invalidated, a real width. Where price is now is not
-// asked here (a structure is a fact).
-func (s *Strategy) structureInstances(ctx *analysiscontext.MarketContext, frame *analysiscontext.LegacyFrame, tf market.Timeframe) []instance {
+// asked here (a structure is a fact). higher are this strategy's own zones on the frames above this one (a zone inside one scores the higher-timeframe
+// points); the second result is every zone this frame holds, for the frame below.
+func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, execBars []market.Candle, higher []band) ([]instance, []band) {
 	bars := frame.Bars
 	if len(bars) < 10 {
-		return nil
+		return nil, nil
 	}
 	atr := medianATR(frame.ATR)
 	zones := s.detectZones(bars, frame.ATR)
 	markTouches(zones, bars)
-	inputs := s.inputsFor(frame, higherFrames(ctx, tf))
+	inputs := s.inputsFor(frame, tf, execBars, higher)
+	held := make([]band, 0, len(zones))
 	for k := range zones {
-		zones[k].Score = scoreZone(zones[k], inputs)
+		zones[k].Score, zones[k].Premium = scoreZone(zones[k], inputs)
+		held = append(held, band{Low: zones[k].Low, High: zones[k].High})
 	}
 	sort.SliceStable(zones, func(i, j int) bool {
 		a, b := zones[i], zones[j]
@@ -308,6 +314,7 @@ func (s *Strategy) structureInstances(ctx *analysiscontext.MarketContext, frame 
 		in := instance{
 			Low: z.Low, High: z.High, Touches: z.Touches, Mitigated: z.Mitigated, Score: z.Score, Timeframe: tf, Frame: frame,
 			FrameOrigin: z.Origin, FrameConfirmed: maxInt(z.Origin, z.BreakIndex), LegStart: z.LegStart,
+			Premium: z.Premium, PDPosition: inputs.pd.position(z.Low),
 		}
 		if low, high, clipped := clipEntry(z.Low, z.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = z.Low, z.High, true
@@ -321,7 +328,7 @@ func (s *Strategy) structureInstances(ctx *analysiscontext.MarketContext, frame 
 		}
 		out = append(out, in)
 	}
-	return out
+	return out, held
 }
 
 // bind maps a structure frame's zones onto the execution frame by TIME: the origin to the first execution bar opening at or after the structure bar that holds

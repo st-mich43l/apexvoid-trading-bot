@@ -6,7 +6,6 @@ package strategyutil
 
 import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
@@ -15,19 +14,6 @@ import (
 type LiquidityGrab struct {
 	Pool  liquidity.Pool
 	Grade string
-}
-
-// dealingRange is the premium/discount read the frozen detector contract gates
-// on: the detector-contract frame's range when the engine computed one,
-// otherwise the canonical dealing range.
-func dealingRange(tf *analysiscontext.TimeframeContext) *fib.DealingRange {
-	if tf == nil {
-		return nil
-	}
-	if tf.Legacy != nil {
-		return tf.Legacy.Range
-	}
-	return tf.Fib.Range
 }
 
 // regimeOf is the regime the frozen detector contract gates on.
@@ -41,26 +27,6 @@ func regimeOf(tf *analysiscontext.TimeframeContext) regime.State {
 // InChop reports the frozen detector contract's chop state for the timeframe.
 func InChop(tf *analysiscontext.TimeframeContext) bool {
 	return tf != nil && regimeOf(tf).Kind == "chop"
-}
-
-func PremiumDiscountAllows(tf *analysiscontext.TimeframeContext, direction market.Direction, strict bool) bool {
-	dealing := dealingRange(tf)
-	if dealing == nil {
-		return true
-	}
-	if dealing.Zone == "eq" {
-		return false
-	}
-	if direction == market.Buy {
-		if strict {
-			return dealing.Zone == "discount"
-		}
-		return dealing.Zone != "premium"
-	}
-	if strict {
-		return dealing.Zone == "premium"
-	}
-	return dealing.Zone != "discount"
 }
 
 func StructuralDirection(ctx *analysiscontext.MarketContext) market.Direction {

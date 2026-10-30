@@ -1,5 +1,6 @@
-// Package demand is the demand zone strategy (BUY only). It owns its whole mechanism: what a demand zone is and when it is dead (structure.go), how a reaction off it is
-// confirmed (confirm.go), whether the entry is valid and the qualification (decision.go), and the candidate it publishes (candidate.go). It reads the
+// Package demand is the demand zone strategy (BUY only). It owns its whole mechanism: what a demand zone is and when it is dead (structure.go), how a reaction
+// off it is confirmed (confirm.go), whether the entry is valid and the qualification (decision.go), the room in front of it (geometry.go) and the candidate it
+// publishes (candidate.go). It reads the
 // market only through the closed bars and facts of the frames in the context.
 package demand
 
@@ -8,6 +9,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -17,7 +19,7 @@ import (
 )
 
 const ID strategy.StrategyID = "demand"
-const Version = "v6"
+const Version = "v7"
 
 const (
 	structureVersion = "v2"
@@ -31,6 +33,9 @@ type Strategy struct {
 	strategyutil.RefusalCounter
 	cfg         Config
 	fingerprint string
+
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
 }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
@@ -48,34 +53,74 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 
 func (s *Strategy) ID() strategy.StrategyID { return ID }
 
+// RequiredTimeframes is M5 alone: the registry evaluates a strategy when one of its required frames closes, and a decision is made on a closed M5 bar. The
+// structure frames are read from the context when they exist.
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
-// Evaluate returns the confirmed reaction off the best zone of the execution frame and, separately, off the best zone of the configured higher frames:
-// a higher-frame decision never competes with the execution frame's.
+// Evaluate returns the confirmed reaction off the best zone of the structure frames (M15 and H1 by default). M5 confirms and executes; it never defines a
+// zone.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
 	base, ok := newView(ctx, &s.cfg)
 	if !ok {
 		return nil
 	}
-	exec := s.frameInstances(ctx, base.frame, market.M5, true)
-	var higher []instance
-	for _, tf := range s.cfg.HigherTimeframes {
+	refusals := map[strategy.Refusal]int64{}
+	defer s.addRefusals(refusals)
+	var instances []instance
+	var higher []band // this strategy's own zones on the frames processed so far (the longer periods first)
+	for _, tf := range s.frameOrder() {
 		frameContext := ctx.Timeframes[tf]
 		if frameContext == nil || frameContext.Legacy == nil {
 			continue
 		}
-		higher = append(higher, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, s.frameInstances(ctx, frameContext.Legacy, tf, false))...)
+		found, held := s.structureInstances(frameContext.Legacy, tf, base.frame.Bars, higher)
+		higher = append(higher, held...)
+		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found, s.cfg.BindWithinExecutionWindow)...)
 	}
-	var out []opportunity.Candidate
-	for _, d := range []*decision{s.best(base, exec), s.best(base, higher)} {
-		// The best decision of the bar competes across both sides; this strategy publishes it only when it is a BUY.
-		if d == nil || d.direction != market.Buy {
-			continue
-		}
-		if candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d); ok {
-			out = append(out, candidate)
-		}
+	d := s.best(base, instances, func(in instance, reason string) {
+		refusals[strategy.Refusal{Reason: reason, Timeframe: in.Timeframe}]++
+	})
+	if d == nil {
+		return nil
 	}
+	candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d)
+	if !ok {
+		return nil
+	}
+	return []opportunity.Candidate{candidate}
+}
+
+// frameOrder is the structure frames, the longest period first: a zone is scored against this strategy's zones on the frames above it.
+func (s *Strategy) frameOrder() []market.Timeframe {
+	order := append([]market.Timeframe(nil), s.cfg.StructureTimeframes...)
+	sort.SliceStable(order, func(i, j int) bool {
+		a, _ := order[i].Minutes()
+		b, _ := order[j].Minutes()
+		return a > b
+	})
+	return order
+}
+
+func (s *Strategy) addRefusals(found map[strategy.Refusal]int64) {
+	if len(found) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	for k, n := range found {
+		s.refusals[k] += n
+	}
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
 	return out
 }
 

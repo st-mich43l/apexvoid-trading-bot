@@ -17,8 +17,8 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | Strategy | Version | Structure | Thesis | Proof | Spec |
 |---|---|---|---|---|---|
 | `key_level` | v6 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | `test/keylevelparity` golden | [key_level](key_level.md), [sweep first](keylevel-sweep-first.md) |
-| `supply` | v8 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | `test/supplyv7` | [supply](supply.md) |
-| `demand` | v6 | M5, M15, H1 | confirmed bounce from a demand zone; same touch cap | `test/techniqueparity` golden | [demand](demand.md) |
+| `supply` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | `test/supplyv7` | [supply](supply.md) |
+| `demand` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed bounce from a demand zone with room above; same touch cap; owns its zone score and dealing range | `test/demandv7` | [demand](demand.md), [premium/discount](premium-discount.md) |
 | `order_block` | v8 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at the last opposite candle before a displacement that broke structure, with room to the next opposing structure; dead once a close of its own frame goes through its far edge ([order-block-definition](order-block-definition.md)) | `test/obv7` | [order_block](order_block.md) |
 | `fvg` | v8 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at a real fair value gap, with room and no leg-extreme entry | `test/fvgv7` | [fvg](fvg.md) |
 | `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | contract tests, `test/ifvgreplay` | [ifvg](ifvg.md) |
@@ -43,7 +43,7 @@ with no claim of better outcomes.
 ## The shared confirmation spine
 
 Every zone, level and line strategy except CRT, iFVG, Break & Retest, Impulse
-Pullback, **fvg**, **order_block** and **supply** (v7: each owns its structure, confirmation, room and candidate;
+Pullback, **fvg**, **order_block**, **supply** and **demand** (each owns its structure, confirmation, room and candidate;
 `test/architecture/strategy_ownership_test.go` keeps it off the spine) confirms through
 the same code in `internal/strategyutil`:
 

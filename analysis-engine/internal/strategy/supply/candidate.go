@@ -17,6 +17,8 @@ const (
 	confirmedEvidence = "m5_supply_zone_rejection_confirmed"
 	invalidationLabel = "supply_zone_invalidated"
 	// reactionExtremeEvidence marks a stop that the reaction's own traded extreme set (it lay beyond the whole zone).
+	// premiumEvidence marks a zone that earned the premium points of its zone score.
+	premiumEvidence         = "m5_supply_zone_premium"
 	reactionExtremeEvidence = "invalidation_beyond_reaction_extreme"
 )
 
@@ -55,6 +57,9 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	}
 	if d.anchored {
 		evidence = append(evidence, reactionExtremeEvidence)
+	}
+	if d.inst.Premium {
+		evidence = append(evidence, premiumEvidence)
 	}
 	if d.budgetCode != "" {
 		evidence = append(evidence, d.budgetCode)
@@ -140,5 +145,6 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
 	m.Measure("room_r", d.room.RoomR)
+	m.Measure("pd_position", d.inst.PDPosition)
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }
