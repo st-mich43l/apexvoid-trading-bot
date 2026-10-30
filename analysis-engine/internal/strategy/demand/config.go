@@ -17,8 +17,10 @@ type Config struct {
 	MinimumTargetDistanceATR float64
 	ExpiryHours              float64
 	PipSize                  float64
-	EntryMaxWidthPrice       float64
-	MaximumEntryATR          float64
+	// RoundStep is the instrument's round-number spacing (instrument scale, injected): a round number inside a zone is evidence.
+	RoundStep          float64
+	EntryMaxWidthPrice float64
+	MaximumEntryATR    float64
 	// Qualification.
 	ConfluenceFloor          int
 	Confluence               confluence.Config
@@ -36,7 +38,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	var c Config
 	floats := map[string]*float64{
 		"invalidation_buffer_atr": &c.InvalidationBufferATR, "minimum_target_distance_atr": &c.MinimumTargetDistanceATR, "expiry_hours": &c.ExpiryHours,
-		"pip_size": &c.PipSize, "fvg_entry_max_width_price": &c.EntryMaxWidthPrice, "maximum_entry_atr": &c.MaximumEntryATR,
+		"pip_size": &c.PipSize, "round_step": &c.RoundStep, "fvg_entry_max_width_price": &c.EntryMaxWidthPrice, "maximum_entry_atr": &c.MaximumEntryATR,
 		"confluence_star_three_ratio": &c.Confluence.StarThreeRatio, "confluence_star_two_ratio": &c.Confluence.StarTwoRatio,
 		"confluence_zone_quality_weight": &c.Confluence.ZoneQualityWeight, "confluence_mad_score_weight": &c.Confluence.MADScoreWeight,
 		"fibonacci_confluence_weight": &c.Confluence.FibonacciWeight, "fibonacci_epsilon_atr": &c.FibonacciEpsilonATR,
@@ -81,8 +83,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
 	case c.ExpiryHours <= 0:
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
-	case c.PipSize <= 0 || c.MaximumEntryATR <= 0 || c.EntryMaxWidthPrice < 0:
-		return Config{}, fmt.Errorf("pip_size and maximum_entry_atr must be > 0 and fvg_entry_max_width_price >= 0")
+	case c.PipSize <= 0 || c.RoundStep <= 0 || c.MaximumEntryATR <= 0 || c.EntryMaxWidthPrice < 0:
+		return Config{}, fmt.Errorf("pip_size, round_step and maximum_entry_atr must be > 0 and fvg_entry_max_width_price >= 0")
 	case c.ConfluenceFloor < 1 || c.ReactionLookbackBars < 1 || c.EngulfingMinimumRangeATR < 0 || c.FibonacciEpsilonATR < 0:
 		return Config{}, fmt.Errorf("invalid qualification parameters")
 	}

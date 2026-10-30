@@ -43,6 +43,8 @@ type Config struct {
 	Confluence          confluence.Config
 	ExpiryHours         float64
 	PipSize             float64
+	// RoundStep is the instrument's round-number spacing (instrument scale, injected): a round number inside a zone is evidence.
+	RoundStep float64
 
 	// BindWithinExecutionWindow drops a structure whose origin precedes the M5 execution window, as the frozen analysis did. Optional, false in production;
 	// only the frozen-Python parity replays set it (engine.WithFrozenWindows).
@@ -59,7 +61,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		"maximum_zone_atr": &c.MaximumZoneATR, "entry_max_width_price": &c.EntryMaxWidthPrice, "maximum_entry_atr": &c.MaximumEntryATR,
 		"engulfing_minimum_range_atr": &c.EngulfingMinimumRangeATR, "invalidation_buffer_atr": &c.InvalidationBufferATR,
 		"minimum_target_r": &c.MinimumTargetR, "fallback_target_r": &c.FallbackTargetR,
-		"expiry_hours": &c.ExpiryHours, "pip_size": &c.PipSize, "fibonacci_epsilon_atr": &c.FibonacciEpsilonATR,
+		"expiry_hours": &c.ExpiryHours, "pip_size": &c.PipSize, "round_step": &c.RoundStep, "fibonacci_epsilon_atr": &c.FibonacciEpsilonATR,
 		"confluence_star_three_ratio": &c.Confluence.StarThreeRatio, "confluence_star_two_ratio": &c.Confluence.StarTwoRatio,
 		"confluence_zone_quality_weight": &c.Confluence.ZoneQualityWeight, "confluence_mad_score_weight": &c.Confluence.MADScoreWeight,
 		"fibonacci_confluence_weight": &c.Confluence.FibonacciWeight,
@@ -103,8 +105,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("structure_timeframes must name at least one timeframe above M5")
 	case c.DisplacementATRMult <= 0 || c.MomentumBodyFraction < 0 || c.MomentumBodyFraction > 1 || c.MaximumZoneTouches < 0:
 		return Config{}, fmt.Errorf("invalid zone definition parameters")
-	case c.MaximumZoneATR <= 0 || c.EntryMaxWidthPrice <= 0 || c.MaximumEntryATR <= 0 || c.PipSize <= 0:
-		return Config{}, fmt.Errorf("maximum_zone_atr, entry_max_width_price, maximum_entry_atr and pip_size must be > 0")
+	case c.MaximumZoneATR <= 0 || c.EntryMaxWidthPrice <= 0 || c.MaximumEntryATR <= 0 || c.PipSize <= 0 || c.RoundStep <= 0:
+		return Config{}, fmt.Errorf("maximum_zone_atr, entry_max_width_price, maximum_entry_atr, pip_size and round_step must be > 0")
 	case c.ReactionLookbackBars < 1 || c.EngulfingMinimumRangeATR < 0:
 		return Config{}, fmt.Errorf("invalid confirmation parameters")
 	case c.InvalidationBufferATR <= 0 || c.MinimumTargetR <= 0 || c.FallbackTargetR < c.MinimumTargetR || c.ObstaclePivotBars < 1:

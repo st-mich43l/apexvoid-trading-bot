@@ -48,7 +48,6 @@ type zone struct {
 	Touches    int
 	Mitigated  bool
 	Score      float64
-	rank       int
 }
 
 // instance is a zone that passed the lifecycle tests: its entry band (clipped to the proximal slice when wide), the whole zone, and where it lives.
@@ -201,41 +200,6 @@ func markTouches(zones []zone, bars []market.Candle) {
 	}
 }
 
-// attachScores reads each zone's score (the frame's multi-factor zone score: key levels, liquidity, higher-timeframe overlap, sessions) from the frame's
-// scored zones, a fact of the frame the strategy does not recompute, and orders the zones the way the frame orders its zones.
-func attachScores(zones []zone, frame *analysiscontext.LegacyFrame) {
-	type key struct {
-		origin    int
-		low, high float64
-	}
-	type scored struct {
-		score float64
-		rank  int
-	}
-	found := map[key][]scored{}
-	for rank, z := range frame.TechniqueZones {
-		if z.Side != "supply" {
-			continue
-		}
-		for _, source := range z.Sources {
-			if source == "supply_demand" {
-				k := key{z.OriginIndex, z.Bottom, z.Top}
-				found[k] = append(found[k], scored{z.Score, rank})
-				break
-			}
-		}
-	}
-	for k := range zones {
-		id := key{zones[k].Origin, zones[k].Low, zones[k].High}
-		zones[k].rank = math.MaxInt32
-		if list := found[id]; len(list) > 0 {
-			zones[k].Score, zones[k].rank = list[0].score, list[0].rank
-			found[id] = list[1:]
-		}
-	}
-	sort.SliceStable(zones, func(i, j int) bool { return zones[i].rank < zones[j].rank })
-}
-
 func epsilon(pip, atr float64) float64 { return math.Max(pip, epsilonATRFraction*math.Max(0, atr)) }
 
 // medianATR is the median of a frame's ATR series (NaN skipped), 1 when there is none.
@@ -313,7 +277,7 @@ func clipEntry(low, high, maxWidth float64) (float64, float64, bool) {
 
 // structureInstances are the supply zones of one structure frame that are still zones: not spent, not invalidated, a real width. Where price is now is not
 // asked here (a structure is a fact).
-func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe) []instance {
+func (s *Strategy) structureInstances(ctx *analysiscontext.MarketContext, frame *analysiscontext.LegacyFrame, tf market.Timeframe) []instance {
 	bars := frame.Bars
 	if len(bars) < 10 {
 		return nil
@@ -321,7 +285,20 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	atr := medianATR(frame.ATR)
 	zones := s.detectZones(bars, frame.ATR)
 	markTouches(zones, bars)
-	attachScores(zones, frame)
+	inputs := s.inputsFor(frame, higherFrames(ctx, tf))
+	for k := range zones {
+		zones[k].Score = scoreZone(zones[k], inputs)
+	}
+	sort.SliceStable(zones, func(i, j int) bool {
+		a, b := zones[i], zones[j]
+		if a.Score != b.Score {
+			return a.Score > b.Score
+		}
+		if a.Touches != b.Touches {
+			return a.Touches < b.Touches
+		}
+		return a.Low < b.Low
+	})
 	pip := s.cfg.PipSize
 	var out []instance
 	for _, z := range zones {
