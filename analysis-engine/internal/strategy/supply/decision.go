@@ -23,7 +23,6 @@ type view struct {
 	frame *analysiscontext.LegacyFrame
 	read  analysiscontext.LegacyRead
 	cfg   *Config
-	dir   market.Direction
 	price float64 // the latest closed bar's close
 	atr   float64 // the execution frame's detector ATR
 }
@@ -44,112 +43,69 @@ func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
 	return &view{frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr}, true
 }
 
-func (v *view) withDirection(direction market.Direction) *view {
-	copy := *v
-	copy.dir = direction
-	return &copy
-}
+func (v *view) htfAligned() bool { return v.read.AlignedWithHTF(market.Sell) }
 
-func (v *view) htfAligned() bool { return v.read.AlignedWithHTF(v.dir) }
-
-// entryValid: price is at the band or within maximum_entry_atr of its proximal edge, and not through it.
+// entryValid: price is at the band or within maximum_entry_atr of its proximal (lower) edge, and not above it.
 func (v *view) entryValid(z zoneBand) bool {
-	maxDistance := math.Max(0, v.atr) * math.Max(0, v.cfg.MaximumEntryATR)
-	distance := 0.0
-	if v.dir == market.Sell {
-		if v.price > z.High()+tolerance {
-			return false
-		}
-		if !(z.Low() <= v.price && v.price <= z.High()) {
-			distance = z.Low() - v.price
-		}
-	} else {
-		if v.price < z.Low()-tolerance {
-			return false
-		}
-		if !(z.Low() <= v.price && v.price <= z.High()) {
-			distance = v.price - z.High()
-		}
+	if v.price > z.High()+tolerance {
+		return false
 	}
-	return distance <= maxDistance+tolerance
+	distance := 0.0
+	if !(z.Low() <= v.price && v.price <= z.High()) {
+		distance = z.Low() - v.price
+	}
+	return distance <= math.Max(0, v.atr)*math.Max(0, v.cfg.MaximumEntryATR)+tolerance
 }
 
-func (v *view) levelValid(level float64) bool {
-	if v.dir == market.Buy {
-		return level <= v.price+tolerance
-	}
-	return level >= v.price-tolerance
-}
+func (v *view) levelValid(level float64) bool { return level >= v.price-tolerance }
 
 func (v *view) zoneDistance(z zoneBand) float64 {
 	if z.Low() <= v.price && v.price <= z.High() {
 		return 0
 	}
-	if v.dir == market.Buy {
-		return math.Abs(v.price - z.High())
-	}
 	return math.Abs(z.Low() - v.price)
 }
 
-// zoneKey is the band's reference level: the proximal edge once price is past it, the far one otherwise.
+// zoneKey is the band's reference level: the proximal edge once price is below it, the far one otherwise.
 func (v *view) zoneKey(z zoneBand) float64 {
-	if v.dir == market.Buy {
-		if z.High() <= v.price+tolerance {
-			return z.High()
-		}
-		return z.Low()
-	}
 	if z.Low() >= v.price-tolerance {
 		return z.Low()
 	}
 	return z.High()
 }
 
-func (v *view) grabKinds() (direction, side string) {
-	if v.dir == market.Buy {
-		return "bull", "sell"
-	}
-	return "bear", "buy"
-}
-
-// zoneGrab is the latest same-direction liquidity grab whose pool points into the band.
+// zoneGrab is the latest bearish liquidity grab whose buy-side pool lies in or just above the band.
 func (v *view) zoneGrab(z zoneBand) *techniquezone.Grab {
-	wantDirection, wantSide := v.grabKinds()
 	for i := len(v.frame.Grabs) - 1; i >= 0; i-- {
 		grab := v.frame.Grabs[i]
-		if grab.Direction != wantDirection || grab.Pool.Side != wantSide {
+		if grab.Direction != "bear" || grab.Pool.Side != "buy" {
 			continue
 		}
 		width := math.Max(z.High()-z.Low(), 0)
 		tol := math.Max(grab.Pool.Band, math.Max(width, v.cfg.PipSize))
-		if z.Side == "demand" && grab.Pool.Side == "sell" && z.Low()-tol <= grab.Pool.Level && grab.Pool.Level <= z.High() ||
-			z.Side == "supply" && grab.Pool.Side == "buy" && z.Low() <= grab.Pool.Level && grab.Pool.Level <= z.High()+tol {
+		if z.Low() <= grab.Pool.Level && grab.Pool.Level <= z.High()+tol {
 			return &grab
 		}
 	}
 	return nil
 }
 
-// recentCHoCH: a change of character in the trade direction within the last lookback bars.
+// recentCHoCH: a downward change of character within the last lookback bars.
 func (v *view) recentCHoCH(lookback int) bool {
 	earliest := maxInt(0, len(v.frame.Bars)-maxInt(1, lookback)-1)
-	wanted := "down"
-	if v.dir == market.Buy {
-		wanted = "up"
-	}
 	for _, brk := range v.frame.Breaks {
-		if brk.Kind == "CHoCH" && brk.Direction == wanted && brk.Index >= earliest {
+		if brk.Kind == "CHoCH" && brk.Direction == "down" && brk.Index >= earliest {
 			return true
 		}
 	}
 	return false
 }
 
-// reactionFrom looks for a confirmed reaction off the band on the execution bars; no bar before minIndex (the first bar that can touch the gap) counts.
+// reactionFrom looks for a confirmed reaction off the band on the execution bars; no bar before minIndex (the first bar that can touch the zone) counts.
 func (v *view) reactionFrom(low, high float64, grab *techniquezone.Grab, minIndex int) *confirmation {
 	lookback := maxInt(1, v.cfg.ReactionLookbackBars)
 	params := confirmParams{
-		MinIndex: minIndex, Direction: string(v.dir), Low: low, High: high, TouchLookback: lookback, ConfirmLookback: lookback,
+		MinIndex: minIndex, Direction: string(market.Sell), Low: low, High: high, TouchLookback: lookback, ConfirmLookback: lookback,
 		HasCHoCH: v.recentCHoCH(lookback), ATR: v.atr, EngulfingMinimumRangeATR: v.cfg.EngulfingMinimumRangeATR,
 	}
 	if grab != nil {
@@ -217,29 +173,22 @@ func (r *result) confluenceContext() *opportunity.ConfluenceContext {
 	}
 }
 
-// decision is one zone's confirmed reaction on the bar.
+// decision is one zone's confirmed reaction on the bar, with the geometry it was judged on.
 type decision struct {
-	inst      instance
-	direction market.Direction
-	v         *view
-	conf      *confirmation
-	res       *result
-	id        string
-}
-
-func directionOf(in instance) market.Direction {
-	if in.Side == "buy" {
-		return market.Buy
-	}
-	return market.Sell
+	inst         instance
+	v            *view
+	conf         *confirmation
+	res          *result
+	id           string
+	reference    float64 // the proximal edge of the entry band
+	invalidation float64
+	anchored     bool   // the reaction's own extreme set the stop
+	budgetCode   string // stop-budget evidence ("" without a budget)
+	room         roomResult
 }
 
 func (in instance) band() zoneBand {
-	side := "supply"
-	if in.Side == "buy" {
-		side = "demand"
-	}
-	return zoneBand{Bottom: in.Low, Top: in.High, Side: side, Score: in.Score, Touches: in.Touches}
+	return zoneBand{Bottom: in.Low, Top: in.High, Side: "supply", Score: in.Score, Touches: in.Touches}
 }
 
 // factorsFor are the confluence factors the confirmation actually showed.
@@ -256,16 +205,16 @@ func (v *view) factorsFor(z zoneBand, kind string) confluence.Factors {
 	return factors
 }
 
-// publish decides one zone: entry validity, the reaction after the zone formed, the qualification.
-func (s *Strategy) publish(base *view, in instance) *decision {
+// publish decides one zone: entry validity, the reaction after the zone formed, the qualification, the stop and the stop budget, then room. refuse is
+// told why a zone that was in play did not publish.
+func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) *decision {
 	if in.Mitigated && in.Touches > retestMaxTouches {
 		return nil
 	}
 	if s.cfg.MaximumZoneTouches > 0 && in.Touches > s.cfg.MaximumZoneTouches {
 		return nil // a zone touched this often is spent
 	}
-	direction := directionOf(in)
-	v := base.withDirection(direction)
+	v := base
 	z := in.band()
 	structLow, structHigh := in.structural()
 	if !v.entryValid(z) {
@@ -279,10 +228,25 @@ func (s *Strategy) publish(base *view, in instance) *decision {
 	if res == nil {
 		return nil
 	}
-	return &decision{inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in)}
+	reference := res.zone.Low()
+	buffer := s.cfg.InvalidationBufferATR * v.atr
+	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, conf, res.structuralHigh, buffer)
+	budgetCode, ok := s.cfg.StopBudget.Apply(reference, invalidation)
+	if !ok {
+		return nil
+	}
+	room := v.room(in, reference, math.Abs(reference-invalidation))
+	if room.Refused {
+		refuse(refusedNoTargetRoom)
+		return nil
+	}
+	return &decision{
+		inst: in, v: v, conf: conf, res: res, id: v.instanceID(in),
+		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
+	}
 }
 
-// instanceID is the structure's stable identity: technique, side, the open time of the zone's base candle on the execution frame, and the
+// instanceID is the structure's stable identity: technique, side (always sell), the open time of the supply zone's own candle on the execution frame, and the
 // higher timeframe when the zone lives there.
 func (v *view) instanceID(in instance) string {
 	origin := int64(0)
@@ -290,17 +254,17 @@ func (v *view) instanceID(in instance) string {
 		origin = v.frame.Bars[in.OriginIndex].Time
 	}
 	if in.Timeframe != "" {
-		return fmt.Sprintf("technique:supply_demand:%s:%d@%s", in.Side, origin, in.Timeframe)
+		return fmt.Sprintf("technique:supply_demand:sell:%d@%s", origin, in.Timeframe)
 	}
-	return fmt.Sprintf("technique:supply_demand:%s:%d", in.Side, origin)
+	return fmt.Sprintf("technique:supply_demand:sell:%d", origin)
 }
 
 // best is the single best confirmed reaction among instances: highest stars, nearest entry on a tie.
-func (s *Strategy) best(base *view, instances []instance) *decision {
+func (s *Strategy) best(base *view, instances []instance, refuse func(in instance, reason string)) *decision {
 	var best *decision
 	bestDistance := math.Inf(1)
 	for _, in := range instances {
-		d := s.publish(base, in)
+		d := s.publish(base, in, func(reason string) { refuse(in, reason) })
 		if d == nil {
 			continue
 		}
