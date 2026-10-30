@@ -35,7 +35,7 @@ func TestTheProductionBlocksOf29OctAreTradedByV5AndTheLosersNotByV7(t *testing.T
 		}
 		p := newPair(t, doc, capture.Symbol)
 		v5 := newV5(t, doc, capture.Symbol)
-		_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{OnEvaluation: func(e engine.Evaluation) {
+		_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{FrozenWindows: true, OnEvaluation: func(e engine.Evaluation) {
 			if e.Timeframe != market.M5 || e.Context == nil {
 				return
 			}

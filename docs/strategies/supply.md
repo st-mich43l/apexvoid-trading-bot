@@ -1,6 +1,8 @@
-# Supply (supply v7)
+# Supply (supply v8)
 
-`supply`, `v7`. Implemented in `analysis-engine/internal/strategy/supply`, self-contained and SELL only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `demand`; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.supply`.
+`supply`, `v8`. Implemented in `analysis-engine/internal/strategy/supply`, self-contained and SELL only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `demand`; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.supply`.
+
+**v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
 
 ## Thesis
 
@@ -58,6 +60,7 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 
 - v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
 - v7: the package owns its mechanism; M15/H1 structure only; room refusal; no competition with demand.
+- v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
 
 ## Release
 

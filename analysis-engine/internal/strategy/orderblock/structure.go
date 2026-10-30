@@ -64,7 +64,7 @@ type instance struct {
 	StructuralLow  float64
 	StructuralHigh float64
 	EntryClipped   bool
-	OriginIndex    int // the block's own candle on the execution frame, once bound
+	OriginIndex    int // the block's own candle on the execution frame once bound, -1 when it precedes the execution window
 	OriginTime     int64
 	TouchableFrom  int
 	Touches        int
@@ -439,7 +439,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 // bind maps a structure frame's blocks onto the execution frame by TIME: the origin to the first execution bar opening at or after the structure bar that
 // holds the block's own candle, and the first bar that may touch it to the first execution bar opening at or after the close of the structure bar that
 // confirmed it (the later of the block's candle and its structure break). A block older than the execution window cannot be anchored there and is dropped.
-func bind(tf market.Timeframe, structureBars, execBars []market.Candle, blocks []instance) []instance {
+func bind(tf market.Timeframe, structureBars, execBars []market.Candle, blocks []instance, bounded bool) []instance {
 	if len(execBars) == 0 {
 		return nil
 	}
@@ -451,8 +451,14 @@ func bind(tf market.Timeframe, structureBars, execBars []market.Candle, blocks [
 		}
 		originTime := structureBars[in.FrameOrigin].Time
 		index := sort.Search(len(execBars), func(i int) bool { return execBars[i].Time >= originTime })
-		if index >= len(execBars) || execBars[0].Time > originTime {
+		if index >= len(execBars) {
 			continue
+		}
+		if execBars[0].Time > originTime { // the origin precedes the execution window: its own frame still holds it, so it stays (OriginIndex -1)
+			if bounded {
+				continue // the frozen analysis dropped it (engine.WithFrozenWindows)
+			}
+			index = -1
 		}
 		touchable := 0
 		if in.FrameConfirmed >= 0 && in.FrameConfirmed < len(structureBars) && known {

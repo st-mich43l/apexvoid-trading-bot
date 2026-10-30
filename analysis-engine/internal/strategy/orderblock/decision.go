@@ -309,10 +309,7 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 // instanceID is the structure's stable identity: technique, side, the open time of the order block's own candle on the execution frame, and the
 // higher timeframe when the block lives there.
 func (v *view) instanceID(in instance) string {
-	origin := int64(0)
-	if in.OriginIndex >= 0 && in.OriginIndex < len(v.frame.Bars) {
-		origin = v.frame.Bars[in.OriginIndex].Time
-	}
+	origin := in.OriginTime // the structure bar's own time, never an index: identity must not change when the origin leaves the M5 window
 	if in.Timeframe != "" {
 		return fmt.Sprintf("technique:order_block:%s:%d@%s", in.Side, origin, in.Timeframe)
 	}

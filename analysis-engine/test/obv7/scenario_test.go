@@ -169,7 +169,7 @@ func TestDetectsTheBlockAndPublishesTheConfirmedReaction(t *testing.T) {
 	if target.Label != "nearest_opposing_structure" || math.Abs(float64(target.Price)-px(210.78)) > 1e-9 {
 		t.Errorf("target %v %q, want the 210.78 impulse extreme", target.Price, target.Label)
 	}
-	if c.StrategyVersion != "v7" || c.StructuralID != "technique:order_block:buy:"+itoa(startTime+60*m5Seconds)+"@M15" {
+	if c.StrategyVersion != "v8" || c.StructuralID != "technique:order_block:buy:"+itoa(startTime+60*m5Seconds)+"@M15" {
 		t.Errorf("version %q id %q", c.StrategyVersion, c.StructuralID)
 	}
 }
@@ -314,5 +314,41 @@ func TestTheStopBudgetRefusesAnOverCapStopAndFlagsAnUnderFloorOne(t *testing.T) 
 	}
 	if n := capped.TakeStopBudgetRefusals(); n == 0 {
 		t.Error("the refusal must be counted")
+	}
+}
+
+// The M5 window holds 150 bars (12.5 hours); the M15 frame holds block for days. A block whose origin has left the M5 window must stay tradable for as long
+// as its own frame holds it, with the identity and the geometry it had inside the window.
+func contextFrom(path []tick, last, from int, htf string) *analysiscontext.MarketContext {
+	ctx := contextAt(path, last, htf)
+	m5 := ctx.Timeframes[market.M5].Legacy
+	ctx.Timeframes[market.M5].Legacy = frame(m5.Bars[from:], m5ATR, nil)
+	return ctx
+}
+
+func TestABlockOlderThanTheM5WindowStaysTradableWithTheSameIdentity(t *testing.T) {
+	s := newStrategy(t, map[string]any{"confluence_floor": 1})
+	whole := s.Evaluate(contextAt(basePath(), decisionBar, "up"))
+	s.TakeRefusals()
+	// the window holds only the last bars (at least 5): the structure's origin, and the start of the leg, are before the first M5 bar
+	windowed := s.Evaluate(contextFrom(basePath(), decisionBar, 67, "up"))
+	s.TakeRefusals()
+	if len(whole) != 1 || len(windowed) != 1 {
+		t.Fatalf("published %d inside the window, %d with the origin before it", len(whole), len(windowed))
+	}
+	a, b := whole[0], windowed[0]
+	if a.ID != b.ID || a.StructuralID != b.StructuralID || a.Entry != b.Entry || a.Invalidation != b.Invalidation || a.Targets[0] != b.Targets[0] || *a.Reaction != *b.Reaction {
+		t.Fatalf("a zone leaving the M5 window changed the decision:\n inside: %+v\n outside: %+v", a, b)
+	}
+	if a.Structure.FormedAt != b.Structure.FormedAt || a.Structure.FormedAt == 0 {
+		t.Errorf("formed at %d vs %d", a.Structure.FormedAt, b.Structure.FormedAt)
+	}
+	// the frozen analysis dropped it; the switch reproduces that
+	bounded := newStrategy(t, map[string]any{"confluence_floor": 1, "bind_within_execution_window": true})
+	if got := bounded.Evaluate(contextFrom(basePath(), decisionBar, 67, "up")); len(got) != 0 {
+		t.Fatalf("with bind_within_execution_window the origin before the window drops the structure, published %s", describe(got[0]))
+	}
+	if got := bounded.Evaluate(contextAt(basePath(), decisionBar, "up")); len(got) != 1 {
+		t.Fatalf("with bind_within_execution_window a structure inside the window is unchanged, published %d", len(got))
 	}
 }

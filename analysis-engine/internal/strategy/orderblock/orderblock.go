@@ -19,7 +19,7 @@ import (
 )
 
 const ID strategy.StrategyID = "order_block"
-const Version = "v7"
+const Version = "v8"
 
 const (
 	structureVersion = "v2"
@@ -73,7 +73,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			continue
 		}
 		found := s.structureInstances(frameContext.Legacy, tf, func(reason string) { refusals[strategy.Refusal{Reason: reason, Timeframe: tf}]++ })
-		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found)...)
+		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found, s.cfg.BindWithinExecutionWindow)...)
 	}
 	d := s.best(base, instances, func(in instance, reason string) {
 		refusals[strategy.Refusal{Reason: reason, Timeframe: in.Timeframe}]++

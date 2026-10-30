@@ -54,6 +54,10 @@ type Options struct {
 	// WithoutStopBudget replay implies it: the frozen Python publisher had neither the stop budget nor the sweep rule. The measurement test sets it on
 	// its own to see the budgeted engine with and without the rule.
 	WithoutKeyLevelSweep bool
+	// FrozenWindows replays with the candle windows of the frozen Python analysis (engine.WithFrozenWindows): session levels from the detection window and
+	// no structure older than the M5 execution window. Every WithoutStopBudget replay implies it. FrozenSessionWindows and FrozenBinding each switch one
+	// half on, for the measurement of what each does.
+	FrozenWindows, FrozenSessionWindows, FrozenBinding bool
 	// OnWithdrawn receives every live zone opportunity the engine withdrew because its structure was closed through (engine.Settings.OnWithdrawn).
 	OnWithdrawn func(candidate opportunity.Candidate, at int64)
 	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
@@ -87,6 +91,12 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 	}
 	if opts.WithoutStopBudget || opts.WithoutKeyLevelSweep {
 		engine.WithoutKeyLevelSweepRequirement(&settings)
+	}
+	if opts.WithoutStopBudget || opts.FrozenWindows || opts.FrozenSessionWindows {
+		engine.WithFrozenSessionWindows(&settings)
+	}
+	if opts.WithoutStopBudget || opts.FrozenWindows || opts.FrozenBinding {
+		engine.WithFrozenBinding(&settings)
 	}
 	settings.OnEvaluation = opts.OnEvaluation
 	settings.OnWithdrawn = opts.OnWithdrawn

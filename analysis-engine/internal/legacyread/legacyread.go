@@ -60,6 +60,11 @@ type Config struct {
 	SweepBodyFraction          float64
 	SweepReactBars             int
 
+	// FrozenSessionWindows computes the session levels (PDH/PDL, the Asia/London/NY extremes, PWH/PWL) from the detection window of each frame (150 M5,
+	// 250 M15, 400 H1 bars), as the frozen Python analysis did. A window that starts mid-day makes yesterday's PDH/PDL a fragment of yesterday; the live
+	// engine leaves this false and reads the frame's whole in-memory history. Only the frozen-Python parity replays set it (engine.WithFrozenWindows).
+	FrozenSessionWindows bool
+
 	// Instrument scale, applied per instrument.
 	PipSize   float64
 	RoundStep float64
@@ -133,7 +138,7 @@ func Stage(candles []market.Candle, tf market.Timeframe, weekly []session.Level,
 	gaps := techniquezone.FVG(bars)
 	frame.Pools = techniquezone.LiquidityPools(swings, bars, cfg.EqualToleranceATR, atr, cfg.MaximumClusterSpanMultiple)
 
-	sessions := session.Update(bars, cfg.Session).Levels
+	sessions := sessionLevels(candles, bars, cfg)
 	for _, level := range sessions {
 		if level.Name == "PWH" || level.Name == "PWL" {
 			continue
@@ -277,17 +282,43 @@ func hasSource(zone techniquezone.Zone, source string) bool {
 	return false
 }
 
+// sessionLevels are the session levels a frame carries: computed from the frame's whole in-memory history (candles), so that yesterday's extremes and the
+// closed Asia/London/NY extremes cover the whole of their windows, or from the detection window (bars) when cfg.FrozenSessionWindows reproduces the frozen
+// analysis. Only finalized levels that were available at the frame's last bar are kept (the levels are causal; this keeps it checkable).
+func sessionLevels(candles, bars []market.Candle, cfg Config) []session.Level {
+	source := candles
+	if cfg.FrozenSessionWindows {
+		source = bars
+	}
+	if len(source) == 0 {
+		return nil
+	}
+	return finalized(session.Update(source, cfg.Session).Levels, source)
+}
+
+// finalized drops any level that was not final or not yet available at the last bar of bars.
+func finalized(levels []session.Level, bars []market.Candle) []session.Level {
+	last := bars[len(bars)-1].Time
+	out := make([]session.Level, 0, len(levels))
+	for _, l := range levels {
+		if l.Final && l.AvailableAt <= last {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 // Weekly returns the prior-week levels of the highest timeframe's window.
 func Weekly(candles []market.Candle, tf market.Timeframe, cfg Config) []session.Level {
 	bars := candles
-	if window := cfg.WindowBars[tf]; window > 0 && len(bars) > window {
+	if window := cfg.WindowBars[tf]; window > 0 && len(bars) > window && cfg.FrozenSessionWindows {
 		bars = bars[len(bars)-window:]
 	}
 	if len(bars) == 0 {
 		return nil
 	}
 	var out []session.Level
-	for _, level := range session.Update(bars, cfg.Session).Levels {
+	for _, level := range finalized(session.Update(bars, cfg.Session).Levels, bars) {
 		if level.Name == "PWH" || level.Name == "PWL" {
 			out = append(out, level)
 		}
