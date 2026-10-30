@@ -49,6 +49,10 @@ type Config struct {
 	ExpiryHours         float64
 	PipSize             float64
 
+	// BindWithinExecutionWindow drops a structure whose origin precedes the M5 execution window, as the frozen analysis did. Optional, false in production;
+	// only the frozen-Python parity replays set it (engine.WithFrozenWindows).
+	BindWithinExecutionWindow bool
+
 	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
 	StopBudget strategyutil.StopBudget
 }
@@ -116,6 +120,11 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("invalid extension parameters")
 	case c.ConfluenceFloor < 1 || c.FibonacciEpsilonATR < 0 || c.ExpiryHours <= 0:
 		return Config{}, fmt.Errorf("invalid qualification parameters")
+	}
+	if raw, present := params["bind_within_execution_window"]; present {
+		if c.BindWithinExecutionWindow, ok = raw.(bool); !ok {
+			return Config{}, fmt.Errorf("parameter %q must be boolean", "bind_within_execution_window")
+		}
 	}
 	if c.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err
