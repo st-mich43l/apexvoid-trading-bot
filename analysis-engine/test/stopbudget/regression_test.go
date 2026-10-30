@@ -29,7 +29,7 @@ var realCases = []realCase{
 	{"key_level", "SELL", 1790847600, 59.2, "structural"}, // 10-01 09:40
 	{"demand", "BUY", 1790840700, 58.5, "structural"},     // 10-01 07:45
 	{"demand", "BUY", 1790841000, 65.2, "structural"},     // 10-01 07:50
-	{"order_block", "BUY", 1790849100, 60.8, "structural"},
+	// order_block is not here: v7 finds blocks on M15 and H1 and this XAU 60.8 pip block was an M5 block (test/obv7).
 	// floor: tighter than 50, execution widens it
 	{"key_level", "BUY", 1791238800, 40.9, "floor"},  // 10-05 22:20
 	{"key_level", "SELL", 1791239400, 40.2, "floor"}, // 10-05 22:30

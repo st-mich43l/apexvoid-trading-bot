@@ -94,7 +94,7 @@ func replayOne(t *testing.T, doc *config.Document, name string, withBudget bool)
 		return nil
 	}
 	var out []record
-	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutKeyLevelSweep: true, WithoutOBDefinition: true, OnEvaluation: func(e engine.Evaluation) {
+	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{WithoutStopBudget: !withBudget, WithoutKeyLevelSweep: true, OnEvaluation: func(e engine.Evaluation) {
 		for _, c := range e.Candidates {
 			strategy := string(c.Strategy)
 			if !legacyFamily[strategy] || c.Reaction == nil {

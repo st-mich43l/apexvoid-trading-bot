@@ -257,7 +257,7 @@ func doReplayCapture(t testing.TB, c Capture, capture *replaycapture.Capture, o 
 	var others []string
 	// The frozen v2 reproduction (models B and C) reads the engine's technique instances, which the order_block v6 definition filters; this certification is about
 	// Confluence Zone v3 and the other strategies as they stood, so the definition is removed (its own effect is measured in test/fvgdefinition).
-	options := replaycapture.Options{WithoutOBDefinition: true}
+	options := replaycapture.Options{}
 	if len(o.overrides) > 0 {
 		options.StrategyParameters = map[string]map[string]any{"confluence_zone": o.overrides}
 	}

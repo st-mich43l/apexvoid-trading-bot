@@ -51,8 +51,6 @@ type SymbolWorker struct {
 	// latest closed bar.
 	legacyFrames map[market.Timeframe]legacyFrameCache
 	legacyWeekly legacyWeeklyCache
-	// fvgRefusals is the ledger of the fair value gaps the confirmed path refused in the evaluation being built (see fvgRefusalLedger).
-	refusals *zoneRefusalLedger
 
 	// techniqueZoneAt/state cache the parity-tested technique population by
 	// its latest primary closed bar. Other timeframe events reuse it.
@@ -201,10 +199,6 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	}
 	for _, refused := range evaluation.UnsweptRefused {
 		w.telemetry.Count(telemetry.CounterStrategyKeyLevelUnsweptRefused, symbolLabel, tfLabel, int64(refused))
-	}
-	// The order blocks the confirmed path refused by the order block definition, by the structure timeframe they were found on and the reason.
-	for refusal, n := range w.refusals.drain() {
-		w.telemetry.CountReason(telemetry.CounterOBDefinitionRefused, symbolLabel, string(refusal.timeframe), refusal.reason, n)
 	}
 	// What a strategy that owns its mechanism refused, by its own reason (fvg v7).
 	for id, taken := range evaluation.Refusals {
@@ -372,7 +366,6 @@ func (w *SymbolWorker) rebuildContext() {
 // source of the prior-week levels) are unchanged; the cheap multi-timeframe
 // zone scoring is recomputed from the staged frames.
 func (w *SymbolWorker) attachLegacyRead() {
-	w.refusals = &zoneRefusalLedger{}
 	if w.legacyFrames == nil {
 		w.legacyFrames = make(map[market.Timeframe]legacyFrameCache)
 	}
@@ -413,12 +406,12 @@ func (w *SymbolWorker) attachLegacyRead() {
 	}
 	frames := legacyread.Complete(staged)
 	if exec := frames[w.settings.PrimaryTimeframe]; exec != nil {
-		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings, w.refusals)
+		exec.Techniques = techniqueInstanceSource(exec, frames[market.H1], w.settings)
 		exec.StructuralInstancesAsOf = structuralInstanceSource(exec, w.settings)
 	}
 	for tf, frame := range frames {
 		if tf != w.settings.PrimaryTimeframe {
-			frame.Techniques = higherTimeframeInstanceSource(frame, tf, w.settings, w.refusals)
+			frame.Techniques = higherTimeframeInstanceSource(frame, tf, w.settings)
 		}
 		w.state.Context.Timeframes[tf].Legacy = frame
 	}
