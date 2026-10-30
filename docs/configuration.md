@@ -98,12 +98,12 @@ timeframe (M5, M15 or H1), not the execution band in `entry`. The root card prin
 a different band). No policy, identity or statistic reads it; an event without it renders as before. See
 [fvg](strategies/fvg.md).
 
-`analysis.strategies.supply`, `demand` and `order_block` carry
+`analysis.strategies.supply` and `demand` carry
 `higher_timeframes: [M15, H1]`: those frames' own zones are also evaluated against the
 M5 closed bars, judged on their own frame's bars and ATR, confirmed and executed on M5
 (see [HTF zone structure](strategies/htf-zone-structure.md)). Removing the key restores
-M5-only evaluation. `fvg` (v7) owns its mechanism and names its frames with `structure_timeframes: [M15, H1]`
-(M5 only confirms and executes); its whole block is documented in [fvg](strategies/fvg.md).
+M5-only evaluation. `fvg` and `order_block` (v7) own their mechanism and name their frames with `structure_timeframes: [M15, H1]`
+(M5 only confirms and executes); their whole blocks are documented in [fvg](strategies/fvg.md) and [order_block](strategies/order_block.md).
 
 ## Sessions
 

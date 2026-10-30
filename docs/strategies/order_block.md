@@ -1,116 +1,66 @@
-# Order Block
+# Order Block (order_block v7)
 
-`order_block` `v6`, package `analysis-engine/internal/strategy/orderblock`.
-Structure on M5, M15 and H1 (`higher_timeframes: [M15, H1]`); confirmation and
-execution on M5. Trades on every instrument.
+`order_block`, `v7`. Implemented in `analysis-engine/internal/strategy/orderblock`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.order_block`.
 
-**Definition (v6, 2026-10-29).** A confirmed block is dead once any close of its own frame after its candle goes beyond its far edge by more than `confirmed_break_buffer_atr` of that frame's ATR (no reclaim forgiveness: a wick that closes back inside is still the sweep), at most `maximum_zone_touches` (2) touches are allowed, and a live opportunity is withdrawn by the first close of its structure's timeframe beyond the structural far edge (`STRUCTURE_CLOSED_THROUGH`). See [order-block-definition](order-block-definition.md).
+## Thesis
 
-## Two populations, one is traded
+The last opposite candle before a displacement that broke structure marks where the move began. When M5 trades back into it, rejects it, and there is room to the next opposing structure, the block is defended. The strategy refuses the other cases and says why: a block a structure-frame close went through, and an entry with no room in front of it.
 
-```mermaid
-flowchart LR
-  subgraph traded [traded: confirmed path]
-    TZ["techniquezone.OrderBlocks<br/>M5 · M15 · H1 frames"] --> CT["strategyutil.ConfirmedTechnique"] --> C1["confirmed candidate<br/>evidence m5_order_block_rejection_confirmed"]
-  end
-  subgraph resting [not executable: resting observation]
-    V2["internal/zone order blocks<br/>Fresh/Touched, Immediate/Nearby"] --> R1["resting candidate<br/>evidence m5_order_block_STATE"]
-  end
-```
+## Structure (`structure.go`)
 
-Everything below describes the confirmed path, the one that produces trades.
-The resting candidates (`orderblock.resting`) carry no reaction and are never
-executed; their lifecycle is the V2 zone book's (`analysis.techniques.*`).
-
-## What an order block is
+M5 never defines a block. `structure_timeframes: [M15, H1]` names the frames a block is found on; each is judged on its own bars and its own ATR.
 
 ```mermaid
 flowchart TD
-  LEG["displacement leg<br/>consecutive same-direction candles,<br/>move ≥ 1.5 ATR, at least half with body ≥ 0.6 of range"] --> BOS{"a BOS or CHoCH in the leg's direction<br/>falls inside the leg?"}
+  LEG["displacement leg<br/>consecutive same-direction candles,<br/>move ≥ displacement_atr_mult ATR, at least half with body ≥ momentum_body_fraction of range"] --> BOS{"a BOS or CHoCH of the frame in the leg's direction<br/>falls inside the leg?"}
   BOS -- no --> NO[no order block]
-  BOS -- yes --> ORG["origin = last opposite-direction candle<br/>before the leg"]
+  BOS -- yes --> ORG["origin = last opposite-direction candle before the leg<br/>(its body must be ≥ momentum_body_fraction of its range)"]
   ORG --> BAND["band = origin candle body<br/>[min(open, close), max(open, close)]"]
   BAND --> SIDE["up leg → demand (BUY)<br/>down leg → supply (SELL)"]
 ```
 
-`techniquezone.OrderBlocks` (`techniquezone.go`) builds them on each frame's own
-bars. Touches are counted from the bar after the structure break.
+A block stays tradable while it is: not spent (touched more than 30 times, or invalidated: a close beyond the far edge by more than 0.5 ATR that is not reclaimed within 6 bars, or more than 2 reclaimed breaks); at most `maximum_zone_atr` of its frame's ATR wide; not closed through (`ob_closed_through`: ANY close of its own frame after its candle beyond the far edge by more than `confirmed_break_buffer_atr` of that bar's ATR, no reclaim forgiveness: a wick that closes back inside is the sweep, a close is the break); and touched no more than `maximum_zone_touches` (2) times. The entry band is the block's proximal slice, clipped to `entry_max_width_price`. A block only exists from the close of the structure-frame candle that broke structure: a touch before that is its formation, not a reaction.
 
-## When it stays tradable
+The block is bound to the M5 frame by time: its first touchable M5 bar is the first one opening at or after the close of the structure candle that confirmed it.
 
-The block is judged on its own frame's bars, with that frame's median ATR over
-the 400-bar window:
+## Confirmation (`confirm.go`)
 
-| Test | Rule (production values) |
-|---|---|
-| Spent | touched more than `RetestMaxTouches` (30) times |
-| Invalidated | a close beyond the far edge by more than `max(pip, 0.05·ATR, 0.5·ATR)` that is not closed back inside within 6 bars, or more than 2 such reclaimed breaks |
-| Price at the block | M5 frame only; M15/H1 blocks skip it and let M5 `EntryValid` decide |
-| Width | at most 3.0 ATR |
-| Origin candle | body at least 0.6 of its range, with a qualifying BOS/CHoCH |
-| Closed through (v6) | ANY close of the block's frame after its candle beyond the far edge by more than `confirmed_break_buffer_atr` (0.1) x the ATR at that bar; no reclaim forgiveness |
-| Touches (v6) | more than `maximum_zone_touches` (2) |
+Unchanged from v6, and owned here: after a touch of the entry band, within `reaction_lookback_bars` (3), one of `wick_rejection`, `sweep_reclaim`, `rejection_choch`, `strong_reclaim`, `engulfing` (`engulfing_minimum_range_atr` x the M5 ATR). The candidate's `Reaction` carries the touch and confirmation bar times, `ReactionType "rejection"` and the pattern.
 
-The first five rows live in `techniquezone.ProductionTechniqueSettings()`, not in
-`config/analysis.yml`. For an order block the "reclaimed inside 6 bars counts as a
-liquidity sweep" forgiveness of the Invalidated row no longer applies: the v6 rule
-is judged on top of it and retires the block on the close (a wick that closes back
-inside still is the sweep). The last two rows are strategy-scoped keys under
-`strategies.order_block`.
+## Entry, stop, room, target (`decision.go`, `candidate.go`, `geometry.go`)
 
-## Confirmation, stop and target
+- **Entry**: price at the band or within `maximum_entry_atr` x the M5 ATR of its proximal edge, not through it.
+- **Stop**: beyond the whole block and beyond the extreme of the M5 bars from the touch to the confirmation, plus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor ([legacy-stop-budget](legacy-stop-budget.md)).
+- **Room**: the obstacles in front of the entry, nearest first, are (a) every confirmed fractal swing (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) on M5 and on the structure frame that no M5 close has gone through since it was known, and (b) the extreme of the displacement leg that broke structure, from the leg's first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
+- **No extension rule**: a block sits at the origin of its leg, so the entry is the leg's retracement by construction.
+- **Selection**: among this strategy's confirmed blocks on one bar, the most stars, then the nearest entry.
 
-```mermaid
-flowchart TD
-  B[tradable block] --> EV{"M5 price within<br/>maximum_entry_atr (2.0 ATR) of the block?"}
-  EV -- no --> X[no candidate]
-  EV -- yes --> RX{"M5 reaction after the block formed<br/>(reaction_lookback_bars 3)"}
-  RX -- none --> X
-  RX -- "wick_rejection · sweep_reclaim · rejection_choch ·<br/>strong_reclaim · engulfing" --> FIN{"confluence stars ≥ 2"}
-  FIN -- no --> X
-  FIN -- yes --> STOP["stop = beyond the block's far edge and the reaction extreme<br/>+ invalidation_buffer_atr (0.5) × M5 ATR"]
-  STOP --> BUD{"stop within the instrument cap?<br/>(XAU 70 pips)"}
-  BUD -- no --> X
-  BUD -- yes --> TGT["target = nearest opposing liquidity<br/>≥ minimum_target_distance_atr (1.0)"]
-  TGT --> C["candidate, expires 24 h after the touch"]
-```
+## Qualification and evidence
 
-- **Entry**: the proximal slice of the block (`entry_max_width_price`, 5.0 on XAU).
-- **Stop**: reaction-anchored ([reaction-anchored-stop](reaction-anchored-stop.md));
-  refused above the instrument cap, never tightened; below the floor it carries
-  `stop_budget_floor` and execution widens it ([legacy-stop-budget](legacy-stop-budget.md)).
-- **Higher timeframes**: an M15/H1 block is bound to M5 by time; the stop covers
-  the whole higher-timeframe block ([htf-zone-structure](htf-zone-structure.md)).
-- **Selection**: among this strategy's confirmed blocks on one bar, the most stars,
-  then the nearest entry.
+The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the block's touches, a fibonacci touch). Evidence codes (unchanged): `m5_order_block_confirmed`, `m5_order_block_rejection_confirmed`, `htf_zone_<tf>`, `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measure `room_r`.
 
-## Known gaps
+## Refusals
 
-From the 28-29 Oct 2026 XAU losses; none is fixed yet.
+`strategy_refused{symbol, strategy="order_block", structure_timeframe, reason}` (a Go counter; `reason` is `ob_closed_through` or `no_target_room`). A structure is counted once per evaluation; the counter never blocks one. It replaces `ob_definition_refused`.
 
-- **Closes inside the tolerance never break the block.** 0.5 × median ATR is
-  about 1.3 points on XAU M5, so repeated closes through the far edge by less than
-  that leave the block live.
-- **The sweep forgiveness reads closes, not wicks.** Three consecutive closes
-  beyond the edge and a 32-point rally were forgiven because price closed back
-  inside within 6 bars.
-- **No touch cap.** Supply and demand set `maximum_zone_touches: 2`;
-  `order_block` does not, so the 30-touch sanity cap applies.
-- **The published opportunity outlives the block.** Once published, an
-  opportunity ends only on a close beyond its stop level or after 24 h
-  ([lifecycle](../analysis-engine.md#opportunity-lifecycle)); a block that later
-  closes through does not withdraw it, so a waiting setup can fill hours later.
+## Lifecycle of a published block (engine, unchanged)
 
-## Quality and evidence
+A live opportunity is withdrawn by the first close of its structure's timeframe beyond the structural far edge by `confirmed_break_buffer_atr` (`STRUCTURE_CLOSED_THROUGH`, rule C of [order-block-definition](order-block-definition.md)). The engine reads the same `confirmed_break_buffer_atr` key as the strategy.
 
-`Quality.Overall` is the zone-family model (`strategyutil.ZoneFamilyQuality`),
-informational only ([quality](../analysis-engine.md#acceptance-and-quality)).
-Evidence: `m5_order_block_confirmed`, `m5_order_block_rejection_confirmed`,
-`invalidation_beyond_reaction_extreme` when the reaction set the stop,
-`stop_budget_structural` / `stop_budget_floor`, `htf_zone_<tf>`.
+## Configuration
 
-## Parity
+Every key of `analysis.strategies.order_block` has a consumer in the package and every key the package reads is there; the engine injects only the instrument scale (`pip_size`, `entry_max_width_price`, the stop envelope) and the shared confluence rubric. `minimum_strength`, `minimum_zone_atr` (both read only by the deleted resting path) and `minimum_target_distance_atr` (replaced by `minimum_target_r`) of v6 are gone; `higher_timeframes` became `structure_timeframes`.
 
-Decisions and entry reproduce the frozen Python `order_block_technique_reaction`
-(`test/techniqueparity` golden, 5 symbols). The stop (reaction-anchored), the
-stop budget and the higher-timeframe export differ from it by design.
+## Measured against v6
+
+See the pull request that introduced v7: commit A moved the code and was proven identical to master by replay; commit B changed behaviour. The 28-29 Oct 2026 production blocks (three losing XAU blocks, one winning EURUSD block) are all M5 blocks: v5 (what production ran) publishes all four, v6 refuses two of the losers, v7 publishes none of the three losers (`test/obv7`). The figures are publish counts, not profit: no capture here knows what a published setup went on to do.
+
+## History
+
+- v3-v5: reaction-anchored stop, instrument stop budget, M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
+- v6 (production 28-29 Oct 2026): the close-break rule and the touch limit ([order-block-definition](order-block-definition.md)).
+- v7: the package owns its mechanism; M15/H1 structure only; room refusal.
+
+## Release
+
+Deploy the Python bot first (or together with Go). If `config/analysis.yml` is rendered from `st-mich43l/ansible-library`, the `strategies.order_block` block changed shape (`higher_timeframes` -> `structure_timeframes`, new keys, three removed); that repository was not edited. Opportunity ids change once at deploy (the strategy version is part of the id).

@@ -77,19 +77,22 @@ flowchart LR
   BARS --> TZ["internal/techniquezone<br/>lifecycle: ProductionTechniqueSettings()<br/>(hardcoded parity values)"]
   V2 --> REST["resting zone observations<br/>(not executable)"]
   V2 --> ZB["zone book → Algo Bot<br/>opposing-barrier check"]
-  TZ --> CONF["confirmed technique strategies<br/>supply · demand · order_block · fvg"]
+  TZ --> CONF["confirmed technique strategies<br/>supply · demand"]
   TZ --> CZ["Confluence Zone facts"]
 ```
 
 Changing `analysis.techniques.*` in `config/analysis.yml` changes the V2 book only.
-The traded supply, demand, order block and FVG setups are judged by
-`techniquezone.ProductionTechniqueSettings()` plus strategy-scoped keys injected in
-`engine/technique_zones.go` (the FVG definition is the pattern to copy).
+The traded supply and demand setups are judged by
+`techniquezone.ProductionTechniqueSettings()`. `order_block` and `fvg` (v7) own their
+structure, thresholds and confirmation in their own packages and in their own
+`analysis.strategies.<id>` blocks ([order_block](strategies/order_block.md),
+[fvg](strategies/fvg.md)).
 
 ## Confirmed zone setups
 
-The path every confirmed `supply`, `demand`, `order_block` and `fvg` opportunity
-takes (`strategyutil.ConfirmedTechnique`):
+The path every confirmed `supply` and `demand` opportunity takes
+(`strategyutil.ConfirmedTechnique`; `order_block` and `fvg` follow the same steps in
+their own packages, with the v7 rules of their pages):
 
 ```mermaid
 flowchart TD

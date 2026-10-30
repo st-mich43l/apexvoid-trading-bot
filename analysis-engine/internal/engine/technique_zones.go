@@ -27,89 +27,6 @@ func productionTechniqueZoneSettings() TechniqueZoneSettings {
 
 var techniqueChain = techniquezone.ProductionChainSettings()
 
-// zoneDefinitionTechnique is the technique settings the two instance sources the zone strategies read (the execution frame's and the higher frames')
-// judge a confirmed zone with: the shared settings plus the order_block strategy's close-break rule (strategies.order_block.confirmed_break_buffer_atr; docs/strategies/order-block-definition.md). The shared settings themselves are left
-// alone on purpose: they also feed the Confluence Zone facts (structuralInstanceSource) and the zone book, which must not change. Absent keys leave a
-// definition off.
-func zoneDefinitionTechnique(settings Settings) techniquezone.TechniqueSettings {
-	technique := settings.TechniqueZones.Technique
-	for _, cfg := range settings.Strategies {
-		switch cfg.ID {
-		case "order_block":
-			if v, ok := cfg.Parameters["confirmed_break_buffer_atr"].(float64); ok && v > 0 {
-				technique.OBBreakBufferATR = v
-			}
-		}
-	}
-	return technique
-}
-
-// withoutParameters removes the named parameters from one strategy, never mutating the caller's map.
-func withoutParameters(settings *Settings, id string, names ...string) {
-	for i := range settings.Strategies {
-		if string(settings.Strategies[i].ID) != id {
-			continue
-		}
-		drop := make(map[string]bool, len(names))
-		for _, name := range names {
-			drop[name] = true
-		}
-		params := make(map[string]any, len(settings.Strategies[i].Parameters))
-		for k, v := range settings.Strategies[i].Parameters {
-			if !drop[k] {
-				params[k] = v
-			}
-		}
-		settings.Strategies[i].Parameters = params
-	}
-}
-
-// WithoutOBDefinition removes the order block definition from the order_block strategy: the close-break rule (confirmed_break_buffer_atr) and the touch limit
-// (maximum_zone_touches), leaving the confirmed path exactly as the frozen Python publisher ran it. The parity replays use it
-// (replaycapture.Options.WithoutStopBudget implies it).
-func WithoutOBDefinition(settings *Settings) {
-	withoutParameters(settings, "order_block", "confirmed_break_buffer_atr", "maximum_zone_touches")
-}
-
-// zoneRefusalLedger collects, for one closed-bar evaluation, the confirmed-path zones the definitions refused (fair value gaps and order blocks), by
-// technique, structure timeframe and reason. The instance sources fill it when a strategy first reads them (once per frame per evaluation, so a zone is
-// counted once) and the worker drains it after the strategies have run. A nil ledger records nothing.
-type zoneRefusalLedger struct {
-	mu     sync.Mutex
-	counts map[zoneRefusalKey]int64
-}
-
-type zoneRefusalKey struct {
-	technique string
-	timeframe market.Timeframe
-	reason    string
-}
-
-func (l *zoneRefusalLedger) recorder(tf market.Timeframe) func(techniquezone.Instance, string) {
-	if l == nil {
-		return nil
-	}
-	return func(in techniquezone.Instance, reason string) {
-		l.mu.Lock()
-		defer l.mu.Unlock()
-		if l.counts == nil {
-			l.counts = make(map[zoneRefusalKey]int64)
-		}
-		l.counts[zoneRefusalKey{in.Technique, tf, reason}]++
-	}
-}
-
-func (l *zoneRefusalLedger) drain() map[zoneRefusalKey]int64 {
-	if l == nil {
-		return nil
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	out := l.counts
-	l.counts = nil
-	return out
-}
-
 // techniqueZoneState replaces the trade-qualification population for the
 // technique families whose geometry has exact frozen-Python parity. The V2
 // zone book still owns every other kind and the resulting ZoneState is the
@@ -181,7 +98,7 @@ func techniqueInstanceZone(in techniquezone.Instance, bars []market.Candle) zone
 // zone-chain techniques collected from the execution frame's scored unmerged
 // zones, plus the CRT instances the H1 frame and the execution window produce.
 // The result is memoised for the frame's one closed-bar evaluation.
-func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings, refusals *zoneRefusalLedger) func() []techniquezone.Instance {
+func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscontext.LegacyFrame, settings Settings) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
 	return func() []techniquezone.Instance {
@@ -191,7 +108,7 @@ func techniqueInstanceSource(exec *analysiscontext.LegacyFrame, h1 *analysiscont
 				return
 			}
 			execATR := techniquezone.ATRScalar(exec.ATR, 1)
-			instances = techniquezone.InstancesFromScoredZonesWithATR(exec.TechniqueZones, bars, exec.ATR, zoneDefinitionTechnique(settings), refusals.recorder(settings.PrimaryTimeframe))
+			instances = techniquezone.InstancesFromScoredZones(exec.TechniqueZones, bars, techniquezone.ATRScalar(exec.ATR, 1), settings.TechniqueZones.Technique)
 			if h1 == nil || len(h1.Bars) == 0 {
 				return
 			}
@@ -253,7 +170,7 @@ func exportHigherTimeframe(all []techniquezone.Instance, tf market.Timeframe) []
 // own last close sits: IgnoreProximity is on. With it off, an H1 zone was offered only if the last CLOSED H1 bar closed in it or at its proximal
 // edge, so an M5 wick into the zone in the middle of an hour (after an H1 bar that closed away from it) found no instance. Proximity is decided
 // where the trade is executed, by the M5 EntryValid check in TechniqueSource.publish.
-func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings, refusals *zoneRefusalLedger) func() []techniquezone.Instance {
+func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market.Timeframe, settings Settings) func() []techniquezone.Instance {
 	var once sync.Once
 	var instances []techniquezone.Instance
 	return func() []techniquezone.Instance {
@@ -261,9 +178,9 @@ func higherTimeframeInstanceSource(frame *analysiscontext.LegacyFrame, tf market
 			if len(frame.Bars) < 10 {
 				return
 			}
-			technique := zoneDefinitionTechnique(settings)
+			technique := settings.TechniqueZones.Technique
 			technique.IgnoreProximity = true
-			instances = exportHigherTimeframe(techniquezone.InstancesFromScoredZonesWithATR(frame.TechniqueZones, frame.Bars, frame.ATR, technique, refusals.recorder(tf)), tf)
+			instances = exportHigherTimeframe(techniquezone.InstancesFromScoredZones(frame.TechniqueZones, frame.Bars, techniquezone.ATRScalar(frame.ATR, 1), technique), tf)
 		})
 		return instances
 	}

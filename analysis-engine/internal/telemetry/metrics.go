@@ -86,15 +86,8 @@ const (
 	// CounterStrategyRefused counts the structures a strategy that owns its mechanism refused, by the strategy's own reason code (fvg v7: gap_small,
 	// displacement_weak, displacement_direction, gap_closed_through, no_rejection, stale_confirmation, no_target_room, entry_at_leg_extreme). Labels: symbol,
 	// strategy, the timeframe the structure was found on and the reason, recorded with CountStrategyRefusal. A structure is counted once per evaluation;
-	// the counter never blocks an evaluation. It replaces fvg_definition_refused.
+	// the counter never blocks an evaluation. It replaces fvg_definition_refused and ob_definition_refused.
 	CounterStrategyRefused Counter = "strategy_refused"
-
-	// CounterOBDefinitionRefused counts order blocks the confirmed path
-	// refused because a close of their own frame went beyond their far edge
-	// (docs/strategies/order-block-definition.md). Labels: symbol, the
-	// structure timeframe and the reason (ob_closed_through), recorded with
-	// CountReason. An instance is counted once per evaluation.
-	CounterOBDefinitionRefused Counter = "ob_definition_refused"
 
 	// CounterOpportunityStructureClosedThrough counts live order block
 	// opportunities withdrawn because a close of their structure's own timeframe
