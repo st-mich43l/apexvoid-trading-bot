@@ -17,7 +17,7 @@ import (
 // one of those behaviours copies the code into its own package.
 
 // migrated are the strategy packages that own their mechanism. Each ownership PR adds its package.
-var migrated = []string{"fvg"}
+var migrated = []string{"fvg", "orderblock"}
 
 // forbiddenPackageSymbols are exported symbols of shared packages a migrated strategy must not use.
 var forbiddenPackageSymbols = map[string][]string{
