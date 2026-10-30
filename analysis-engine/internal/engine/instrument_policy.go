@@ -413,14 +413,14 @@ func (s Settings) BlockedByDefendedLevel(c opportunity.Candidate) (float64, bool
 var legacyDetectorStrategies = map[string]bool{
 	"break_retest": true, "key_level": true,
 	// The technique publishers (technique_detectors.py) qualify through the same contract.
-	"supply": true, "demand": true, "ifvg": true, "crt": true, "confluence_zone": true, "flip_zone": true, "trendline": true,
+	"demand": true, "ifvg": true, "crt": true, "confluence_zone": true, "flip_zone": true, "trendline": true,
 	// The XAU scalp strategies read the shared confluence rubric and instrument scale the same way CRT does.
 	"round_number": true, "asia_range": true, "shock_retest": true,
 }
 
 // ownedMechanismStrategies are the strategies that own their thresholds in their own analysis.strategies block (no analysis.detector, no shared technique
 // settings) and so receive only the instrument scale and the shared confluence rubric from the engine.
-var ownedMechanismStrategies = map[strategy.StrategyID]bool{"fvg": true, "order_block": true}
+var ownedMechanismStrategies = map[strategy.StrategyID]bool{"fvg": true, "order_block": true, "supply": true}
 
 // applyOwnedScale gives those strategies the two things they must not own: the instrument scale (pip size, the instrument's entry-band width) and the shared
 // confluence rubric (scoring version, star ratios, weights, the fibonacci epsilon). It is idempotent.
