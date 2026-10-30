@@ -366,9 +366,6 @@ func TestStructuralDirectionAndGatesUseTheDetectorContractRead(t *testing.T) {
 		t.Fatalf("an undecided read has no direction, got %q", got)
 	}
 	tf := ctx.Timeframes[market.M5]
-	if PremiumDiscountAllows(tf, market.Buy, false) || !PremiumDiscountAllows(tf, market.Sell, false) {
-		t.Fatal("premium forbids a loose BUY and allows a loose SELL")
-	}
 	if !InChop(tf) {
 		t.Fatal("the detector-contract regime is chop")
 	}

@@ -23,13 +23,9 @@ var realCases = []realCase{
 	// refused: the honest structural stop is wider than the 70 pip cap
 	{"key_level", "BUY", 1790857500, 84.6, "refused"},  // 10-01 12:25 Key Level BUY, stop 84.6 pips from the proximal edge
 	{"key_level", "SELL", 1790861700, 86.8, "refused"}, // 10-01 13:35
-	{"demand", "BUY", 1790839800, 96.7, "refused"},     // 10-01 07:30 demand
-	{"demand", "BUY", 1790840400, 81.9, "refused"},     // 10-01 07:40 demand
 	// structural: inside 50-70
 	{"key_level", "SELL", 1790847600, 59.2, "structural"}, // 10-01 09:40
-	{"demand", "BUY", 1790840700, 58.5, "structural"},     // 10-01 07:45
-	{"demand", "BUY", 1790841000, 65.2, "structural"},     // 10-01 07:50
-	// order_block is not here: v7 finds blocks on M15 and H1 and this XAU 60.8 pip block was an M5 block (test/obv7).
+	// order_block and demand are not here: v7 finds them on M15 and H1 and the 10-01 07:30-07:50 XAU demand setups and the 60.8 pip block were M5 structures (test/obv7, test/demandv7).
 	// floor: tighter than 50, execution widens it
 	{"key_level", "BUY", 1791238800, 40.9, "floor"},  // 10-05 22:20
 	{"key_level", "SELL", 1791239400, 40.2, "floor"}, // 10-05 22:30

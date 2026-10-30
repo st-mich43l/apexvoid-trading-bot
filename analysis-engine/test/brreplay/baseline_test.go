@@ -8,6 +8,7 @@ package brreplay_test
 
 import (
 	"fmt"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"math"
 	"sort"
 
@@ -99,7 +100,7 @@ func (s *frozenV2) Both(ctx *analysiscontext.MarketContext) (tlCand, lvCand *opp
 		return nil, nil
 	}
 	direction := strategyutil.StructuralDirection(ctx)
-	if !direction.IsValid() || !strategyutil.PremiumDiscountAllows(tf, direction, s.strictPD) {
+	if !direction.IsValid() || !premiumDiscountAllows(tf, direction, s.strictPD) {
 		return nil, nil
 	}
 	d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, direction, s.detector)
@@ -257,4 +258,32 @@ func (s *frozenV2) candidate(ctx *analysiscontext.MarketContext, d *strategyutil
 	}
 	candidate.DetectorConfluence = result.ConfluenceContext()
 	return candidate, nil
+}
+
+// premiumDiscountAllows is the frozen Python gate this certification reproduces: a trade is allowed unless the frame's dealing range puts price on the
+// wrong side of equilibrium (strict: only the matching half). The production code no longer has it: premium and discount are score inputs of supply and
+// demand, never a veto.
+func premiumDiscountAllows(tf *analysiscontext.TimeframeContext, direction market.Direction, strict bool) bool {
+	var dealing *fib.DealingRange
+	if tf.Legacy != nil {
+		dealing = tf.Legacy.Range
+	} else {
+		dealing = tf.Fib.Range
+	}
+	if dealing == nil {
+		return true
+	}
+	if dealing.Zone == "eq" {
+		return false
+	}
+	if direction == market.Buy {
+		if strict {
+			return dealing.Zone == "discount"
+		}
+		return dealing.Zone != "premium"
+	}
+	if strict {
+		return dealing.Zone == "premium"
+	}
+	return dealing.Zone != "discount"
 }

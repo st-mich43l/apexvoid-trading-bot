@@ -242,7 +242,7 @@ func normalizeEnvelope(t *testing.T, line []byte) []byte {
 }
 
 func isConfirmedZoneReaction(c opportunity.Candidate) bool {
-	return (c.Strategy == "supply" || c.Strategy == "demand") && c.ObservedTimeframe == market.M5 &&
+	return (c.Strategy == "supply" || c.Strategy == "demand" || c.Strategy == "order_block" || c.Strategy == "fvg") && c.ObservedTimeframe == market.M5 &&
 		c.Technical != nil && c.Technical.Confirmation != nil
 }
 
@@ -375,8 +375,9 @@ func TestEveryConfirmedReactionCarriesItsCausalFacts(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	// supply (v7) finds its zones on M15/H1 only and refuses an entry with no room: this capture yields none for it (its own evidence is test/supplyv7).
-	if byStrategy["demand"] == 0 {
-		t.Fatalf("the real capture must yield confirmed demand reactions, got %v", byStrategy)
+	// supply and demand (v9, v7) find their zones on M15/H1 only and refuse an entry with no room: this capture yields none for them (their evidence is
+	// test/supplyv7 and test/demandv7). The zone family is whatever confirms here.
+	if len(byStrategy) == 0 {
+		t.Fatalf("the real capture must yield confirmed zone-family reactions, got %v", byStrategy)
 	}
 }

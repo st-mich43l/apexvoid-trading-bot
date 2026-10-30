@@ -175,7 +175,7 @@ func TestDetectsTheZoneAndPublishesTheConfirmedSell(t *testing.T) {
 	if target.Label != "nearest_opposing_structure" || math.Abs(float64(target.Price)-px(209.08)) > 1e-9 {
 		t.Errorf("target %v %q, want the 209.08 departure low", target.Price, target.Label)
 	}
-	if c.StrategyVersion != "v8" || c.StructuralID != "technique:supply_demand:sell:"+itoa(startTime+66*m5Seconds)+"@M15" {
+	if c.StrategyVersion != "v9" || c.StructuralID != "technique:supply_demand:sell:"+itoa(startTime+66*m5Seconds)+"@M15" {
 		t.Errorf("version %q id %q", c.StrategyVersion, c.StructuralID)
 	}
 }

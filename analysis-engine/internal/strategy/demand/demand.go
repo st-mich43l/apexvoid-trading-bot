@@ -1,17 +1,7 @@
-// Package demand implements DemandStrategy.
-// (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), the buy-side sibling
-// of internal/strategy/supply, per the strategy catalog's split of the
-// legacy "Supply Demand" detector. Independently implemented — this
-// package must never import internal/strategy/supply, and vice versa
-// (test/architecture/dependency_test.go's strategy-isolation rule); any
-// resemblance in code shape is a coincidence of two theses that happen to
-// be mirror images, not shared strategy behavior.
-//
-// Thesis: a still-valid (State Fresh/Touched), currently price-relevant
-// (Relevance Immediate/Nearby) canonical Demand zone is a standing buy
-// reaction zone. Entry is the zone's own band; invalidation is a
-// confirmed close beyond the zone's own Low; target is the nearest
-// buy-side liquidity pool above.
+// Package demand is the demand zone strategy (BUY only). It owns its whole mechanism: what a demand zone is and when it is dead (structure.go), how a reaction
+// off it is confirmed (confirm.go), whether the entry is valid and the qualification (decision.go), the room in front of it (geometry.go) and the candidate it
+// publishes (candidate.go). It reads the
+// market only through the closed bars and facts of the frames in the context.
 package demand
 
 import (
@@ -19,22 +9,17 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/liquidity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
 )
 
-// ID is this strategy's fixed V2 identity.
 const ID strategy.StrategyID = "demand"
-
-// Version is this strategy's own technical-thesis version.
-const Version = "v6"
+const Version = "v7"
 
 const (
 	structureVersion = "v2"
@@ -43,32 +28,16 @@ const (
 	configVersion    = 3
 )
 
-// Config is Demand's own parsed technical configuration.
-type Config struct {
-	MinimumStrength          float64
-	InvalidationBufferATR    float64
-	MinimumTargetDistanceATR float64
-	ExpiryHours              float64
-	// Reaction is the shared legacy confirmation tuning (see strategyutil).
-	Reaction strategyutil.ReactionConfig
-	// Technique is the legacy Python technique validation (see strategyutil).
-	Technique strategyutil.TechniqueGeometry
-	// Legacy qualifies the confirmed reaction through the frozen detector contract.
-	Legacy strategyutil.LegacyDetectorSettings
-	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
-	StopBudget strategyutil.StopBudget
-}
-
-// Strategy is DemandStrategy.
+// Strategy is the demand zone strategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
 	cfg         Config
-	rawConfig   strategy.Config
-	timeframe   market.Timeframe
 	fingerprint string
+
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
 }
 
-// New constructs DemandStrategy from its registry configuration.
 func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if cfg.ID != ID {
 		return nil, fmt.Errorf("demand: New called with strategy ID %q, want %q", cfg.ID, ID)
@@ -77,226 +46,85 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("demand: %w", err)
 	}
-	s := &Strategy{
-		cfg: parsed, rawConfig: cfg, timeframe: market.M5,
-		fingerprint: configFingerprint(cfg),
-	}
+	s := &Strategy{cfg: parsed, fingerprint: configFingerprint(cfg)}
 	s.cfg.StopBudget.Refusals = &s.RefusalCounter
 	return s, nil
 }
 
-func parseConfig(params map[string]any) (Config, error) {
-	minimumStrength, err := requireFloat(params, "minimum_strength")
-	if err != nil {
-		return Config{}, err
-	}
-	invalidationBuffer, err := requireFloat(params, "invalidation_buffer_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	minimumTargetDistance, err := requireFloat(params, "minimum_target_distance_atr")
-	if err != nil {
-		return Config{}, err
-	}
-	expiryHours, err := requireFloat(params, "expiry_hours")
-	if err != nil {
-		return Config{}, err
-	}
-	if invalidationBuffer <= 0 {
-		return Config{}, fmt.Errorf("invalidation_buffer_atr must be > 0")
-	}
-	if expiryHours <= 0 {
-		return Config{}, fmt.Errorf("expiry_hours must be > 0")
-	}
-	legacyConfig, err := strategyutil.ParseLegacyDetectorSettings(params)
-	if err != nil {
-		return Config{}, err
-	}
-	reactionConfig, err := strategyutil.ParseReactionConfig(params)
-	if err != nil {
-		return Config{}, err
-	}
-	techniqueConfig, err := strategyutil.ParseTechniqueGeometry(params)
-	if err != nil {
-		return Config{}, err
-	}
-	stopBudget, err := strategyutil.ParseStopBudget(params)
-	if err != nil {
-		return Config{}, err
-	}
-	return Config{
-		StopBudget:      stopBudget,
-		MinimumStrength: minimumStrength, InvalidationBufferATR: invalidationBuffer,
-		MinimumTargetDistanceATR: minimumTargetDistance, ExpiryHours: expiryHours, Reaction: reactionConfig, Technique: techniqueConfig, Legacy: legacyConfig,
-	}, nil
-}
-
-func requireFloat(params map[string]any, key string) (float64, error) {
-	raw, ok := params[key]
-	if !ok {
-		return 0, fmt.Errorf("missing required parameter %q", key)
-	}
-	switch v := raw.(type) {
-	case float64:
-		return v, nil
-	case int:
-		return float64(v), nil
-	default:
-		return 0, fmt.Errorf("parameter %q is not numeric (got %T)", key, raw)
-	}
-}
-
 func (s *Strategy) ID() strategy.StrategyID { return ID }
 
-func (s *Strategy) RequiredTimeframes() []market.Timeframe {
-	return []market.Timeframe{s.timeframe}
-}
+// RequiredTimeframes is M5 alone: the registry evaluates a strategy when one of its required frames closes, and a decision is made on a closed M5 bar. The
+// structure frames are read from the context when they exist.
+func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
-// Evaluate emits the resting-zone observations and, separately, the confirmed
-// reaction the frozen publisher (technique_detectors) decides on the frame's
-// technique instances.
+// Evaluate returns the confirmed reaction off the best zone of the structure frames (M15 and H1 by default). M5 confirms and executes; it never defines a
+// zone.
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
-	return append(s.resting(ctx), strategyutil.ConfirmedTechnique(ctx, s.cfg.Legacy, strategyutil.TechniqueSupplyDemand, market.Buy, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, PublishStructure: true, ZoneEvidence: "m5_demand_zone_confirmed", ConfirmedEvidence: "m5_demand_zone_rejection_confirmed",
-		InvalidationLabel: "demand_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
-		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
-		Versions: opportunity.AnalysisProvenance{
-			StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-			ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-		},
-	})...)
-}
-
-// resting is the resting-zone half of Evaluate. Read-only: never mutates ctx.
-func (s *Strategy) resting(ctx *context.MarketContext) []opportunity.Candidate {
-	tfCtx, ok := ctx.Timeframes[s.timeframe]
+	base, ok := newView(ctx, &s.cfg)
 	if !ok {
 		return nil
 	}
-	atr := ctx.Volatility.ATR
-	if atr <= 0 {
+	refusals := map[strategy.Refusal]int64{}
+	defer s.addRefusals(refusals)
+	var instances []instance
+	var higher []band // this strategy's own zones on the frames processed so far (the longer periods first)
+	for _, tf := range s.frameOrder() {
+		frameContext := ctx.Timeframes[tf]
+		if frameContext == nil || frameContext.Legacy == nil {
+			continue
+		}
+		found, held := s.structureInstances(frameContext.Legacy, tf, base.frame.Bars, higher)
+		higher = append(higher, held...)
+		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found, s.cfg.BindWithinExecutionWindow)...)
+	}
+	d := s.best(base, instances, func(in instance, reason string) {
+		refusals[strategy.Refusal{Reason: reason, Timeframe: in.Timeframe}]++
+	})
+	if d == nil {
 		return nil
 	}
-
-	var candidates []opportunity.Candidate
-	for _, z := range tfCtx.Zones.Zones {
-		if z.Kind != zone.KindDemand {
-			continue
-		}
-		if z.State != zone.StateFresh && z.State != zone.StateTouched {
-			continue
-		}
-		if z.Relevance != zone.Immediate && z.Relevance != zone.Nearby {
-			continue
-		}
-		if z.Strength < s.cfg.MinimumStrength {
-			continue
-		}
-
-		entryLow, entryHigh := float64(z.Low), float64(z.High)
-		invalidationPrice := entryLow - s.cfg.InvalidationBufferATR*atr
-
-		targetPool, ok := nearestPool(tfCtx.Liquidity.Pools, liquidity.LiquidityBuySide, entryHigh, s.cfg.MinimumTargetDistanceATR*atr)
-		if !ok {
-			continue
-		}
-
-		createdAt := zoneReferenceTime(z)
-		expiresAt := createdAt + int64(s.cfg.ExpiryHours*3600)
-
-		setupKey := fmt.Sprintf("zone:%s", z.ID)
-		id, err := opportunity.DeterministicID(opportunity.Identity{
-			Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol, Direction: market.Buy, SetupKey: setupKey,
-		})
-		if err != nil {
-			continue
-		}
-
-		quality := computeQuality(z)
-
-		candidate := opportunity.Candidate{
-			ID: id, Strategy: ID, StrategyVersion: Version, Symbol: ctx.Symbol,
-			Direction:    market.Buy,
-			StructuralID: z.ID,
-			Entry:        opportunity.EntryZone{Low: entryLow, High: entryHigh},
-			Invalidation: market.PriceLevel{
-				Price: market.Price(invalidationPrice), Label: "demand_zone_invalidated",
-			},
-			Targets: []opportunity.Target{{
-				Price: market.PriceLevel{Price: targetPool.High, Label: "nearest_buy_side_liquidity"},
-			}},
-			Evidence: []opportunity.Evidence{
-				{Code: "m5_demand_zone_" + z.State.String()},
-				{Code: "m5_demand_zone_relevance_" + z.Relevance.String()},
-				{Code: "m5_demand_zone_layer_" + z.Layer.String()},
-			},
-			Quality:   quality,
-			CreatedAt: createdAt, ExpiresAt: expiresAt,
-			Provenance: opportunity.AnalysisProvenance{
-				StructureVersion: structureVersion, LiquidityVersion: liquidityVersion, ZoneVersion: zoneVersionUsed,
-				ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
-			},
-		}
-		candidates = append(candidates, candidate)
+	candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d)
+	if !ok {
+		return nil
 	}
-	return candidates
+	return []opportunity.Candidate{candidate}
 }
 
-func nearestPool(pools []liquidity.Pool, side liquidity.LiquiditySide, referencePrice, minimumDistance float64) (liquidity.Pool, bool) {
-	var candidates []liquidity.Pool
-	for _, p := range pools {
-		if p.Side != side {
-			continue
-		}
-		mid := (float64(p.Low) + float64(p.High)) / 2
-		distance := mid - referencePrice
-		if distance < minimumDistance {
-			continue
-		}
-		candidates = append(candidates, p)
-	}
-	if len(candidates) == 0 {
-		return liquidity.Pool{}, false
-	}
-	sort.Slice(candidates, func(i, j int) bool {
-		mi := (float64(candidates[i].Low) + float64(candidates[i].High)) / 2
-		mj := (float64(candidates[j].Low) + float64(candidates[j].High)) / 2
-		return mi < mj
+// frameOrder is the structure frames, the longest period first: a zone is scored against this strategy's zones on the frames above it.
+func (s *Strategy) frameOrder() []market.Timeframe {
+	order := append([]market.Timeframe(nil), s.cfg.StructureTimeframes...)
+	sort.SliceStable(order, func(i, j int) bool {
+		a, _ := order[i].Minutes()
+		b, _ := order[j].Minutes()
+		return a > b
 	})
-	return candidates[0], true
+	return order
 }
 
-func zoneReferenceTime(z zone.Zone) int64 {
-	if z.LastTouchedAt != nil && *z.LastTouchedAt > z.CreatedAt {
-		return *z.LastTouchedAt
+func (s *Strategy) addRefusals(found map[strategy.Refusal]int64) {
+	if len(found) == 0 {
+		return
 	}
-	return z.CreatedAt
-}
-
-// computeQuality is Demand's own quality model — independently computed
-// from Supply's (source task §40), even though both happen to use
-// strength/relevance/freshness as their own dimensions today.
-func computeQuality(z zone.Zone) opportunity.StrategyQuality {
-	// A resting zone has had no reaction, so its one measurable dimension is how much of it is left: every touch spends resting
-	// interest (Fall(touches; 0, 5)). The engine's technique-zone adapter gives every zone a Strength of 1 and
-	// a Relevance of Immediate (it has neither), so neither is scored. Resting zones are not executable and are not comparable with
-	// confirmed ones, which are scored by the full model of strategyutil.ZoneFamilyQuality.
-	m := quality.New("demand.resting.quality.v1")
-	m.Score("zone_freshness", quality.Fall(float64(z.TouchCount), 0, 5))
-	m.Measure("zone_touches", float64(z.TouchCount))
-	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
-}
-
-func clamp01(v float64) float64 {
-	if v < 0 {
-		return 0
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
 	}
-	if v > 1 {
-		return 1
+	for k, n := range found {
+		s.refusals[k] += n
 	}
-	return v
 }
 
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
+}
+
+// configFingerprint is the strategy's version-pinned parameter digest.
 func configFingerprint(cfg strategy.Config) string {
 	keys := make([]string, 0, len(cfg.Parameters))
 	for k := range cfg.Parameters {
