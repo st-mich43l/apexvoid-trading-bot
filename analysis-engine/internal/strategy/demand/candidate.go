@@ -10,34 +10,24 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
+const fixedRewardRisk = "fixed_reward_risk"
+
 const (
 	zoneEvidence      = "m5_demand_zone_confirmed"
 	confirmedEvidence = "m5_demand_zone_rejection_confirmed"
 	invalidationLabel = "demand_zone_invalidated"
 	// reactionExtremeEvidence marks a stop that the reaction's own traded extreme set (it lay beyond the whole zone).
+	// discountEvidence marks a zone that earned the discount points of its zone score.
+	discountEvidence        = "m5_demand_zone_discount"
 	reactionExtremeEvidence = "invalidation_beyond_reaction_extreme"
-	fallbackTargetR         = 2.0
 )
 
-// reactionAnchoredInvalidation puts the stop beyond the whole zone and beyond the extreme the bars from the touch to the confirmation traded, plus the
-// buffer; anchored is true when the reaction's extreme (not the zone's edge) set it.
-func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, direction market.Direction, structLow, structHigh, buffer float64) (price float64, anchored bool) {
+// reactionAnchoredInvalidation puts the stop below the whole zone and below the extreme the bars from the touch to the confirmation traded, plus the buffer;
+// anchored is true when the reaction's extreme (not the zone's edge) set it.
+func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, structLow, buffer float64) (price float64, anchored bool) {
 	structural := structLow - buffer
-	if direction == market.Sell {
-		structural = structHigh + buffer
-	}
 	if conf == nil || conf.TouchIndex < 0 || conf.ConfirmationIndex >= len(bars) || conf.TouchIndex > conf.ConfirmationIndex {
 		return structural, false
-	}
-	if direction == market.Sell {
-		extreme := math.Inf(-1)
-		for _, b := range bars[conf.TouchIndex : conf.ConfirmationIndex+1] {
-			extreme = math.Max(extreme, b.High)
-		}
-		if math.IsInf(extreme, 0) || math.IsNaN(extreme) || !(extreme > structHigh) {
-			return structural, false
-		}
-		return extreme + buffer, true
 	}
 	extreme := math.Inf(1)
 	for _, b := range bars[conf.TouchIndex : conf.ConfirmationIndex+1] {
@@ -49,60 +39,15 @@ func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, dire
 	return extreme - buffer, true
 }
 
-// nearestOpposingTarget is the nearest unswept opposing liquidity at least the minimum distance from the entry; without one, a fixed reward:risk beyond
-// it.
-func (d *decision) nearestOpposingTarget(reference, invalidation, minimum float64) (float64, string, bool) {
-	want := "buy"
-	if d.direction == market.Sell {
-		want = "sell"
-	}
-	best, bestDistance := 0.0, math.Inf(1)
-	for _, pool := range d.v.frame.Pools {
-		if pool.Side != want {
-			continue
-		}
-		distance := pool.Level - reference
-		if d.direction == market.Sell {
-			distance = reference - pool.Level
-		}
-		if distance >= minimum && distance < bestDistance {
-			best, bestDistance = pool.Level, distance
-		}
-	}
-	if !math.IsInf(bestDistance, 1) {
-		return best, "nearest_opposing_liquidity", true
-	}
-	risk := math.Abs(reference - invalidation)
-	if risk <= 0 {
-		return 0, "", false
-	}
-	if d.direction == market.Sell {
-		return reference - fallbackTargetR*risk, "fixed_reward_risk", true
-	}
-	return reference + fallbackTargetR*risk, "fixed_reward_risk", true
-}
-
 // candidate builds the confirmed opportunity: the published (proximal) entry band, the stop beyond the whole zone and the reaction's extreme, the
-// nearest opposing liquidity as the nominal target, and the decision's own reaction and confluence as evidence.
+// nearest opposing structure (or a fixed reward:risk when none stands in the way) as the target, and the decision's own reaction and confluence as evidence.
 func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Candidate, bool) {
 	v := d.v
 	atr := v.atr
 	low, high := d.res.zone.Low(), d.res.zone.High()
 	structLow, structHigh := d.res.structuralLow, d.res.structuralHigh
-	buffer := s.cfg.InvalidationBufferATR * atr
-	reference := high
-	if d.direction == market.Sell {
-		reference = low
-	}
-	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, d.conf, d.direction, structLow, structHigh, buffer)
-	budgetCode, publish := s.cfg.StopBudget.Apply(reference, invalidation)
-	if !publish {
-		return opportunity.Candidate{}, false
-	}
-	target, targetLabel, ok := d.nearestOpposingTarget(reference, invalidation, s.cfg.MinimumTargetDistanceATR*atr)
-	if !ok {
-		return opportunity.Candidate{}, false
-	}
+	reference, invalidation := d.reference, d.invalidation
+	target, targetLabel := d.room.Target, d.room.Label
 	conf := d.conf
 	formedAt, confirmedAt := conf.TouchTime, conf.ConfirmationTime
 	setupKey := fmt.Sprintf("zone:%s:rejection:%d:%d", d.id, conf.TouchTime, conf.ConfirmationTime)
@@ -110,15 +55,18 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	if d.inst.Timeframe != "" {
 		evidence = append(evidence, "htf_zone_"+lowerTimeframe(d.inst.Timeframe))
 	}
-	if anchored {
+	if d.anchored {
 		evidence = append(evidence, reactionExtremeEvidence)
 	}
-	if budgetCode != "" {
-		evidence = append(evidence, budgetCode)
+	if d.inst.Discount {
+		evidence = append(evidence, discountEvidence)
 	}
-	scored := s.quality(d, reference, invalidation, target, targetLabel != "fixed_reward_risk", atr)
+	if d.budgetCode != "" {
+		evidence = append(evidence, d.budgetCode)
+	}
+	scored := s.quality(d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
-		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.symbol, Direction: d.direction,
+		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.symbol, Direction: market.Buy,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: invalidationLabel,
 		Target: target, TargetLabel: targetLabel, Evidence: evidence, Quality: scored,
 		FormedAt: formedAt, ConfirmedAt: confirmedAt, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
@@ -151,9 +99,6 @@ func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.St
 		timeframe = d.inst.Timeframe
 	}
 	formedAt := d.inst.OriginTime
-	if bars := d.v.frame.Bars; formedAt == 0 && d.inst.OriginIndex >= 0 && d.inst.OriginIndex < len(bars) {
-		formedAt = bars[d.inst.OriginIndex].Time
-	}
 	return &opportunity.StructureZone{Timeframe: timeframe, Low: low, High: high, FormedAt: formedAt}
 }
 
@@ -161,7 +106,6 @@ func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.St
 func (s *Strategy) quality(d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
 	m := quality.New(string(ID) + ".quality.v1")
 	v := d.v
-	buy := d.direction == market.Buy
 	departure, width, touches := math.NaN(), math.NaN(), math.NaN()
 	if atr > 0 {
 		lo, hi := d.inst.Low, d.inst.High
@@ -175,15 +119,12 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 		if d.conf.TouchIndex < end {
 			end = d.conf.TouchIndex
 		}
-		start := maxInt(0, d.inst.OriginIndex)
-		if stop := minInt(end, start+9); start < stop {
+		// The departure is read on the M5 bars right after the origin: unknown once the origin has left the M5 window.
+		start := d.inst.OriginIndex
+		if stop := minInt(end, start+9); start >= 0 && start < stop {
 			best := 0.0
 			for _, b := range bars[start:stop] {
-				if buy {
-					best = math.Max(best, b.High-hi)
-				} else {
-					best = math.Max(best, lo-b.Low)
-				}
+				best = math.Max(best, b.High-hi)
 			}
 			departure = best / atr
 		}
@@ -194,14 +135,16 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Measure("zone_departure_atr", departure)
 	m.Measure("zone_width_atr", width)
 	m.Measure("zone_touches", touches)
-	m.Score("rejection", quality.RejectionScore(v.frame.Bars, d.conf.TouchIndex, d.conf.ConfirmationIndex, buy))
+	m.Score("rejection", quality.RejectionScore(v.frame.Bars, d.conf.TouchIndex, d.conf.ConfirmationIndex, true))
 	m.Score("entry_location", quality.LocationScore(v.price, reference, atr))
 	if atr > 0 {
 		m.Measure("entry_chase_atr", math.Abs(v.price-reference)/atr)
 	}
-	m.Score("structure", quality.StructureScore(buy, v.frame.Structure, v.recentCHoCH(maxInt(1, v.cfg.ReactionLookbackBars)), v.htfAligned()))
+	m.Score("structure", quality.StructureScore(true, v.frame.Structure, v.recentCHoCH(maxInt(1, v.cfg.ReactionLookbackBars)), v.htfAligned()))
 	room, rewardRisk := quality.GeometryRoom(reference, invalidation, target, structural)
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
+	m.Measure("room_r", d.room.RoomR)
+	m.Measure("pd_position", d.inst.PDPosition)
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }

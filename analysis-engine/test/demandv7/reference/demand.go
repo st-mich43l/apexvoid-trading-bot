@@ -1,5 +1,5 @@
-// Package reference is the frozen master implementation of the demand strategy (v6), vendored so that test/demandmigration can prove the self-contained
-// package decides identically. Deleted in the rebuild commit. Original header: Package demand implements DemandStrategy.
+// Package reference is the frozen master implementation of the demand strategy (v6), vendored so that test/demandv7 can run the strategy as it ran on master
+// (the "before" of the measurement). Original header: Package demand implements DemandStrategy.
 // (apexvoid-bot-prompts/rebuild-strategies.md §9/§21), the buy-side sibling
 // of internal/strategy/supply, per the strategy catalog's split of the
 // legacy "Supply Demand" detector. Independently implemented — this

@@ -25,8 +25,7 @@ type realCase struct {
 var realCases = []realCase{
 	// key_level BUY sweep_reclaim 2026-10-13 21:00: the confirming wick low 1.1193 pierced the stop at 1.1194.
 	{"replay-eurusd-production-capture-20261014.json", "key_level", market.Buy, 1791925200, 1.1193, 1.1194},
-	// demand BUY strong_reclaim 2026-10-13 21:25.
-	{"replay-eurusd-production-capture-20261014.json", "demand", market.Buy, 1791926700, 1.11951, 1.11956},
+	// demand is not here: v7 finds zones on M15 and H1 and this EURUSD strong_reclaim was an M5 zone (test/demandv7).
 	// order_block is not here: v7 finds blocks on M15 and H1 and this EURUSD strong_reclaim was an M5 block (test/obv7).
 	// supply is not here: v7 finds zones on M15 and H1 and this EURUSD strong_reclaim was an M5 zone (test/supplyv7).
 	{"replay-gbpusd-production-capture-20261013.json", "flip_zone", market.Buy, 1791763500, 1.32394, 1.32397},

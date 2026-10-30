@@ -1,8 +1,10 @@
-# Supply (supply v8)
+# Supply (supply v9)
 
-`supply`, `v8`. Implemented in `analysis-engine/internal/strategy/supply`, self-contained and SELL only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `demand`; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.supply`.
+`supply`, `v9`. Implemented in `analysis-engine/internal/strategy/supply`, self-contained and SELL only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `demand`; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.supply`.
 
 **v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
+
+**v9 (zone score and dealing range).** The zone score that sets the stars (the points for a fresh zone, a key level, a round number, liquidity, session levels, a sweep, a higher-timeframe zone and a trendline) is now this strategy's own (`zonescore.go`); the strategy no longer reads the shared `frame.TechniqueZones` score. Its higher-timeframe point compares a zone with **this strategy's own** supply zones on the frames above it, not with every zone of every technique. The premium/discount point reads a corrected dealing range ([premium-discount](premium-discount.md)). A zone earns `m5_supply_zone_premium` when it was awarded the points; the quality measure `pd_position` is where its proximal edge sits in that range.
 
 ## Thesis
 
@@ -31,9 +33,13 @@ Unchanged from v6, and owned here: after a touch of the entry band from below, w
 - **No extension rule**: a zone sits at the origin of its departure.
 - **Selection**: among this strategy's confirmed zones on one bar, the most stars, then the nearest entry. The competition is among SELL zones only.
 
+## Zone score and premium/discount (`zonescore.go`, `dealing.go`)
+
+Points per fact: fresh (never touched) 3 · touched once 1 · a supply base 1.5 · a key level inside 2 · a round number inside 1 · a buy-side pool just above 2 · each distinct unswept session high in or just above 2 · the zone wholly in the premium half of the dealing range `pd_position_score` (2) · a grade-A bearish sweep into the zone 2 · inside a supply zone of this strategy on a higher frame 3 · an unbroken trendline through it 1.5. The facts (key levels, pools, session levels, sweeps, trendlines, `round_step`) are read from the frames. The zone's frame's dealing range is built from its last confirmed swing high and low (`structure_pivot_bars`) and extended by every high and low since: it always contains price. Premium/discount is a score input, never a gate.
+
 ## Qualification and evidence
 
-The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the zone's touches, a fibonacci touch). Evidence codes (unchanged): `m5_supply_zone_confirmed`, `m5_supply_zone_rejection_confirmed`, `htf_zone_<tf>`, `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measure `room_r`.
+The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the zone's touches, a fibonacci touch). Evidence codes: `m5_supply_zone_confirmed`, `m5_supply_zone_rejection_confirmed`, `htf_zone_<tf>`, `m5_supply_zone_premium` (the points were awarded), `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measures `room_r` and `pd_position`.
 
 ## Refusals
 
@@ -41,7 +47,7 @@ The shared confluence rubric (stars, floor `confluence_floor`) with factors the 
 
 ## Configuration
 
-Every key of `analysis.strategies.supply` has a consumer in the package and every key the package reads is there; the engine injects only the instrument scale (`pip_size`, `entry_max_width_price`, the stop envelope) and the shared confluence rubric. `minimum_strength` (read only by the deleted resting path) and `minimum_target_distance_atr` (replaced by `minimum_target_r`) of v6 are gone; `higher_timeframes` became `structure_timeframes`.
+Every key of `analysis.strategies.supply` (`structure_pivot_bars` and `pd_position_score` are new in v9) has a consumer in the package and every key the package reads is there; the engine injects only the instrument scale (`pip_size`, `entry_max_width_price`, the stop envelope) and the shared confluence rubric. `minimum_strength` (read only by the deleted resting path) and `minimum_target_distance_atr` (replaced by `minimum_target_r`) of v6 are gone; `higher_timeframes` became `structure_timeframes`.
 
 ## Measured against v6
 
@@ -60,6 +66,7 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 
 - v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
 - v7: the package owns its mechanism; M15/H1 structure only; room refusal; no competition with demand.
+- v9: the owned zone score, own higher-timeframe zones, the corrected dealing range ([premium-discount](premium-discount.md)).
 - v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
 
 ## Release

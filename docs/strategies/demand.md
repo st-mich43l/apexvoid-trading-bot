@@ -1,7 +1,57 @@
-# Demand
+# Demand (demand v7)
 
+`demand`, `v7`. Implemented in `analysis-engine/internal/strategy/demand`, self-contained and BUY only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `supply`; `test/architecture` enforces both). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.demand`.
 
-## Spent zones (v3)
+## Thesis
+
+A demand zone found on M15 or H1 is where a strong move up began. When M5 trades back down into it, rejects it, and there is room above to the next opposing structure, the zone is defended. The strategy refuses the other case and says why: an entry with no room in front of it.
+
+## Structure (`structure.go`)
+
+M5 never defines a zone. `structure_timeframes: [M15, H1]` names the frames a zone is found on; each is judged on its own bars and its own ATR.
+
+- **Departure**: a run of consecutive up candles that moved at least `displacement_atr_mult` x ATR, at least half of them with a body of at least `momentum_body_fraction` of their range.
+- **Zone**: the range, wicks included, of the 3 candles before the departure's first candle. It exists from the close of the candle that ended the departure; a touch before that is its formation, not a reaction.
+- **Dead or spent**: a close below the zone's low is a break; the zone survives it only when a close returns inside within 6 bars (a sweep), and at most twice; a zone touched more than 30 times, or more than `maximum_zone_touches` (2), is spent. Wider than `maximum_zone_atr` of its frame's ATR it is a region, not a zone.
+- The entry band is the zone's proximal (upper) slice, clipped to `entry_max_width_price`.
+
+The zone is bound to the M5 frame by time: its first touchable M5 bar is the first one opening at or after the close of the structure candle that ended the departure. A zone whose origin has left the 150-bar M5 window stays tradable for as long as its own frame holds it ([analysis-engine-windows](../analysis-engine-windows.md)); its identity and `formed_at` come from the origin bar's time.
+
+## Confirmation (`confirm.go`)
+
+Owned here: after a touch of the entry band from above, within `reaction_lookback_bars` (3), one of `wick_rejection`, `sweep_reclaim`, `rejection_choch`, `strong_reclaim`, `engulfing` (`engulfing_minimum_range_atr` x the M5 ATR). The candidate's `Reaction` carries the touch and confirmation bar times, `ReactionType "rejection"` and the pattern.
+
+## Entry, stop, room, target (`decision.go`, `candidate.go`, `geometry.go`)
+
+- **Entry**: price at the band or within `maximum_entry_atr` x the M5 ATR above its proximal edge, not below it.
+- **Stop**: below the whole zone and below the extreme of the M5 bars from the touch to the confirmation, minus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor ([legacy-stop-budget](legacy-stop-budget.md)).
+- **Room**: the obstacles above the entry, nearest first, are (a) every confirmed fractal swing high (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) on M5 and on the structure frame that no M5 close has gone above since it was known, and (b) the high of the departure, from its first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
+- **No extension rule**: a zone sits at the origin of its departure.
+- **Selection**: among this strategy's confirmed zones on one bar, the most stars, then the nearest entry. The competition is among BUY zones only.
+
+## Zone score and premium/discount (`zonescore.go`, `dealing.go`)
+
+Points per fact: fresh (never touched) 3 · touched once 1 · a demand base 1.5 · a key level inside 2 · a round number inside 1 · a sell-side pool just below 2 · each distinct unswept session low in or just below 2 · the zone wholly in the discount half of the dealing range `pd_position_score` (2) · a grade-A bullish sweep into the zone 2 · inside a demand zone of this strategy on a higher frame 3 · an unbroken trendline through it 1.5. The facts (key levels, pools, session levels, sweeps, trendlines, `round_step`) are read from the frames. The zone's frame's dealing range is built from its last confirmed swing high and low (`structure_pivot_bars`) and extended by every high and low since: it always contains price ([premium-discount](premium-discount.md)). Premium/discount is a score input, never a gate.
+
+## Qualification and evidence
+
+The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the zone's touches, a fibonacci touch). Evidence codes: `m5_demand_zone_confirmed`, `m5_demand_zone_rejection_confirmed`, `htf_zone_<tf>`, `m5_demand_zone_discount` (the points were awarded), `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measures `room_r` and `pd_position`.
+
+## Refusals
+
+`strategy_refused{symbol, strategy="demand", structure_timeframe, reason}` (a Go counter; `reason` is `no_target_room`). A structure is counted once per evaluation; the counter never blocks one.
+
+## Configuration
+
+Every key of `analysis.strategies.demand` has a consumer in the package and every key the package reads is there; the engine injects only the instrument scale (`pip_size`, `round_step`, `entry_max_width_price`, the stop envelope) and the shared confluence rubric. `minimum_strength` (read only by the deleted resting path) and `minimum_target_distance_atr` (replaced by `minimum_target_r`) of v6 are gone; `higher_timeframes` became `structure_timeframes`.
+
+## Measured against v6
+
+See the pull request that introduced v7. Commit A moved the code and was proven identical to master by replay. One thing master did is not kept: **the v6 demand publisher took the best decision of the bar across supply AND demand zones and published it only if it was a BUY**, so a stronger supply reaction on the same bar suppressed a demand setup (supply v7 removed the mirror of this). v7 selects among BUY zones only. The figures are publish counts, not profit: no capture here knows what a published setup went on to do.
+
+## History
+
+### Spent zones (v3)
 
 A confirmed reaction on a zone already touched more than `maximum_zone_touches` (2) times no longer publishes; the frozen Python publishers had no such limit (the parameter is opt-in, default 0 = unlimited, and the parity golden still proves the frozen contract with it off). Replay of the 2026-09-14 to 10-14 captures, hypothetical causal fills, per side and half (dev before 2026-10-07 / out of sample after): zones touched 3 or more times -0.31 / -0.39R; touched at most once -0.08 / -0.22R. Hypothetical mean over all filled setups moved from -0.18R to -0.17R, 95% interval [-0.29, -0.04]. The rule was chosen after looking at both halves, so the out-of-sample figure is a consistency check, not an independent test.
 
@@ -9,105 +59,10 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 
 **Reaction after formation (Q2).** The zone exists once its displacement leg has ended (`Zone.BreakIndex`); a touch or confirmation on the leg's own bars is its formation, not a reaction to it (252 of 1,894 replayed confirmed Demand opportunities were of that kind; a later valid reaction replaced 55).
 
-## Strategy ID / version
 
-`demand`, `v6`. Implemented in `analysis-engine/internal/strategy/demand`.
-Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
+- v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
+- v7: the package owns its mechanism and its zone score; M15/H1 structure only; room refusal; no competition with supply; the corrected dealing range.
 
-## Purpose / thesis
+## Release
 
-A still-valid, currently price-relevant canonical Demand zone is a
-standing buy reaction zone — the buy-side mirror of `supply.md`'s thesis,
-independently implemented (not shared code; see Known old-engine false
-positive below for why that independence matters).
-
-## Supported instruments / timeframes
-
-Any symbol; single timeframe `M5`.
-
-## Required regime / structure / liquidity / location
-
-- Zone `Kind == KindDemand`.
-- `State` is `Fresh` or `Touched`.
-- `Relevance` is `Immediate` or `Nearby`.
-- `Strength >= minimum_strength`.
-- A `LiquidityBuySide` pool exists at least `minimum_target_distance_atr`
-  above the zone's high.
-- `ctx.Volatility.ATR > 0`.
-
-## Formation / trigger / confirmation
-
-Owned by `internal/zone`. This strategy re-evaluates structural validity
-+ current relevance fresh on every call.
-
-## Entry / invalidation / target
-
-- **Entry**: the zone's own band.
-- **Invalidation**: `zone.Low - invalidation_buffer_atr * ATR`.
-
-**Reaction-anchored invalidation (v4).** A candidate with a confirmed reaction publishes the far edge of the structure or, if the bars from the touch to the confirmation traded beyond it, that extreme, in both cases one `invalidation_buffer_atr*ATR` further out (Buy: `min(structure low, lowest low touch..confirm) - buffer`; Sell: `max(structure high, highest high touch..confirm) + buffer`). A sweep or strong reclaim is confirmed by a wick that pierces the band, and a stop inside that wick has already been traded. The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries the evidence code `invalidation_beyond_reaction_extreme`. A resting candidate (no confirmation) keeps the structural price, and the fixed-reward:risk fallback target, the quality geometry and the published invalidation follow the new price. Measured on the committed captures in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged (`LEGACY_PARITY_PROVEN`); the invalidation differs from the frozen publisher by design.
-- **Target**: the nearest `LiquidityBuySide` pool's high, at least
-  `minimum_target_distance_atr * ATR` from entry.
-
-**Instrument stop budget (v5).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
-
-**Higher-timeframe structure (v6).** The setup is found on M15/H1 structure and confirmed and executed on M5 (`higher_timeframes: [M15, H1]`). The higher frame's zones are judged as facts (spent, invalidated, width, fill and minimum, body and BOS), not by its last close; the M5 price decides whether the entry is valid. The M5 reaction confirms, the entry band is the proximal slice, and the stop is beyond the whole higher-timeframe zone and the M5 reaction extreme, plus `invalidation_buffer_atr` x the M5 detector ATR. The candidate carries `StructureTimeframe` and the evidence `htf_zone_<tf>`. Measured in [htf-zone-structure.md](htf-zone-structure.md).
-
-## Expiry
-
-`expiry_hours` after the zone's own most recent real timestamp.
-
-## Failure cases / anti-patterns
-
-Same shape as Supply's: below-threshold strength, no opposing liquidity,
-zero ATR — all reject rather than fabricate a degraded candidate.
-
-## Quality components / evidence codes
-
-`freshness_quality` only (`Overall` is that value). Q3: `zone_strength_quality` (it republished `Strength = 1`) and `relevance_quality` (a constant for `Immediate`) are no longer published: they described the detector's admission rule, not how good this zone is, and made `Overall` look like a measurement. See [quality](../analysis-engine.md#acceptance-and-quality).
-
-Evidence codes: `m5_demand_zone_<state>`, `m5_demand_zone_relevance_<relevance>`,
-`m5_demand_zone_layer_<layer>`.
-
-## Bullish / bearish examples
-
-Demand is Buy-only. Example: a Fresh, Immediate, `Strength=0.8` demand
-zone at 2020–2022 with a buy-side pool at 2031–2032 and ATR=1.0 produces
-a Buy candidate with invalidation at 2019.5 and target 2032.
-
-## Valid / invalid examples
-
-Valid: as above. Invalid: `State=Invalidated`, `Relevance=Dormant`, or no
-buy-side liquidity above (`test/strategy/demand/demand_test.go`).
-
-## Higher-timeframe zones
-
-The tradable path is the confirmed reaction: the frozen technique publisher
-reads the M5 frame's demand instances and a rejection on M5 bars (the resting
-zone above is an observation only; Algo Bot executes confirmed reactions).
-The frozen Python publishers read the M5 zone population alone. With
-`higher_timeframes: [M15]` (set in `config/analysis.yml`) the M15 frame's own
-demand zones, built by the same collection on M15 bars and ATR, are also
-evaluated against the M5 closed bars: same reaction confirmation, entry
-validity, entry clip and stop rules.
-
-- A higher-timeframe zone is anchored to the M5 bar of the same open time (an
-  origin older than the M5 window is dropped) and never joins the confluence
-  bands, so every M5 decision is unchanged: it is a second, separate candidate
-  (`technique:supply_demand:<side>:<origin>@M15`) carrying the extra evidence code
-  `htf_zone_m15`, and arbitration treats it like any other same-thesis
-  competitor.
-- This is the one deliberate extension of the frozen contract; there is no
-  Python oracle for it. Evidence: the replay of the 14-21 Sep and the 7 Oct XAU
-  captures keeps every previous envelope byte-identical (none removed or
-  changed) and adds M15 reactions only; that shows what is emitted, not whether
-  it earns. Remove `higher_timeframes` to turn it off.
-
-## Status and execution
-
-- **Certification**: `LEGACY_PARITY_PROVEN` ([catalog](README.md#catalog)).
-- **Symbols**: all instruments.
-- **Execution**: Trades on every instrument.
-- **Arbitration**: opportunities on the same symbol and direction that share a
-  thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
-  (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).
+Deploy the Python bot first (or together with Go). If `config/analysis.yml` is rendered from `st-mich43l/ansible-library`, the `strategies.demand` block changed shape (`higher_timeframes` -> `structure_timeframes`, new keys, two removed); that repository was not edited. Opportunity ids change once at deploy (the strategy version is part of the id).

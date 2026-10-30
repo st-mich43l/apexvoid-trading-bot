@@ -14,8 +14,8 @@ import (
 // owns it. Points per fact (the values the shared zone score always used):
 //
 //	fresh (never touched) 3 · touched once 1 · a supply/demand base 1.5 · a key level inside 2 · a round number inside 1 · a buy-side liquidity pool just above 2
-//	· each unswept session high in or just above 2 · price in the premium half of the dealing range 2 · a grade-A bearish sweep into the zone 2
-//	· inside a higher-timeframe supply zone 3 · an unbroken trendline through it 1.5
+//	· each unswept session high in or just above 2 · the zone in the premium half of the dealing range (pd_position_score, 2) · a grade-A bearish sweep into
+//	the zone 2 · inside a higher-timeframe supply zone of this strategy 3 · an unbroken trendline through it 1.5
 const (
 	freshScore        = 3.0
 	singleTouchScore  = 1.0
@@ -32,51 +32,37 @@ const (
 
 // scoreInputs are the facts a zone is scored against, all read from frames.
 type scoreInputs struct {
-	levels      []techniquezone.Level
-	pools       []techniquezone.Pool
-	roundStep   float64
-	sessions    []techniquezone.SessionRef
-	hasEq       bool
-	equilibrium float64
-	grabs       []techniquezone.Grab
-	lineValues  []float64
-	pip         float64
-	higher      []techniquezone.Zone // the zones of the frames above this one
+	levels     []techniquezone.Level
+	pools      []techniquezone.Pool
+	roundStep  float64
+	sessions   []techniquezone.SessionRef
+	pd         dealingBand // the dealing range of the zone's frame
+	pdScore    float64
+	grabs      []techniquezone.Grab
+	lineValues []float64
+	pip        float64
+	higher     []band // this strategy's own zones on the frames above this one
 }
 
-// inputsFor reads a frame's scoring facts. higher are the frames with a longer period than the zone's own frame.
-func (s *Strategy) inputsFor(frame *analysiscontext.LegacyFrame, higher []*analysiscontext.LegacyFrame) scoreInputs {
-	in := scoreInputs{levels: frame.Levels, pools: frame.Pools, roundStep: s.cfg.RoundStep, sessions: frame.Sessions, grabs: frame.Grabs, pip: s.cfg.PipSize}
-	if frame.Range != nil {
-		in.hasEq, in.equilibrium = true, float64(frame.Range.Equilibrium)
-	}
+// band is a price range: a supply zone this strategy found on a higher frame.
+type band struct{ Low, High float64 }
+
+// inputsFor reads a frame's scoring facts. higher are this strategy's own zones on the frames with a longer period than the zone's own frame; pd is the dealing
+// range of the zone's frame (dealingRange).
+func (s *Strategy) inputsFor(frame *analysiscontext.LegacyFrame, tf market.Timeframe, execBars []market.Candle, higher []band) scoreInputs {
+	in := scoreInputs{levels: frame.Levels, pools: frame.Pools, roundStep: s.cfg.RoundStep, sessions: frame.Sessions, grabs: frame.Grabs, pip: s.cfg.PipSize, higher: higher, pdScore: s.cfg.PDPositionScore}
+	in.pd = dealingRange(frame.Bars, frame.ATR, tf, execBars, s.cfg.StructurePivotBars)
 	last := len(frame.Bars) - 1
 	for _, line := range frame.Trendlines {
 		if line.BrokenAt == nil {
 			in.lineValues = append(in.lineValues, float64(trendline.ValueAt(line, last)))
 		}
 	}
-	for _, h := range higher {
-		in.higher = append(in.higher, h.Zones...)
-	}
 	return in
 }
 
-// higherFrames are the frames of the context with a longer period than tf.
-func higherFrames(ctx *analysiscontext.MarketContext, tf market.Timeframe) []*analysiscontext.LegacyFrame {
-	minutes, _ := tf.Minutes()
-	var out []*analysiscontext.LegacyFrame
-	for other, frameContext := range ctx.Timeframes {
-		if m, ok := other.Minutes(); ok && m > minutes && frameContext != nil && frameContext.Legacy != nil {
-			out = append(out, frameContext.Legacy)
-		}
-	}
-	return out
-}
-
-// scoreZone is the score of one supply zone.
-func scoreZone(z zone, in scoreInputs) float64 {
-	score := 0.0
+// scoreZone is the score of one supply zone and whether it was awarded the premium points.
+func scoreZone(z zone, in scoreInputs) (score float64, premium bool) {
 	switch z.Touches {
 	case 0:
 		score += freshScore
@@ -97,14 +83,15 @@ func scoreZone(z zone, in scoreInputs) float64 {
 		score += liquidityScore
 	}
 	score += sessionLevelScore * float64(sessionConfluences(z, in.sessions, in.pip))
-	if in.hasEq && z.Low >= in.equilibrium {
-		score += pdPositionScore
+	if in.pd.OK && z.Low >= in.pd.equilibrium() {
+		score += in.pdScore
+		premium = in.pdScore > 0
 	}
 	if hasSweepA(z, in.grabs, in.pip) {
 		score += sweepAScore
 	}
 	for _, h := range in.higher {
-		if h.Side == "supply" && z.Low >= h.Low() && z.High <= h.High() {
+		if z.Low >= h.Low && z.High <= h.High {
 			score += htfZoneScore
 			break
 		}
@@ -115,7 +102,7 @@ func scoreZone(z zone, in scoreInputs) float64 {
 			break
 		}
 	}
-	return score
+	return score, premium
 }
 
 func overlapsLevel(z zone, level techniquezone.Level) bool {
