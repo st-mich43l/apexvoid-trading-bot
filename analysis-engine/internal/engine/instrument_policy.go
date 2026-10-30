@@ -434,6 +434,7 @@ func applyOwnedScale(settings *Settings) {
 			params[k] = v
 		}
 		params["pip_size"] = settings.LegacyRead.PipSize
+		params["round_step"] = settings.LegacyRead.RoundStep
 		params["entry_max_width_price"] = settings.TechniqueZones.Technique.FVGEntryMaxWidthPrice
 		params["confluence_scoring_version"] = settings.Confluence.ScoringVersion
 		params["confluence_star_three_ratio"] = settings.Confluence.StarThreeRatio
@@ -471,6 +472,9 @@ func applyLegacyDetector(settings *Settings) {
 		params["fibonacci_confluence_weight"] = settings.Confluence.FibonacciWeight
 		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
 		params["price_digits"] = float64(settings.Geometry.PriceDigits)
+		if settings.Strategies[i].ID == "demand" {
+			params["round_step"] = settings.LegacyRead.RoundStep // the zone score the strategy owns reads it
+		}
 		params["technique_retest_max_touches"] = float64(settings.TechniqueZones.Technique.RetestMaxTouches)
 		settings.Strategies[i].Parameters = params
 	}

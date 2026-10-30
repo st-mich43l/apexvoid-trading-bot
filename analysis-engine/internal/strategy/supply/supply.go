@@ -72,7 +72,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		if frameContext == nil || frameContext.Legacy == nil {
 			continue
 		}
-		found := s.structureInstances(frameContext.Legacy, tf)
+		found := s.structureInstances(ctx, frameContext.Legacy, tf)
 		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found, s.cfg.BindWithinExecutionWindow)...)
 	}
 	d := s.best(base, instances, func(in instance, reason string) {

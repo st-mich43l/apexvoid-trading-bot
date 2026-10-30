@@ -57,14 +57,14 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	if !ok {
 		return nil
 	}
-	exec := s.frameInstances(base.frame, true)
+	exec := s.frameInstances(ctx, base.frame, market.M5, true)
 	var higher []instance
 	for _, tf := range s.cfg.HigherTimeframes {
 		frameContext := ctx.Timeframes[tf]
 		if frameContext == nil || frameContext.Legacy == nil {
 			continue
 		}
-		higher = append(higher, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, s.frameInstances(frameContext.Legacy, false))...)
+		higher = append(higher, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, s.frameInstances(ctx, frameContext.Legacy, tf, false))...)
 	}
 	var out []opportunity.Candidate
 	for _, d := range []*decision{s.best(base, exec), s.best(base, higher)} {
