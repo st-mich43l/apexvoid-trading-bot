@@ -1,8 +1,10 @@
-# Fair Value Gap (fvg v8)
+# Fair Value Gap (fvg v9)
 
 ## Strategy ID / version
 
-`fvg`, `v8`. Implemented in `analysis-engine/internal/strategy/fvg`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.fvg`.
+`fvg`, `v9`. Implemented in `analysis-engine/internal/strategy/fvg`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.fvg`.
+
+**v9 (sweep gate, 31 Oct 2026).** A gap is traded only when the impulse that made it followed a sweep of resting liquidity in its favour (`require_prior_sweep: true`, refusal `no_prior_sweep`). The structure break (BOS/CHoCH) by the impulse is measured, computed by this package causally, and never a gate. The research, the sweep test and the measurements are in [liquidity-sweep-and-structure](liquidity-sweep-and-structure.md); the gate is on by owner decision on weak evidence and is to be confirmed or removed from forward-labelled outcomes.
 
 **v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
 
@@ -41,15 +43,25 @@ A touch without a rejection is counted `no_rejection`; a rejection that is too o
 - **Leg extension** (`entry_at_leg_extreme`): the leg runs from the lowest low of the structure frame from `leg_lookback_bars` before the gap's first candle to the impulse extreme. A leg of at least `extension_minimum_leg_atr` of the structure frame's ATR whose extreme the entry has retraced by less than `minimum_leg_retracement` is refused. It is not a premium/discount gate: it applies only to a stretched leg and only to the gap that leg printed.
 - When both room and extension apply, both are counted.
 
+## The prior sweep (`sweep.go`)
+
+For the impulse whose first candle is bar *s* of the gap's own frame (the gap's first candle: two bars before the one that completed it), in favour of the gap's side (BUY described, SELL mirrors): within `sweep_lookback_bars` (6) before *s*, *s* included, a bar traded through a level of sell-side liquidity known before that bar:
+
+- `swing`: a fractal low of `sweep_pivot_bars` (2) bars on each side of this package's own detection, already confirmed at the bar before, formed within `sweep_level_max_age_bars` (96) bars of the sweeping bar and not traded below by any bar since its confirmation;
+- `pdl` (SELL: `pdh`): the previous trading day's low, finalized and available at the open of the sweeping bar (the frame's session levels, built from the whole history);
+- `session`: a finalized Asia or London low (SELL: high) available at the open of the sweeping bar.
+
+The earliest sweeping bar decides; on one bar `pdl`/`pdh` outranks `session` outranks `swing`, and within a kind the deepest sweep. Nothing after the bars of the frame is read. `require_prior_sweep: false` runs the same test, publishes it and never refuses. The gate is the last test of a setup that would otherwise publish, so `no_prior_sweep` counts what the gate cost.
+
 ## Qualification and evidence
 
 The shared confluence rubric (stars, floor `confluence_floor`) with factors that are measured, not assumed: `WickRejection` (the wick branch), `DisplacementGrade` (the engulfing branch, or the gap's middle candle with a body of at least one structure ATR), `HTFAligned`, `Touches`, `FibTouch` (`fibonacci_enabled`) and `StructuralAgreement` only when the rejecting bar closed through the most recent M5 swing in the trade direction that was already confirmed before it.
 
-Evidence codes (unchanged): `m5_fvg_zone_confirmed`, `m5_fvg_rejection_confirmed`, `htf_zone_<tf>`, `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions as before plus the measures `room_r`, `leg_retracement` and `formation_steepness_atr_per_bar` (|third close - first open| / 3 / the structure frame's ATR).
+Evidence codes: `m5_fvg_zone_confirmed`, `m5_fvg_rejection_confirmed`, `htf_zone_<tf>`, `invalidation_beyond_reaction_extreme`, the stop budget code; v9 adds `m5_fvg_prior_sweep_<swing|pdl|pdh|session>` and `m5_fvg_break_bos` / `m5_fvg_break_choch` (a candle of the gap's three-candle impulse closed beyond the most recent confirmed swing of the other side; kind judged by the structure as of that bar). Neither is a confluence factor. Quality (informational, never a gate): the zone-family dimensions as before plus the measures `room_r`, `leg_retracement` and `formation_steepness_atr_per_bar` (|third close - first open| / 3 / the structure frame's ATR), and from v9 `prior_sweep` (0/1; always 1 with the gate on), `sweep_depth_atr`, `sweep_reclaimed` (0/1, only with a sweep) and `break_kind` (1 BOS, -1 CHoCH, 0 none). Nothing reads them to rank or refuse.
 
 ## Refusals
 
-`strategy_refused{symbol, strategy="fvg", structure_timeframe, reason}` (a Go counter; `reason` is `gap_small`, `displacement_weak`, `displacement_direction`, `gap_closed_through`, `no_rejection`, `stale_confirmation`, `no_target_room` or `entry_at_leg_extreme`). A structure is counted once per evaluation; the counter never blocks one. It replaces `fvg_definition_refused`.
+`strategy_refused{symbol, strategy="fvg", structure_timeframe, reason}` (a Go counter; `reason` is `gap_small`, `displacement_weak`, `displacement_direction`, `gap_closed_through`, `no_rejection`, `stale_confirmation`, `no_target_room`, `entry_at_leg_extreme` or, from v9, `no_prior_sweep`). A structure is counted once per evaluation; the counter never blocks one. It replaces `fvg_definition_refused`. `strategy_feature{symbol, strategy, structure_timeframe, feature, value}` counts, per created opportunity, `prior_sweep` (0/1) and `break_kind` (bos/choch/none): the cheap live tally of the published population before outcome labels exist.
 
 ## Configuration
 
@@ -65,6 +77,7 @@ See the pull request that introduced v7: commit A moved the code and was proven 
 - v6 (owner report 2026-10-28): the gap definition. Trades were labelled FVG where the chart shows no gap; measured on XAU, 68% of M15 gaps and all H1 gaps were under 0.5 ATR of their own frame. The thresholds (0.5 / 0.5 / 0.5) are the iFVG v3 contract, nothing was fitted to results. Of 1,266 replayed v5 candidates over 613 distinct gaps, 453 (36%) were refused.
 - v7: the package owns its mechanism; M15/H1 structure only; close-through death; measured confirmation; room and leg-extension refusals.
 - v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
+- v9: the prior-sweep gate and the causal, measured structure break ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)). Rollback: `require_prior_sweep: false`.
 
 ## Contract and card (display only)
 

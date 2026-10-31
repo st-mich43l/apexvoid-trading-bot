@@ -14,8 +14,8 @@ import (
 )
 
 // A hand-built market with a bullish M15 order block. Everything is derived from the M5 path: the M15 frame is the aggregate of complete M15 candles, exactly
-// as the engine builds it, so cutting the path at any M5 bar gives the context of that moment. The structure break the engine's frame would report is given
-// explicitly (a fact of the frame).
+// as the engine builds it, so cutting the path at any M5 bar gives the context of that moment. The swing the leg breaks is given explicitly (a fact of the
+// frame): the strategy computes its structure breaks itself, causally, from the swings it is handed.
 //
 //	bars 0-59   a flat chop around 210.00 (no leg, no block)
 //	bars 60-62  M15 candle 20: the last bearish candle, body 209.80-210.00           => the block (demand)
@@ -75,27 +75,32 @@ func aggregate(m5 []market.Candle) []market.Candle {
 	return out
 }
 
-func frame(bars []market.Candle, atr float64, breaks []techniquezone.Break) *analysiscontext.LegacyFrame {
+func frame(bars []market.Candle, atr float64, swings []techniquezone.Swing) *analysiscontext.LegacyFrame {
 	series := make([]float64, len(bars))
 	for i := range series {
 		series[i] = atr
 	}
-	return &analysiscontext.LegacyFrame{Bars: bars, ATR: series, DetectorATR: atr, Breaks: breaks}
+	return &analysiscontext.LegacyFrame{Bars: bars, ATR: series, DetectorATR: atr, Swings: swings}
 }
 
-// contextAt is the market after the closed M5 bar `last` of path. The M15 frame reports the BOS of candle 22 once that candle has closed.
+// breakSwing is the swing high (low, mirrored) that M15 candle 22 closes beyond: confirmed at candle 22, so the BOS is dated at candle 22 and not before.
+func breakSwing(kind string, price float64) []techniquezone.Swing {
+	return []techniquezone.Swing{{Index: 21, Kind: kind, Price: price, ConfirmedIndex: 22}}
+}
+
+// contextAt is the market after the closed M5 bar `last` of path. The M15 frame holds the swing candle 22 breaks once that candle has closed.
 func contextAt(path []tick, last int, htf string) *analysiscontext.MarketContext {
 	m5 := candles(path[:last+1])
 	m15 := aggregate(m5)
-	var breaks []techniquezone.Break
+	var swings []techniquezone.Swing
 	if len(m15) > 22 {
-		breaks = append(breaks, techniquezone.Break{Kind: "BOS", Direction: "up", Level: px(210.30), Index: 22})
+		swings = breakSwing("high", px(210.30))
 	}
 	return &analysiscontext.MarketContext{
 		Symbol: "GBPJPY",
 		Timeframes: map[market.Timeframe]*analysiscontext.TimeframeContext{
 			market.M5:  {Timeframe: market.M5, Legacy: frame(m5, m5ATR, nil)},
-			market.M15: {Timeframe: market.M15, Legacy: frame(m15, m15ATR, breaks)},
+			market.M15: {Timeframe: market.M15, Legacy: frame(m15, m15ATR, swings)},
 		},
 		Legacy: &analysiscontext.LegacyRead{LocalStructure: "up", HTFBias: htf},
 	}
@@ -169,7 +174,7 @@ func TestDetectsTheBlockAndPublishesTheConfirmedReaction(t *testing.T) {
 	if target.Label != "nearest_opposing_structure" || math.Abs(float64(target.Price)-px(210.78)) > 1e-9 {
 		t.Errorf("target %v %q, want the 210.78 impulse extreme", target.Price, target.Label)
 	}
-	if c.StrategyVersion != "v8" || c.StructuralID != "technique:order_block:buy:"+itoa(startTime+60*m5Seconds)+"@M15" {
+	if c.StrategyVersion != "v9" || c.StructuralID != "technique:order_block:buy:"+itoa(startTime+60*m5Seconds)+"@M15" {
 		t.Errorf("version %q id %q", c.StrategyVersion, c.StructuralID)
 	}
 }
@@ -196,7 +201,7 @@ func TestTheSellMirrorIsTheSameBlockInverted(t *testing.T) {
 		Symbol: "GBPJPY",
 		Timeframes: map[market.Timeframe]*analysiscontext.TimeframeContext{
 			market.M5:  {Timeframe: market.M5, Legacy: frame(m5, m5ATR, nil)},
-			market.M15: {Timeframe: market.M15, Legacy: frame(m15, m15ATR, []techniquezone.Break{{Kind: "BOS", Direction: "down", Index: 22}})},
+			market.M15: {Timeframe: market.M15, Legacy: frame(m15, m15ATR, breakSwing("low", px(420-210.30)))},
 		},
 		Legacy: &analysiscontext.LegacyRead{LocalStructure: "down", HTFBias: "down"},
 	}

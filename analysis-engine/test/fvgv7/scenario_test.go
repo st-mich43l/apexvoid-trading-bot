@@ -10,12 +10,14 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/fvg"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // A hand-built market in which a bullish M15 gap forms on M5 bars 66-68 and price comes back to it. Everything is derived from the M5 path: the M15 frame
 // is the aggregate of complete M15 candles, exactly as the engine builds it, so cutting the path at any M5 bar gives the context of that moment.
 //
-//	bars 0-59   a flat chop around 210.00 (no gap, no pivot)
+//	bars 0-59   a flat chop around 210.00 (no gap, no pivot); bar 58 dips to 209.90 and closes back: it trades through the previous day's low (209.95),
+//	            the liquidity the gap's impulse follows (the sweep fvg v9 requires)
 //	bars 60-62  candle a (the gap's first): high 210.10
 //	bars 63-65  candle b (the displacement): 210.08 -> 210.60
 //	bars 66-68  candle c (the third): low 210.42, high 211.00      => gap 210.10-210.42 (1.07 M15 ATR)
@@ -42,6 +44,7 @@ func basePath() []tick {
 	for i := 0; i < 60; i++ {
 		path = append(path, chop())
 	}
+	path[58] = tick{210.00, 210.04, 209.90, 210.00}
 	return append(path,
 		tick{210.00, 210.05, 209.98, 210.04}, tick{210.04, 210.08, 210.02, 210.07}, tick{210.07, 210.10, 210.05, 210.08}, // a
 		tick{210.08, 210.30, 210.07, 210.28}, tick{210.28, 210.50, 210.26, 210.48}, tick{210.48, 210.62, 210.45, 210.60}, // b
@@ -77,7 +80,12 @@ func frame(bars []market.Candle, atr float64) *analysiscontext.LegacyFrame {
 	for i := range series {
 		series[i] = atr
 	}
-	return &analysiscontext.LegacyFrame{Bars: bars, ATR: series, DetectorATR: atr}
+	return &analysiscontext.LegacyFrame{Bars: bars, ATR: series, DetectorATR: atr, Sessions: sessions()}
+}
+
+// sessions is the previous day's low, finalized before the first bar.
+func sessions() []techniquezone.SessionRef {
+	return []techniquezone.SessionRef{{Name: "PDL", Price: px(209.95), AvailableAt: startTime}}
 }
 
 // contextAt is the market after the closed M5 bar `last` of path.
@@ -162,7 +170,7 @@ func TestDetectsTheGapAndPublishesTheMeasuredRejection(t *testing.T) {
 	if target.Label != "nearest_opposing_structure" || math.Abs(float64(target.Price)-px(211.00)) > 1e-9 {
 		t.Errorf("target %v %q, want the 211.00 swing high", target.Price, target.Label)
 	}
-	if c.StrategyVersion != "v8" || c.StructuralID == "" {
+	if c.StrategyVersion != "v9" || c.StructuralID == "" {
 		t.Errorf("version %q id %q", c.StrategyVersion, c.StructuralID)
 	}
 }

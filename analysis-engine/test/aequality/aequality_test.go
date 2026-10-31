@@ -625,6 +625,8 @@ func TestSupplyDemandZonesAreNotSpent(t *testing.T) {
 // minimum number of independent facts) and a flag that exists only when it is true.
 var constantByDesign = map[string]bool{
 	"break_retest/break_accept_closes": true, "confluence_zone/independent_fact_count": true,
+	// fvg v9 with require_prior_sweep publishes only gaps that followed a sweep, so prior_sweep is 1 on every one by the gate (0 and 1 when the gate is off).
+	"fvg/prior_sweep": true,
 }
 
 // TestNoStrategyAssertsAConstantAsAMeasurement fails when a component carries the same value on every opportunity of a strategy (twenty or

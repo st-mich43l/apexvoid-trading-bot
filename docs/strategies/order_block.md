@@ -1,6 +1,8 @@
-# Order Block (order_block v8)
+# Order Block (order_block v9)
 
-`order_block`, `v8`. Implemented in `analysis-engine/internal/strategy/orderblock`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.order_block`.
+`order_block`, `v9`. Implemented in `analysis-engine/internal/strategy/orderblock`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.order_block`.
+
+**v9 (causal breaks, 31 Oct 2026).** The package computes its structure breaks itself, causally (`breaks.go`), instead of reading the frame's shared ones. A swing joins the reference set only at the bar that confirms it; a break is the first close beyond the most recent confirmed swing of the other side; BOS against CHoCH is judged by the structure of the swings confirmed BEFORE that bar (the shared labelling dates a break up to `fractal_n` bars early and judges its kind by the trend as of the frame's last bar). The same breaks are used for the block's definition, for the `rejection_choch` confirmation on M5 and for the structure score. The kind of the break that formed the block and the sweep before its leg are measured evidence, never a gate ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)).
 
 **v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
 
@@ -21,7 +23,7 @@ flowchart TD
   BAND --> SIDE["up leg → demand (BUY)<br/>down leg → supply (SELL)"]
 ```
 
-A block stays tradable while it is: not spent (touched more than 30 times, or invalidated: a close beyond the far edge by more than 0.5 ATR that is not reclaimed within 6 bars, or more than 2 reclaimed breaks); at most `maximum_zone_atr` of its frame's ATR wide; not closed through (`ob_closed_through`: ANY close of its own frame after its candle beyond the far edge by more than `confirmed_break_buffer_atr` of that bar's ATR, no reclaim forgiveness: a wick that closes back inside is the sweep, a close is the break); and touched no more than `maximum_zone_touches` (2) times. The entry band is the block's proximal slice, clipped to `entry_max_width_price`. A block only exists from the close of the structure-frame candle that broke structure: a touch before that is its formation, not a reaction.
+A block stays tradable while it is: not spent (touched more than 30 times, or invalidated: a close beyond the far edge by more than 0.5 ATR that is not reclaimed within 6 bars, or more than 2 reclaimed breaks); at most `maximum_zone_atr` of its frame's ATR wide; not closed through (`ob_closed_through`: ANY close of its own frame after its candle beyond the far edge by more than `confirmed_break_buffer_atr` of that bar's ATR, no reclaim forgiveness: a wick that closes back inside is the sweep, a close is the break); and touched no more than `maximum_zone_touches` (2) times. The entry band is the block's proximal slice, clipped to `entry_max_width_price`. A block only exists from the close of the structure-frame candle at which its break became knowable (the breaking close, which is never before the confirmation of the swing it broke): a touch before that is its formation, not a reaction.
 
 The block is bound to the M5 frame by time: its first touchable M5 bar is the first one opening at or after the close of the structure candle that confirmed it.
 
@@ -39,11 +41,11 @@ Unchanged from v6, and owned here: after a touch of the entry band, within `reac
 
 ## Qualification and evidence
 
-The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the block's touches, a fibonacci touch). Evidence codes (unchanged): `m5_order_block_confirmed`, `m5_order_block_rejection_confirmed`, `htf_zone_<tf>`, `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measure `room_r`.
+The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the block's touches, a fibonacci touch). Evidence codes: `m5_order_block_confirmed`, `m5_order_block_rejection_confirmed`, `htf_zone_<tf>`, `invalidation_beyond_reaction_extreme`, the stop budget code; v9 adds `m5_order_block_break_bos` / `m5_order_block_break_choch` (the kind of the causal break that formed the block, judged by the structure as of that bar) and `m5_order_block_prior_sweep_<swing|pdl|pdh|session>` (a bar from `sweep_lookback_bars` before the leg's first candle through that candle traded through a level of resting liquidity; the same test as fvg's, this package's own copy). Neither is a confluence factor. Quality (informational, never a gate): the zone-family dimensions plus the measure `room_r`, and from v9 `break_kind` (1 BOS, -1 CHoCH), `prior_sweep` (0/1) and `sweep_depth_atr`. Nothing reads them to rank or refuse; the research found no benefit in either for order blocks.
 
 ## Refusals
 
-`strategy_refused{symbol, strategy="order_block", structure_timeframe, reason}` (a Go counter; `reason` is `ob_closed_through` or `no_target_room`). A structure is counted once per evaluation; the counter never blocks one. It replaces `ob_definition_refused`.
+`strategy_refused{symbol, strategy="order_block", structure_timeframe, reason}` (a Go counter; `reason` is `ob_closed_through` or `no_target_room`). A structure is counted once per evaluation; the counter never blocks one. It replaces `ob_definition_refused`. `strategy_feature{symbol, strategy, structure_timeframe, feature, value}` counts, per created opportunity, `prior_sweep` (0/1) and `break_kind` (bos/choch).
 
 ## Lifecycle of a published block (engine, unchanged)
 
@@ -63,6 +65,7 @@ See the pull request that introduced v7: commit A moved the code and was proven 
 - v6 (production 28-29 Oct 2026): the close-break rule and the touch limit ([order-block-definition](order-block-definition.md)).
 - v7: the package owns its mechanism; M15/H1 structure only; room refusal.
 - v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
+- v9: causal structure breaks owned by the package; break kind and prior sweep as measured evidence ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)). Rollback: revert the version.
 
 ## Release
 
