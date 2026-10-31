@@ -139,6 +139,7 @@ config/              the one non-secret configuration authority (YAML)
 contracts/           cross-service schemas and parity fixtures
 deployment-template/ production Compose / Ansible templates
 docs/                architecture, execution, configuration, operations, strategies
+tradingview/          Pine indicators for discretionary chart analysis
 ```
 
 ## Quick start
