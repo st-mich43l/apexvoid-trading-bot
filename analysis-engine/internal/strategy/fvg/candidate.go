@@ -8,6 +8,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 const fixedRewardRisk = "fixed_reward_risk"
@@ -16,6 +17,8 @@ const (
 	zoneEvidence      = "m5_fvg_zone_confirmed"
 	confirmedEvidence = "m5_fvg_rejection_confirmed"
 	invalidationLabel = "fvg_invalidated"
+	// priorSweepEvidencePrefix is followed by the kind of the liquidity the gap's impulse swept: swing, pdl, pdh or session (measured; sweep.go).
+	priorSweepEvidencePrefix = "m5_fvg_prior_sweep_"
 	// reactionExtremeEvidence marks a stop that the reaction's own traded extreme set (it lay beyond the whole gap).
 	reactionExtremeEvidence = "invalidation_beyond_reaction_extreme"
 )
@@ -71,6 +74,12 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	}
 	if d.budgetCode != "" {
 		evidence = append(evidence, d.budgetCode)
+	}
+	if d.sweep.Found {
+		evidence = append(evidence, priorSweepEvidencePrefix+d.sweep.Kind)
+	}
+	if d.hasBreak {
+		evidence = append(evidence, breakEvidence(d.brk))
 	}
 	scored := s.quality(d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
@@ -160,5 +169,39 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Measure("room_r", d.room.RoomR)
 	m.Measure("leg_retracement", d.room.Retracement)
 	m.Measure("formation_steepness_atr_per_bar", v.steepness(d.inst))
+	// The sweep and the structure break are measured facts of the impulse, never scores: nothing reads them to rank or to refuse (the sweep refuses only as
+	// the require_prior_sweep gate, before this point).
+	m.Measure("prior_sweep", boolMeasure(d.sweep.Found))
+	if d.sweep.Found {
+		m.Measure("sweep_depth_atr", d.sweep.Depth)
+		m.Measure("sweep_reclaimed", boolMeasure(d.sweep.Reclaimed))
+	}
+	m.Measure("break_kind", breakKindMeasure(d.brk, d.hasBreak))
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
+}
+
+// breakEvidence names the causal structure break by the gap's impulse.
+func breakEvidence(brk techniquezone.Break) string {
+	if brk.Kind == breakCHoCH {
+		return "m5_fvg_break_choch"
+	}
+	return "m5_fvg_break_bos"
+}
+
+// breakKindMeasure is the break_kind quality measure: 1 a BOS, -1 a CHoCH, 0 no break by the impulse.
+func breakKindMeasure(brk techniquezone.Break, has bool) float64 {
+	switch {
+	case !has:
+		return 0
+	case brk.Kind == breakCHoCH:
+		return -1
+	}
+	return 1
+}
+
+func boolMeasure(v bool) float64 {
+	if v {
+		return 1
+	}
+	return 0
 }

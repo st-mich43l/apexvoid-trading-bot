@@ -16,6 +16,8 @@ const (
 	zoneEvidence      = "m5_order_block_confirmed"
 	confirmedEvidence = "m5_order_block_rejection_confirmed"
 	invalidationLabel = "order_block_invalidated"
+	// priorSweepEvidencePrefix is followed by the kind of the liquidity the block's leg swept: swing, pdl, pdh or session (measured; sweep.go).
+	priorSweepEvidencePrefix = "m5_order_block_prior_sweep_"
 	// reactionExtremeEvidence marks a stop that the reaction's own traded extreme set (it lay beyond the whole block).
 	reactionExtremeEvidence = "invalidation_beyond_reaction_extreme"
 )
@@ -71,6 +73,12 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	}
 	if d.budgetCode != "" {
 		evidence = append(evidence, d.budgetCode)
+	}
+	if d.inst.BreakKind != "" {
+		evidence = append(evidence, breakEvidence(d.inst.BreakKind))
+	}
+	if d.sweep.Found {
+		evidence = append(evidence, priorSweepEvidencePrefix+d.sweep.Kind)
 	}
 	scored := s.quality(d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
@@ -158,5 +166,34 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
 	m.Measure("room_r", d.room.RoomR)
+	// The break that made the block and the sweep before its leg are measured facts, never scores: nothing reads them to rank or to refuse.
+	m.Measure("break_kind", breakKindMeasure(d.inst.BreakKind))
+	m.Measure("prior_sweep", boolMeasure(d.sweep.Found))
+	if d.sweep.Found {
+		m.Measure("sweep_depth_atr", d.sweep.Depth)
+	}
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
+}
+
+// breakEvidence names the kind of the causal structure break that qualified the block.
+func breakEvidence(kind string) string {
+	if kind == breakCHoCH {
+		return "m5_order_block_break_choch"
+	}
+	return "m5_order_block_break_bos"
+}
+
+// breakKindMeasure is the break_kind quality measure: 1 a BOS, -1 a CHoCH.
+func breakKindMeasure(kind string) float64 {
+	if kind == breakCHoCH {
+		return -1
+	}
+	return 1
+}
+
+func boolMeasure(v bool) float64 {
+	if v {
+		return 1
+	}
+	return 0
 }

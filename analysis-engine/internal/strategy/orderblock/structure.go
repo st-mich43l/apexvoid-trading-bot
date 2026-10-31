@@ -48,9 +48,10 @@ type leg struct {
 type block struct {
 	Side       string // "buy" | "sell"
 	Low, High  float64
-	Origin     int // index of the block's own candle on its frame
-	LegStart   int // index of the first candle of the displacement leg that broke structure
-	BreakIndex int // the structure break that qualified the block
+	Origin     int    // index of the block's own candle on its frame
+	LegStart   int    // index of the first candle of the displacement leg that broke structure
+	BreakIndex int    // the structure break that qualified the block
+	BreakKind  string // BOS | CHoCH, judged by the structure as of the breaking bar (breaks.go)
 	Touches    int
 	Mitigated  bool
 	Score      float64
@@ -75,6 +76,7 @@ type instance struct {
 	FrameOrigin    int                          // the block's own candle on that frame
 	FrameConfirmed int                          // the later of the block's candle and its structure break on that frame
 	LegStart       int                          // the displacement leg's first candle on that frame
+	BreakKind      string                       // the kind of the causal break that qualified the block
 }
 
 func (i instance) structural() (float64, float64) {
@@ -159,17 +161,18 @@ func (s *Strategy) displacement(bars []market.Candle, atr []float64) []leg {
 	return legs
 }
 
-// causingBreak is the structure break (BOS or CHoCH) of the leg's direction that happened inside the leg.
-func causingBreak(l leg, breaks []techniquezone.Break) (int, bool) {
+// causingBreak is the structure break (BOS or CHoCH) of the leg's direction that happened inside the leg. The breaks are the strategy's own causal ones
+// (breaks.go): a break is dated at the bar that closed beyond a swing that was already confirmed, and its kind is the structure's as of that bar.
+func causingBreak(l leg, breaks []techniquezone.Break) (techniquezone.Break, bool) {
 	for _, b := range breaks {
-		if (b.Kind != "BOS" && b.Kind != "CHoCH") || b.Direction != l.Direction {
+		if (b.Kind != breakBOS && b.Kind != breakCHoCH) || b.Direction != l.Direction {
 			continue
 		}
 		if l.Start <= b.Index && b.Index <= l.End {
-			return b.Index, true
+			return b, true
 		}
 	}
-	return 0, false
+	return techniquezone.Break{}, false
 }
 
 // lastOppositeCandle is the last candle before the leg that moved the other way.
@@ -191,7 +194,7 @@ func lastOppositeCandle(bars []market.Candle, l leg) int {
 func (s *Strategy) detectBlocks(bars []market.Candle, atr []float64, breaks []techniquezone.Break) []block {
 	var blocks []block
 	for _, l := range s.displacement(bars, atr) {
-		breakIndex, ok := causingBreak(l, breaks)
+		causing, ok := causingBreak(l, breaks)
 		if !ok {
 			continue
 		}
@@ -204,7 +207,7 @@ func (s *Strategy) detectBlocks(bars []market.Candle, atr []float64, breaks []te
 		if l.Direction == "up" {
 			side = "buy"
 		}
-		b := block{Side: side, Low: low, High: high, Origin: origin, LegStart: l.Start, BreakIndex: breakIndex}
+		b := block{Side: side, Low: low, High: high, Origin: origin, LegStart: l.Start, BreakIndex: causing.Index, BreakKind: causing.Kind}
 		if closedBeyond(b, bars) {
 			b.Touches, b.Mitigated = 1, true
 		}
@@ -401,7 +404,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		return nil
 	}
 	atr := medianATR(frame.ATR)
-	blocks := s.detectBlocks(bars, frame.ATR, frame.Breaks)
+	blocks := s.detectBlocks(bars, frame.ATR, causalBreaks(frame.Swings, bars))
 	markTouches(blocks, bars)
 	attachScores(blocks, frame)
 	pip := s.cfg.PipSize
@@ -412,7 +415,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		}
 		in := instance{
 			Side: b.Side, Low: b.Low, High: b.High, Touches: b.Touches, Mitigated: b.Mitigated, Score: b.Score, Timeframe: tf, Frame: frame,
-			FrameOrigin: b.Origin, FrameConfirmed: maxInt(b.Origin, b.BreakIndex), LegStart: b.LegStart,
+			FrameOrigin: b.Origin, FrameConfirmed: maxInt(b.Origin, b.BreakIndex), LegStart: b.LegStart, BreakKind: b.BreakKind,
 		}
 		if low, high, clipped := clipEntry(b.Side, b.Low, b.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = b.Low, b.High, true
