@@ -41,6 +41,13 @@ type Config struct {
 	ExtensionMinimumLegATR float64
 	MinimumLegRetracement  float64
 
+	// The sweep test (sweep.go): a liquidity sweep in the gap's favour within SweepLookbackBars of the first candle of the impulse that made the gap.
+	// RequirePriorSweep refuses a gap without one (no_prior_sweep); false still measures it and publishes it as evidence.
+	RequirePriorSweep    bool
+	SweepLookbackBars    int
+	SweepPivotBars       int
+	SweepLevelMaxAgeBars int
+
 	// Qualification.
 	ConfluenceFloor     int
 	FibonacciEnabled    bool
@@ -81,6 +88,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	ints := map[string]*int{
 		"confirmation_window_bars": &c.ConfirmationWindowBars, "confirmation_max_age_bars": &c.ConfirmationMaxAgeBars, "obstacle_pivot_bars": &c.ObstaclePivotBars,
 		"leg_lookback_bars": &c.LegLookbackBars, "confluence_floor": &c.ConfluenceFloor,
+		"sweep_lookback_bars": &c.SweepLookbackBars, "sweep_pivot_bars": &c.SweepPivotBars, "sweep_level_max_age_bars": &c.SweepLevelMaxAgeBars,
 	}
 	for key, dst := range ints {
 		value, err := strategyutil.Int(params, key)
@@ -97,6 +105,9 @@ func parseConfig(params map[string]any) (Config, error) {
 	var err error
 	if c.FibonacciEnabled, ok = params["fibonacci_enabled"].(bool); !ok {
 		return Config{}, fmt.Errorf("parameter %q must be boolean", "fibonacci_enabled")
+	}
+	if c.RequirePriorSweep, ok = params["require_prior_sweep"].(bool); !ok {
+		return Config{}, fmt.Errorf("parameter %q must be boolean", "require_prior_sweep")
 	}
 	raw, present := params["structure_timeframes"]
 	if !present {
@@ -118,6 +129,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("invalid stop or room parameters (fallback_target_r must be >= minimum_target_r)")
 	case c.LegLookbackBars < 1 || c.ExtensionMinimumLegATR <= 0 || c.MinimumLegRetracement < 0 || c.MinimumLegRetracement > 1:
 		return Config{}, fmt.Errorf("invalid extension parameters")
+	case c.SweepLookbackBars < 1 || c.SweepPivotBars < 1 || c.SweepLevelMaxAgeBars < c.SweepPivotBars+1:
+		return Config{}, fmt.Errorf("invalid sweep parameters (sweep_lookback_bars and sweep_pivot_bars must be >= 1, sweep_level_max_age_bars > sweep_pivot_bars)")
 	case c.ConfluenceFloor < 1 || c.FibonacciEpsilonATR < 0 || c.ExpiryHours <= 0:
 		return Config{}, fmt.Errorf("invalid qualification parameters")
 	}

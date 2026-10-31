@@ -39,6 +39,12 @@ type Config struct {
 	FallbackTargetR       float64
 	ObstaclePivotBars     int
 
+	// The sweep test (sweep.go), measured only: a liquidity sweep in the block's favour within SweepLookbackBars of the first candle of the leg that broke
+	// structure. It is evidence and a quality measure; it never refuses a block.
+	SweepLookbackBars    int
+	SweepPivotBars       int
+	SweepLevelMaxAgeBars int
+
 	// Qualification.
 	ConfluenceFloor     int
 	FibonacciEnabled    bool
@@ -76,7 +82,8 @@ func parseConfig(params map[string]any) (Config, error) {
 	}
 	ints := map[string]*int{
 		"maximum_zone_touches": &c.MaximumZoneTouches, "reaction_lookback_bars": &c.ReactionLookbackBars, "obstacle_pivot_bars": &c.ObstaclePivotBars,
-		"confluence_floor": &c.ConfluenceFloor,
+		"confluence_floor": &c.ConfluenceFloor, "sweep_lookback_bars": &c.SweepLookbackBars, "sweep_pivot_bars": &c.SweepPivotBars,
+		"sweep_level_max_age_bars": &c.SweepLevelMaxAgeBars,
 	}
 	for key, dst := range ints {
 		value, err := strategyutil.Int(params, key)
@@ -112,6 +119,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("invalid confirmation parameters")
 	case c.InvalidationBufferATR <= 0 || c.MinimumTargetR <= 0 || c.FallbackTargetR < c.MinimumTargetR || c.ObstaclePivotBars < 1:
 		return Config{}, fmt.Errorf("invalid stop or room parameters (fallback_target_r must be >= minimum_target_r)")
+	case c.SweepLookbackBars < 1 || c.SweepPivotBars < 1 || c.SweepLevelMaxAgeBars < c.SweepPivotBars+1:
+		return Config{}, fmt.Errorf("invalid sweep parameters (sweep_lookback_bars and sweep_pivot_bars must be >= 1, sweep_level_max_age_bars > sweep_pivot_bars)")
 	case c.ConfluenceFloor < 1 || c.FibonacciEpsilonATR < 0 || c.ExpiryHours <= 0:
 		return Config{}, fmt.Errorf("invalid qualification parameters")
 	}

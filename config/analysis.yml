@@ -324,9 +324,16 @@ analysis:
       # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as
       # strategy_refused{strategy="order_block"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v8
+      version: v9
       enabled: true
       structure_timeframes: [M15, H1]
+      # v9: the block's structure break is computed by the strategy itself, causally (a swing joins the reference set when it is confirmed, BOS against CHoCH
+      # is the structure as of the breaking bar); the break kind and the sweep before the leg are measured evidence, never a gate
+      # (docs/strategies/liquidity-sweep-and-structure.md). The sweep test: a bar of the lookback before the leg's first candle traded through a swing low
+      # (fractal of sweep_pivot_bars, confirmed, not older than sweep_level_max_age_bars, unswept), the previous day's low or an Asia/London low (SELL: highs).
+      sweep_lookback_bars: 6
+      sweep_pivot_bars: 2
+      sweep_level_max_age_bars: 96
       # The block: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least momentum_body_fraction
       # of their range, and that broke structure; the block is the body of the last opposite candle before it, which must have such a body itself.
       displacement_atr_mult: 1.5
@@ -359,9 +366,17 @@ analysis:
       # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as
       # strategy_refused{strategy="fvg"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v8
+      version: v9
       enabled: true
       structure_timeframes: [M15, H1]
+      # v9 (docs/strategies/liquidity-sweep-and-structure.md): a gap is traded only when the impulse that made it followed a sweep of resting liquidity in its
+      # favour (no_prior_sweep otherwise). The test: a bar from sweep_lookback_bars before the impulse's first candle up to it traded through a swing low
+      # (fractal of sweep_pivot_bars, confirmed, not older than sweep_level_max_age_bars, unswept), the previous day's low or an Asia/London low (SELL: highs).
+      # false still measures the sweep and publishes it as evidence, and never refuses. The structure break by the impulse (BOS/CHoCH, causal) is evidence only.
+      require_prior_sweep: true
+      sweep_lookback_bars: 6
+      sweep_pivot_bars: 2
+      sweep_level_max_age_bars: 96
       # The gap definition (the contract iFVG v3 uses): the structural gap is at least minimum_gap_atr of the ATR of its own frame, the middle candle's body at
       # least minimum_displacement_body_atr of it and minimum_displacement_body_ratio of its own range, closing in the gap's direction. 0 switches one off.
       minimum_gap_atr: 0.5

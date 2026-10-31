@@ -11,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // tolerance is the comparison slack of the entry and level tests.
@@ -198,6 +199,9 @@ type decision struct {
 	anchored     bool   // the reaction's own extreme set the stop
 	budgetCode   string // stop-budget evidence ("" without a budget)
 	room         roomResult
+	sweep        sweep               // the sweep test of the impulse that made the gap (measured; the gate when require_prior_sweep)
+	brk          techniquezone.Break // the causal structure break by the gap's impulse, when hasBreak
+	hasBreak     bool
 }
 
 func directionOf(in instance) market.Direction {
@@ -265,9 +269,18 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 		}
 		return nil
 	}
+	// The gap's impulse starts at its first candle, two bars before the one that completed it. Last, so that the gate refuses what would otherwise publish.
+	impulse := in.FrameOrigin - 2
+	prior := s.priorSweep(in.Frame, impulse, direction == market.Buy, medianATR(in.Frame.ATR))
+	if s.cfg.RequirePriorSweep && !prior.Found {
+		refuse(refusedNoPriorSweep)
+		return nil
+	}
+	brk, hasBreak := impulseBreak(in.Breaks, in.Side, impulse, in.FrameOrigin)
 	return &decision{
 		inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in),
 		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
+		sweep: prior, brk: brk, hasBreak: hasBreak,
 	}
 }
 

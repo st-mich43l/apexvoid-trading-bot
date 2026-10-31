@@ -7,6 +7,7 @@ import (
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // retestMaxTouches is how many touches a gap may have taken and still be tradable (unchanged from the shared technique lifecycle this strategy inherited:
@@ -23,6 +24,8 @@ const (
 	refusedStaleConfirmation     = "stale_confirmation"
 	refusedNoTargetRoom          = "no_target_room"
 	refusedEntryAtLegExtreme     = "entry_at_leg_extreme"
+	// refusedNoPriorSweep: the impulse that made the gap was not preceded by a liquidity sweep in its favour (require_prior_sweep, sweep.go).
+	refusedNoPriorSweep = "no_prior_sweep"
 )
 
 // zoneBand is a price band with the facts the qualification reads.
@@ -63,6 +66,8 @@ type instance struct {
 	Timeframe      market.Timeframe
 	Frame          *analysiscontext.LegacyFrame // the frame the gap was found on
 	FrameOrigin    int
+	// Breaks are the causal structure breaks of that frame (breaks.go), shared by the frame's instances.
+	Breaks []techniquezone.Break
 }
 
 func (i instance) structural() (float64, float64) {
@@ -253,6 +258,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	gaps := detectGaps(bars)
 	markTouches(gaps, bars)
 	attachScores(gaps, frame)
+	breaks := causalBreaks(frame.Swings, bars)
 	var out []instance
 	for _, g := range gaps {
 		if g.Mitigated && (g.Touches <= 0 || g.Touches > retestMaxTouches) {
@@ -260,7 +266,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		}
 		in := instance{
 			Side: g.Side, Low: g.Low, High: g.High, StructuralLow: g.Low, StructuralHigh: g.High, FrameOrigin: g.Origin, TouchableFrom: g.Origin + 1,
-			Touches: g.Touches, Mitigated: g.Mitigated, Score: g.Score, Timeframe: tf, Frame: frame,
+			Touches: g.Touches, Mitigated: g.Mitigated, Score: g.Score, Timeframe: tf, Frame: frame, Breaks: breaks,
 		}
 		if low, high, clipped := clipEntry(g.Side, g.Low, g.High, s.cfg.EntryMaxWidthPrice); clipped {
 			in.EntryClipped, in.Low, in.High = true, low, high
