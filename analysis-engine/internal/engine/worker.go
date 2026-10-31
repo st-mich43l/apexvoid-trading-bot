@@ -278,6 +278,9 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			doneOpp()
 			return AnalysisSnapshot{}, result, obsErr
 		}
+		if observed.Kind == opportunity.TransitionCreated {
+			w.countFeatures(candidate, symbolLabel)
+		}
 		w.observeTransition(observed, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
 	for _, expired := range w.state.Opportunities.Expire(event.Candle.Time) {
@@ -296,6 +299,29 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	snap := SnapshotFrom(w.state, w.settings, event.Candle.Time)
 	doneSnap()
 	return snap, result, nil
+}
+
+// countFeatures counts, once per created opportunity, the measured features a strategy published as quality measures (fvg and order_block v9: prior_sweep
+// 0/1 and break_kind bos/choch/none) under strategy_feature{strategy, feature, value, structure_timeframe}. A tally of what was published; it never blocks.
+func (w *SymbolWorker) countFeatures(candidate opportunity.Candidate, symbol string) {
+	structureTimeframe := string(candidate.StructureTimeframe)
+	if sweep, ok := candidate.Quality.Components["prior_sweep"]; ok {
+		value := "0"
+		if sweep >= 0.5 {
+			value = "1"
+		}
+		w.telemetry.CountStrategyFeature(symbol, string(candidate.Strategy), structureTimeframe, "prior_sweep", value, 1)
+	}
+	if kind, ok := candidate.Quality.Components["break_kind"]; ok {
+		value := "none"
+		switch {
+		case kind > 0.5:
+			value = "bos"
+		case kind < -0.5:
+			value = "choch"
+		}
+		w.telemetry.CountStrategyFeature(symbol, string(candidate.Strategy), structureTimeframe, "break_kind", value, 1)
+	}
 }
 
 // observeTransition records one opportunity lifecycle transition under

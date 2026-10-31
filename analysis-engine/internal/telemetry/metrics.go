@@ -89,6 +89,11 @@ const (
 	// the counter never blocks an evaluation. It replaces fvg_definition_refused and ob_definition_refused.
 	CounterStrategyRefused Counter = "strategy_refused"
 
+	// CounterStrategyFeature counts, for each opportunity a strategy created, the measured features it carries (fvg and order_block v9: prior_sweep, break_kind),
+	// by the feature and its value. It is the cheap live tally before outcome labels exist: it describes the published population and never blocks or ranks
+	// anything. Labels: symbol, strategy, the structure timeframe, the feature and its value, recorded with CountStrategyFeature.
+	CounterStrategyFeature Counter = "strategy_feature"
+
 	// CounterHistoryShort counts the closed-bar evaluations of a frame whose in-memory history holds fewer bars than its detection window or than the
 	// largest lookback an enabled strategy needs on it (analysis_history_short). Labels: symbol, timeframe. It never blocks an evaluation.
 	CounterHistoryShort Counter = "analysis_history_short"
@@ -149,7 +154,8 @@ type key struct {
 	symbol    string
 	timeframe string
 	reason    string // set only by CountReason: a bounded, fixed set per counter
-	strategy  string // set only by CountStrategyRefusal
+	strategy  string // set only by CountStrategyRefusal and CountStrategyFeature
+	value     string // set only by CountStrategyFeature (reason then holds the feature)
 }
 
 // Recorder is a concurrency-safe in-process metrics store — deliberately
@@ -217,6 +223,15 @@ func (r *Recorder) CountStrategyRefusal(symbol, strategy, structureTimeframe, re
 	r.counts[k] += n
 }
 
+// CountStrategyFeature counts one created opportunity of a strategy carrying a measured feature, by the structure timeframe, the feature and its value
+// (CounterStrategyFeature).
+func (r *Recorder) CountStrategyFeature(symbol, strategy, structureTimeframe, feature, value string, n int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := key{label: string(CounterStrategyFeature), symbol: symbol, timeframe: structureTimeframe, reason: feature, strategy: strategy, value: value}
+	r.counts[k] += n
+}
+
 // DurationSample is one Snapshot row for a duration metric.
 type DurationSample struct {
 	Phase          string
@@ -232,7 +247,8 @@ type CountSample struct {
 	Symbol    string
 	Timeframe string
 	Reason    string // empty unless the counter is recorded with CountReason
-	Strategy  string // empty unless the counter is recorded with CountStrategyRefusal
+	Strategy  string // empty unless the counter is recorded with CountStrategyRefusal or CountStrategyFeature
+	Value     string // empty unless the counter is recorded with CountStrategyFeature (Reason is then the feature)
 	Count     int64
 }
 
@@ -257,7 +273,7 @@ func (r *Recorder) Snapshot() ([]DurationSample, []CountSample) {
 	counts := make([]CountSample, 0, len(r.counts))
 	for k, c := range r.counts {
 		counts = append(counts, CountSample{
-			Counter: k.label, Symbol: k.symbol, Timeframe: k.timeframe, Reason: k.reason, Strategy: k.strategy, Count: c,
+			Counter: k.label, Symbol: k.symbol, Timeframe: k.timeframe, Reason: k.reason, Strategy: k.strategy, Value: k.value, Count: c,
 		})
 	}
 	return durations, counts

@@ -26,6 +26,8 @@ type view struct {
 	dir   market.Direction
 	price float64 // the latest closed bar's close
 	atr   float64 // the execution frame's detector ATR
+	// breaks are the execution frame's causal structure breaks (breaks.go); the frame's shared breaks are not read.
+	breaks []techniquezone.Break
 }
 
 func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
@@ -41,7 +43,7 @@ func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
 	if !(atr > 0) {
 		atr = 1
 	}
-	return &view{frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr}, true
+	return &view{frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr, breaks: causalBreaks(frame.Legacy.Swings, bars)}, true
 }
 
 func (v *view) withDirection(direction market.Direction) *view {
@@ -137,8 +139,8 @@ func (v *view) recentCHoCH(lookback int) bool {
 	if v.dir == market.Buy {
 		wanted = "up"
 	}
-	for _, brk := range v.frame.Breaks {
-		if brk.Kind == "CHoCH" && brk.Direction == wanted && brk.Index >= earliest {
+	for _, brk := range v.breaks {
+		if brk.Kind == breakCHoCH && brk.Direction == wanted && brk.Index >= earliest {
 			return true
 		}
 	}
@@ -230,6 +232,7 @@ type decision struct {
 	anchored     bool   // the reaction's own extreme set the stop
 	budgetCode   string // stop-budget evidence ("" without a budget)
 	room         roomResult
+	sweep        sweep // the sweep test of the leg that broke structure (measured, never a gate)
 }
 
 func directionOf(in instance) market.Direction {
@@ -300,9 +303,10 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 		refuse(refusedNoTargetRoom)
 		return nil
 	}
+	prior := s.priorSweep(in.Frame, in.LegStart, direction == market.Buy, medianATR(in.Frame.ATR))
 	return &decision{
 		inst: in, direction: direction, v: v, conf: conf, res: res, id: v.instanceID(in),
-		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
+		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room, sweep: prior,
 	}
 }
 
