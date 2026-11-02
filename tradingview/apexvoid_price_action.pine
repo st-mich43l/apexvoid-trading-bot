@@ -8,26 +8,7 @@ indicator("ApexVoid | Price Action v2.9.1", "AV PA v2.9.1", overlay = true, scal
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
-// v2.9.1: zone captions share the right-edge label column (merged, zoom-aware); text inside boxes only
-// when the box is tall enough and no other box text sits at that price; consumed-pool labels removed.
-// v2.9: a planned long/short RR box is always drawn for the nearest qualified POI (preview), trade boxes
-// carry only the R:R number.
-// v2.8: trade plan - price-action entry at a qualified POI, stop beyond the zone, target at the
-// nearest key level, long/short position boxes for the last N trades, paper-tracked results.
-// v2.7.1: compile fix (a Pine line cannot be queried for its colour; BOS de-duplication keeps a direction array).
-// v2.7: one right-edge label column (labels at the same price merge, never overlap), BOS label
-// beside the break candle, one BOS per candle, slim premium/discount gauge.
-// v2.6: BOS / CHoCH lines end on the candle that actually closed beyond the swing, not on
-// the later bar where the swing was published (up to 38 bars late on XAUUSD M15).
-// v2.5: BSL/SSL restored - objects may use the price range the candles already span (so
-// they cannot squash the scale), plus the nearest unswept internal swing high/low.
-// v2.4: compact "major only" panel, premium / discount range, POI captions name the zone kind.
-// v2.3: candle-scale protection (objects limited to a window around price), lighter zone
-// fills, shorter drawn lengths, larger and better-spaced labels.
-// v2.2: base-and-impulse supply/demand zones (DBR / RBR / RBD / DBD) beside the swing zones.
-// v2.1: order blocks restored (swing + internal, own display budget, lifecycle) and
-// BSL/SSL rebuilt as a level-first liquidity-pool model (sweep != break). See
-// tradingview/docs/ob-liquidity-v2.1.md for definitions and known limitations.
+// Version history and rules: tradingview/README.md.
 
 const string G1 = "01  Market Structure"
 const string G2 = "02  Liquidity"
