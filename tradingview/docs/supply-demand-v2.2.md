@@ -10,7 +10,7 @@ there. The swing zones, order blocks, FVG, liquidity pools and alerts are unchan
 | Item | Status |
 | --- | --- |
 | Detector logic on real XAUUSD closed bars (M5, M15, H1, H4) | Checked with the Python model `reference/sd_base_model.py` (`reference/test_sd_base_model.py`, 6 checks pass: synthetic DBR/RBR, filters, weak or closed-back departures, wide base, real-bar invariants, no duplicates). |
-| Pine syntax | Third-party Pine parser (v5 grammar) — see the PR notes for the result. A syntax check only. |
+| Pine syntax | Parsed without errors by a third-party Pine parser (v5 grammar, `//@version=6` swapped for `5`). A syntax check only. |
 | Pine v6 compile, drawing, label placement, object limits, alerts in TradingView | **Not done** (no TradingView access here). |
 | Predictive value of the zones | **Not tested.** This change is detection, not an edge claim. |
 
