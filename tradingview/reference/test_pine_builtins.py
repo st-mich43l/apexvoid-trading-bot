@@ -82,6 +82,7 @@ VETTED = {
     "str.contains",
     "str.format_time",
     "str.length",
+    "str.replace_all",
     "str.startswith",
     "str.substring",
     "str.tostring",
