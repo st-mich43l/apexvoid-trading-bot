@@ -276,7 +276,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 `reference/test_pa_model.py` runs the order-block and liquidity decision logic on
 real XAUUSD M5 / M15 / H1 / H4 bars and the v2.0 reproduction of the hidden-block
-defect (`python tradingview/reference/test_pa_model.py`, and `test_sd_base_model.py` for the v2.2 supply/demand detector; `render.py` regenerates the
+defect (`python tradingview/reference/test_pa_model.py`, `test_sd_base_model.py` for the v2.2 supply/demand detector, and `test_pine_builtins.py`, which fails if the indicator calls a Pine built-in that has not been confirmed to exist (the syntax-only parser cannot catch those; v2.7 shipped with a call to a non-existent `line.get_color`); `render.py` regenerates the
 images). It validates the algorithm only: it does not compile or draw the Pine file.
 Compile errors, label placement, object limits and alert behaviour must still be
 checked in TradingView, and a comparison with other indicators has not been done. See

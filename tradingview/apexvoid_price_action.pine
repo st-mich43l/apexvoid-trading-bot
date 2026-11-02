@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.7", "AV Price Action v2.7", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.7.1", "AV Price Action v2.7.1", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,7 @@ indicator("ApexVoid | Price Action v2.7", "AV Price Action v2.7", overlay = true
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.7.1: compile fix (a Pine line cannot be queried for its colour; BOS de-duplication keeps a direction array).
 // v2.7: one right-edge label column (labels at the same price merge, never overlap), BOS label
 // beside the break candle, one BOS per candle, slim premium/discount gauge.
 // v2.6: BOS / CHoCH lines end on the candle that actually closed beyond the swing, not on
@@ -197,6 +198,7 @@ string dashboardPosition = dashboardPositionInput == "Top Left" ? position.top_l
 var label[] eventLabels = array.new_label()
 var line[] externalEventLines = array.new_line()
 var label[] externalEventLabels = array.new_label()
+var bool[] externalEventUp = array.new_bool()   // direction of each external event (a Pine line cannot be queried for its colour)
 var line[] internalEventLines = array.new_line()
 var label[] internalEventLabels = array.new_label()
 
@@ -259,19 +261,23 @@ f_structureLine(int x1, int x2, float level, bool bullish, bool choch, bool inte
             while array.size(externalEventLines) > 2
                 line.delete(array.shift(externalEventLines))
                 label.delete(array.shift(externalEventLabels))
+                array.shift(externalEventUp)
         // One candle that closes beyond several swings is one break: keep the most recent swing.
         if not choch and array.size(externalEventLines) > 0
             int lastEvent = array.size(externalEventLines) - 1
             line previousLine = array.get(externalEventLines, lastEvent)
             label previousLabel = array.get(externalEventLabels, lastEvent)
-            if line.get_x2(previousLine) == x2 and label.get_text(previousLabel) == "BOS" and line.get_color(previousLine) == c
+            if line.get_x2(previousLine) == x2 and label.get_text(previousLabel) == "BOS" and array.get(externalEventUp, lastEvent) == bullish
                 line.delete(array.pop(externalEventLines))
                 label.delete(array.pop(externalEventLabels))
+                array.pop(externalEventUp)
         array.push(externalEventLines, structureLine)
         array.push(externalEventLabels, structureLabel)
+        array.push(externalEventUp, bullish)
         if array.size(externalEventLines) > effectiveExternalEvents
             line.delete(array.shift(externalEventLines))
             label.delete(array.shift(externalEventLabels))
+            array.shift(externalEventUp)
     0
 
 // zoneKind: 1 = OB; 2 = FVG; 3 = supply/demand.
