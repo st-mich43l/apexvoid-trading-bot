@@ -42,7 +42,8 @@ pool or sweep is an analytical reference, not an entry signal.
 | FVG | blue (bullish) / orange (bearish) box | Three-candle fair value gap. |
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
-| `POI · Bull` / `POI · Bear` | thicker border | A zone that passed a named qualification path (below). |
+| `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
+| `PREMIUM` / `DISCOUNT` / `EQ` | very light rose / green bands and a dashed 50 % line | Upper half (supply side) and lower half (demand side) of the last confirmed external range, and its equilibrium. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
@@ -152,7 +153,22 @@ limited by the window. If one of them squashes the candles, switch it off in its
 
 ### Market Intelligence panel
 
-Default `Compact`; `Standard` and `Expanded` add rows. Hover cells for tooltips.
+Default `Compact` shows **major information only**, one line each; hover a cell for the
+detail. `Standard` and `Expanded` show the full panel described further down.
+
+| Compact row | Shows |
+| --- | --- |
+| Bias / Phase | External bias (and HTF bias when enabled); market phase |
+| Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the confirmed external range |
+| High / Low | Last confirmed external swing high / low (tooltip: times and developing extreme) |
+| Protected | The external level whose break flips the bias |
+| Last break | Last external BOS/CHoCH with its age (tooltip: last internal break) |
+| Bull POI / Bear POI | Nearest qualified POI, distance in ATR, `A` actionable / `Q` qualified / `D` distant or tested |
+| BSL / SSL | Nearest active pools (`*` = active but not drawn) |
+| Asia | Live range while the session runs, otherwise the last completed range |
+| Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
+
+Full panel (`Standard` / `Expanded`):
 
 | Section | Rows |
 | --- | --- |
@@ -196,7 +212,7 @@ reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 
 **05 Asian Session** — show, session hours, timezone, retained ranges.
 
-**06 Visuals & Performance** — display profile, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Maximum drawn length` (250 bars), colours, zone transparency (92),
+**06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
