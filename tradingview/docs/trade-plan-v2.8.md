@@ -11,7 +11,8 @@ rules are implemented as asked; the paper results below do not show an edge.
 | --- | --- |
 | Rules reproduced bar by bar in Python (`reference/trade_model.py`) and checked on real XAUUSD bars (`reference/test_trade_model.py`, 7 checks pass) | Done |
 | Pine syntax | Parsed without errors by a third-party Pine parser (v5 grammar). Syntax only. |
-| Built-in call guard (`reference/test_pine_builtins.py`) | Passes: no unvetted built-in is called |
+| Built-in call guard (`reference/test_pine_builtins.py`) | Passes: no unvetted built-in is called, and the main script body is within the size limit (see below) |
+| First TradingView compile | Failed with `CE10295: the main body of the script is too long`; fixed in v2.8.1 by moving the dashboard, the zone drawing pass and the pool drawing pass into functions (main body 1850 → 1455 lines; v2.7.1 had 1645 and compiled). |
 | TradingView compile and look on a chart | **Not done here.** Re-paste the file and compile. |
 | Evidence that the rules make money | **None.** See §5. |
 

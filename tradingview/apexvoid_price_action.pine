@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.8", "AV Price Action v2.8", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.8", "AV PA v2.8", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -1128,144 +1128,158 @@ if barstate.isconfirmed and array.size(poolStates) > 0 and not na(atr)
             f_inc(liqStats, 4)
             f_poolRemove(i)
 
-int relevantLiquidityCount = 0
-int poolActiveCount = 0
-int poolSweptCount = 0
-int poolConsumedCount = 0
-float nearestBslPrice = na
-float nearestSslPrice = na
-bool nearestBslShown = false
-bool nearestSslShown = false
+// Pool drawing pass. A function so the main script body stays within TradingView's size limit; it
+// only reads state and draws, and reports its counters through the arrays below.
+int[] liqView = array.new_int(4, 0)            // 0 drawn active pools, 1 active, 2 swept, 3 consumed
+float[] liqNearest = array.new_float(2, na)    // nearest active BSL above / SSL below price
+bool[] liqNearestShown = array.new_bool(2, false)
 
-if barstate.islast and array.size(poolStates) > 0
-    int nearBsl = -1
-    int nearSsl = -1
-    float nearBslGap = 1.0e10
-    float nearSslGap = 1.0e10
-    for i = 0 to array.size(poolStates) - 1
-        array.set(poolVisible, i, false)
-        int scanState = array.get(poolStates, i)
-        poolActiveCount += scanState == 0 ? 1 : 0
-        poolSweptCount += scanState == 1 ? 1 : 0
-        poolConsumedCount += scanState == 2 ? 1 : 0
-        if scanState == 0
-            int scanSide = array.get(poolSides, i)
-            float scanEdge = scanSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
-            if scanSide == 1 and scanEdge > close and scanEdge - close < nearBslGap
-                nearBsl := i
-                nearBslGap := scanEdge - close
-            if scanSide == -1 and scanEdge < close and close - scanEdge < nearSslGap
-                nearSsl := i
-                nearSslGap := close - scanEdge
-    nearestBslPrice := nearBsl >= 0 ? array.get(poolTops, nearBsl) : na
-    nearestSslPrice := nearSsl >= 0 ? array.get(poolBottoms, nearSsl) : na
-    float atrSafe = math.max(atr, syminfo.mintick)
+f_renderPools() =>
+    if array.size(poolStates) > 0
+        int nearBsl = -1
+        int nearSsl = -1
+        float nearBslGap = 1.0e10
+        float nearSslGap = 1.0e10
+        for i = 0 to array.size(poolStates) - 1
+            array.set(poolVisible, i, false)
+            int scanState = array.get(poolStates, i)
+            if scanState == 0
+                f_inc(liqView, 1)
+            if scanState == 1
+                f_inc(liqView, 2)
+            if scanState == 2
+                f_inc(liqView, 3)
+            if scanState == 0
+                int scanSide = array.get(poolSides, i)
+                float scanEdge = scanSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+                if scanSide == 1 and scanEdge > close and scanEdge - close < nearBslGap
+                    nearBsl := i
+                    nearBslGap := scanEdge - close
+                if scanSide == -1 and scanEdge < close and close - scanEdge < nearSslGap
+                    nearSsl := i
+                    nearSslGap := close - scanEdge
+        array.set(liqNearest, 0, nearBsl >= 0 ? array.get(poolTops, nearBsl) : na)
+        array.set(liqNearest, 1, nearSsl >= 0 ? array.get(poolBottoms, nearSsl) : na)
+        float atrSafe = math.max(atr, syminfo.mintick)
 
-    // Balanced selection: the nearest active BSL above and SSL below are always
-    // considered; remaining slots go to structural degree first, then proximity.
-    int shown = 0
-    if renderLiquidity and effectiveVisibleLiquidity > 0
-        if nearBsl >= 0 and nearBslGap / atrSafe <= effLiqNearestATR and f_scaleOk(array.get(poolTops, nearBsl))
-            array.set(poolVisible, nearBsl, true)
-            shown += 1
-        if nearSsl >= 0 and nearSslGap / atrSafe <= effLiqNearestATR and f_scaleOk(array.get(poolBottoms, nearSsl)) and shown < effectiveVisibleLiquidity
-            array.set(poolVisible, nearSsl, true)
-            shown += 1
-        if shown < effectiveVisibleLiquidity
-            for pick = shown to effectiveVisibleLiquidity - 1
-                int bestPool = -1
-                float bestPoolScore = -1.0e10
-                for i = 0 to array.size(poolStates) - 1
-                    if not array.get(poolVisible, i)
-                        int candSide = array.get(poolSides, i)
-                        float candEdge = candSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
-                        float candDistance = math.abs(close - candEdge) / atrSafe
-                        if debugMode or (candDistance <= effLiqDistanceATR and f_scaleOk(candEdge))
-                            float candScore = array.get(poolDegrees, i) * 1000.0 + (array.get(poolStates, i) == 0 ? 500.0 : 0.0) - candDistance * 10.0
-                            if candScore > bestPoolScore
-                                bestPool := i
-                                bestPoolScore := candScore
-                if bestPool >= 0
-                    array.set(poolVisible, bestPool, true)
+        // Balanced selection: the nearest active BSL above and SSL below are always
+        // considered; remaining slots go to structural degree first, then proximity.
+        int shown = 0
+        if renderLiquidity and effectiveVisibleLiquidity > 0
+            if nearBsl >= 0 and nearBslGap / atrSafe <= effLiqNearestATR and f_scaleOk(array.get(poolTops, nearBsl))
+                array.set(poolVisible, nearBsl, true)
+                shown += 1
+            if nearSsl >= 0 and nearSslGap / atrSafe <= effLiqNearestATR and f_scaleOk(array.get(poolBottoms, nearSsl)) and shown < effectiveVisibleLiquidity
+                array.set(poolVisible, nearSsl, true)
+                shown += 1
+            if shown < effectiveVisibleLiquidity
+                for pick = shown to effectiveVisibleLiquidity - 1
+                    int bestPool = -1
+                    float bestPoolScore = -1.0e10
+                    for i = 0 to array.size(poolStates) - 1
+                        if not array.get(poolVisible, i)
+                            int candSide = array.get(poolSides, i)
+                            float candEdge = candSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+                            float candDistance = math.abs(close - candEdge) / atrSafe
+                            if debugMode or (candDistance <= effLiqDistanceATR and f_scaleOk(candEdge))
+                                float candScore = array.get(poolDegrees, i) * 1000.0 + (array.get(poolStates, i) == 0 ? 500.0 : 0.0) - candDistance * 10.0
+                                if candScore > bestPoolScore
+                                    bestPool := i
+                                    bestPoolScore := candScore
+                    if bestPool >= 0
+                        array.set(poolVisible, bestPool, true)
+                    else
+                        break
+
+        array.set(liqNearestShown, 0, nearBsl >= 0 and array.get(poolVisible, nearBsl))
+        array.set(liqNearestShown, 1, nearSsl >= 0 and array.get(poolVisible, nearSsl))
+        for i = 0 to array.size(poolStates) - 1
+            line poolLine = array.get(poolLines, i)
+            label poolLabel = array.get(poolLabels, i)
+            box poolBox = array.get(poolBoxes, i)
+            if array.get(poolVisible, i)
+                int pSide = array.get(poolSides, i)
+                int pState = array.get(poolStates, i)
+                int pDegree = array.get(poolDegrees, i)
+                int pTests = array.get(poolTests, i)
+                int pBirth = array.get(poolBirths, i)
+                int pStateBar = array.get(poolStateBars, i)
+                float pTop = array.get(poolTops, i)
+                float pBottom = array.get(poolBottoms, i)
+                float pEdge = pSide == 1 ? pTop : pBottom
+                string pKind = array.get(poolKinds, i)
+                bool pActive = pState == 0
+                if pActive
+                    f_inc(liqView, 0)
+                int leftX = math.max(pBirth, bar_index - maxDrawBars)
+                int rightX = pActive ? bar_index + 5 : math.max(pStateBar, leftX + 1)
+                color lineTone = color.new(liquidityColor, pActive ? 25 : 78)
+                string baseName = pKind == "EQ" ? (pSide == 1 ? "EQH · BSL" : "EQL · SSL") : pKind == "PDH" ? "PDH · BSL" : pKind == "PDL" ? "PDL · SSL" : (pSide == 1 ? "BSL" : "SSL")
+                string labelText = baseName + (pState == 1 ? " · swept" : pState == 2 ? " · taken" : "")
+                string degreeText = pDegree == 1 ? "Internal equal level" : pDegree == 2 ? "External swing" : "External + equal / session level"
+                string poolTip = baseName + " " + str.tostring(pEdge, format.mintick) + "\n" + degreeText + " · tests " + str.tostring(pTests) + "\n" + (pState == 0 ? "Active" : pState == 1 ? "Swept (grab)" : "Consumed") + " · age " + str.tostring(bar_index - pBirth) + " bars"
+                if na(poolLine)
+                    poolLine := line.new(leftX, pEdge, rightX, pEdge, xloc = xloc.bar_index, color = lineTone, style = line.style_dotted, width = 1)
+                    array.set(poolLines, i, poolLine)
                 else
-                    break
-
-    nearestBslShown := nearBsl >= 0 and array.get(poolVisible, nearBsl)
-    nearestSslShown := nearSsl >= 0 and array.get(poolVisible, nearSsl)
-    for i = 0 to array.size(poolStates) - 1
-        line poolLine = array.get(poolLines, i)
-        label poolLabel = array.get(poolLabels, i)
-        box poolBox = array.get(poolBoxes, i)
-        if array.get(poolVisible, i)
-            int pSide = array.get(poolSides, i)
-            int pState = array.get(poolStates, i)
-            int pDegree = array.get(poolDegrees, i)
-            int pTests = array.get(poolTests, i)
-            int pBirth = array.get(poolBirths, i)
-            int pStateBar = array.get(poolStateBars, i)
-            float pTop = array.get(poolTops, i)
-            float pBottom = array.get(poolBottoms, i)
-            float pEdge = pSide == 1 ? pTop : pBottom
-            string pKind = array.get(poolKinds, i)
-            bool pActive = pState == 0
-            relevantLiquidityCount += pActive ? 1 : 0
-            int leftX = math.max(pBirth, bar_index - maxDrawBars)
-            int rightX = pActive ? bar_index + 5 : math.max(pStateBar, leftX + 1)
-            color lineTone = color.new(liquidityColor, pActive ? 25 : 78)
-            string baseName = pKind == "EQ" ? (pSide == 1 ? "EQH · BSL" : "EQL · SSL") : pKind == "PDH" ? "PDH · BSL" : pKind == "PDL" ? "PDL · SSL" : (pSide == 1 ? "BSL" : "SSL")
-            string labelText = baseName + (pState == 1 ? " · swept" : pState == 2 ? " · taken" : "")
-            string degreeText = pDegree == 1 ? "Internal equal level" : pDegree == 2 ? "External swing" : "External + equal / session level"
-            string poolTip = baseName + " " + str.tostring(pEdge, format.mintick) + "\n" + degreeText + " · tests " + str.tostring(pTests) + "\n" + (pState == 0 ? "Active" : pState == 1 ? "Swept (grab)" : "Consumed") + " · age " + str.tostring(bar_index - pBirth) + " bars"
-            if na(poolLine)
-                poolLine := line.new(leftX, pEdge, rightX, pEdge, xloc = xloc.bar_index, color = lineTone, style = line.style_dotted, width = 1)
-                array.set(poolLines, i, poolLine)
+                    line.set_xy1(poolLine, leftX, pEdge)
+                    line.set_xy2(poolLine, rightX, pEdge)
+                    line.set_color(poolLine, lineTone)
+                if pKind == "EQ"
+                    float bandMid = (pTop + pBottom) / 2.0
+                    float bandHalf = math.max((pTop - pBottom) / 2.0, atrSafe * 0.03)
+                    color bandFill = color.new(liquidityColor, pActive ? 86 : 95)
+                    if na(poolBox)
+                        poolBox := box.new(left = leftX, top = bandMid + bandHalf, right = rightX, bottom = bandMid - bandHalf, xloc = xloc.bar_index, border_color = color.new(liquidityColor, 100), bgcolor = bandFill)
+                        array.set(poolBoxes, i, poolBox)
+                    else
+                        box.set_lefttop(poolBox, leftX, bandMid + bandHalf)
+                        box.set_rightbottom(poolBox, rightX, bandMid - bandHalf)
+                        box.set_bgcolor(poolBox, bandFill)
+                else if not na(poolBox)
+                    box.delete(poolBox)
+                    box emptyPoolBox = na
+                    array.set(poolBoxes, i, emptyPoolBox)
+                if pActive
+                    f_regLabel(pEdge, labelText, liquidityColor, pKind == "EQ" ? 62 : 60, poolTip)
+                    if not na(poolLabel)
+                        label.delete(poolLabel)
+                        label emptyActiveLabel = na
+                        array.set(poolLabels, i, emptyActiveLabel)
+                else
+                    // Consumed pools keep a small label at the event bar, away from the edge column.
+                    if na(poolLabel)
+                        poolLabel := label.new(rightX, pEdge, labelText, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 70), textcolor = color.new(liquidityColor, 55), size = contextTextSize, tooltip = poolTip)
+                        array.set(poolLabels, i, poolLabel)
+                    else
+                        label.set_xy(poolLabel, rightX, pEdge)
+                        label.set_text(poolLabel, labelText)
+                        label.set_tooltip(poolLabel, poolTip)
             else
-                line.set_xy1(poolLine, leftX, pEdge)
-                line.set_xy2(poolLine, rightX, pEdge)
-                line.set_color(poolLine, lineTone)
-            if pKind == "EQ"
-                float bandMid = (pTop + pBottom) / 2.0
-                float bandHalf = math.max((pTop - pBottom) / 2.0, atrSafe * 0.03)
-                color bandFill = color.new(liquidityColor, pActive ? 86 : 95)
-                if na(poolBox)
-                    poolBox := box.new(left = leftX, top = bandMid + bandHalf, right = rightX, bottom = bandMid - bandHalf, xloc = xloc.bar_index, border_color = color.new(liquidityColor, 100), bgcolor = bandFill)
-                    array.set(poolBoxes, i, poolBox)
-                else
-                    box.set_lefttop(poolBox, leftX, bandMid + bandHalf)
-                    box.set_rightbottom(poolBox, rightX, bandMid - bandHalf)
-                    box.set_bgcolor(poolBox, bandFill)
-            else if not na(poolBox)
-                box.delete(poolBox)
-                box emptyPoolBox = na
-                array.set(poolBoxes, i, emptyPoolBox)
-            if pActive
-                f_regLabel(pEdge, labelText, liquidityColor, pKind == "EQ" ? 62 : 60, poolTip)
+                if not na(poolLine)
+                    line.delete(poolLine)
+                    line emptyPoolLine = na
+                    array.set(poolLines, i, emptyPoolLine)
                 if not na(poolLabel)
                     label.delete(poolLabel)
-                    label emptyActiveLabel = na
-                    array.set(poolLabels, i, emptyActiveLabel)
-            else
-                // Consumed pools keep a small label at the event bar, away from the edge column.
-                if na(poolLabel)
-                    poolLabel := label.new(rightX, pEdge, labelText, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 70), textcolor = color.new(liquidityColor, 55), size = contextTextSize, tooltip = poolTip)
-                    array.set(poolLabels, i, poolLabel)
-                else
-                    label.set_xy(poolLabel, rightX, pEdge)
-                    label.set_text(poolLabel, labelText)
-                    label.set_tooltip(poolLabel, poolTip)
-        else
-            if not na(poolLine)
-                line.delete(poolLine)
-                line emptyPoolLine = na
-                array.set(poolLines, i, emptyPoolLine)
-            if not na(poolLabel)
-                label.delete(poolLabel)
-                label emptyPoolLabel = na
-                array.set(poolLabels, i, emptyPoolLabel)
-            if not na(poolBox)
-                box.delete(poolBox)
-                box emptyPoolBox2 = na
-                array.set(poolBoxes, i, emptyPoolBox2)
+                    label emptyPoolLabel = na
+                    array.set(poolLabels, i, emptyPoolLabel)
+                if not na(poolBox)
+                    box.delete(poolBox)
+                    box emptyPoolBox2 = na
+                    array.set(poolBoxes, i, emptyPoolBox2)
+    0
+
+if barstate.islast
+    f_renderPools()
+int relevantLiquidityCount = array.get(liqView, 0)
+int poolActiveCount = array.get(liqView, 1)
+int poolSweptCount = array.get(liqView, 2)
+int poolConsumedCount = array.get(liqView, 3)
+float nearestBslPrice = array.get(liqNearest, 0)
+float nearestSslPrice = array.get(liqNearest, 1)
+bool nearestBslShown = array.get(liqNearestShown, 0)
+bool nearestSslShown = array.get(liqNearestShown, 1)
 
 // ------- ORDER BLOCKS (STRUCTURE-ORIGIN, DISPLACEMENT-QUALIFIED) -------
 // A block is built when an internal or external structure break closes. Origin: among
@@ -1572,6 +1586,127 @@ f_poiPath(int i, bool fresh) =>
     string path = componentConfluence ? "Composite" : structureOriginOB ? "Structure-origin OB" : displacedSwingZone ? "Displaced swing zone" : baseImpulseZone ? "Base-impulse zone" : sweptImbalance ? "Swept imbalance" : "Candidate"
     path
 
+// Zone drawing pass. A function so the main script body stays within TradingView's size limit.
+// Hidden zones have no box object, so they cannot distort chart autoscaling; they are recreated
+// when ranking qualifies them.
+f_renderZones() =>
+    // Rendering pass. Hidden zones have no box object, so they cannot distort
+    // chart autoscaling; they can be recreated later when ranking qualifies them.
+    for i = 0 to array.size(zones) - 1
+        box zoneBox = array.get(zones, i)
+        bool visible = array.get(zoneVisible, i)
+        if visible
+            float top = array.get(zoneTops, i)
+            float bottom = array.get(zoneBottoms, i)
+            int origin = array.get(zoneOrigins, i)
+            int kind = array.get(zoneKinds, i)
+            int side = array.get(zoneSides, i)
+            bool touched = array.get(zoneTouched, i)
+            bool poi = array.get(zonePoi, i)
+            color tone = array.get(zoneColors, i)
+            string title = poi ? array.get(zonePoiTitles, i) : array.get(zoneTitles, i)
+            bool isOB = kind == 1
+            int obClass = array.get(zoneClasses, i)
+            string obName = (obClass == 1 ? "iOB" : "OB") + (touched ? " · T" : "")
+            string shortTitle = poi ? title : isOB ? obName : array.get(zoneTitles, i)
+            float mitigation = array.get(zoneMitigation, i)
+            string zoneState = array.get(zoneQualification, i)
+            string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
+            string zoneTooltip = title + "\n" + obTipLine + zoneState + "\nMitigated " + str.tostring(mitigation * 100.0, "#.0") + "%\n" + str.tostring(bottom, format.mintick) + " — " + str.tostring(top, format.mintick)
+            float zoneMid = (top + bottom) / 2.0
+            bool tallZone = top - bottom >= atr * (largeText ? 0.45 : compactText ? 0.20 : 0.32)
+            bool suppressCaption = false
+            if not poi and array.size(zones) > 1
+                for j = 0 to array.size(zones) - 1
+                    if j != i and array.get(zoneVisible, j) and array.get(zonePoi, j)
+                        float poiTop = array.get(zoneTops, j)
+                        float poiBottom = array.get(zoneBottoms, j)
+                        suppressCaption := suppressCaption or math.min(top, poiTop) - math.max(bottom, poiBottom) > 0
+            string insideText = tallZone and not suppressCaption ? shortTitle : ""
+            color zoneBorder = isOB ? color.new(tone, touched ? 72 : 42) : poi ? color.new(tone, 10) : color.new(tone, touched ? 75 : 50)
+            int zoneBorderWidth = isOB ? 1 : poi ? 2 : 1
+            string zoneBorderStyle = isOB and touched ? line.style_dashed : line.style_solid
+            color zoneFill = isOB ? color.new(tone, touched ? 95 : math.min(97, zoneOpacity + 2)) : color.new(tone, touched ? 96 : poi ? math.max(82, zoneOpacity - 3) : zoneOpacity)
+            int drawLeft = math.max(origin, bar_index - maxDrawBars)
+            if na(zoneBox)
+                zoneBox := box.new(left = drawLeft, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
+                array.set(zones, i, zoneBox)
+            else
+                box.set_left(zoneBox, drawLeft)
+                box.set_right(zoneBox, bar_index + 5)
+                box.set_border_color(zoneBox, zoneBorder)
+                box.set_border_width(zoneBox, zoneBorderWidth)
+                box.set_border_style(zoneBox, zoneBorderStyle)
+                box.set_bgcolor(zoneBox, zoneFill)
+                box.set_text(zoneBox, insideText)
+                box.set_text_color(zoneBox, tone)
+                box.set_text_size(zoneBox, zoneTextSize)
+                box.set_text_halign(zoneBox, text.align_right)
+            line zoneMidLine = array.get(zoneMidLines, i)
+            if isOB and showOBMidline
+                if na(zoneMidLine)
+                    zoneMidLine := line.new(drawLeft, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
+                    array.set(zoneMidLines, i, zoneMidLine)
+                else
+                    line.set_x1(zoneMidLine, drawLeft)
+                    line.set_x2(zoneMidLine, bar_index + 5)
+            else if not na(zoneMidLine)
+                line.delete(zoneMidLine)
+                line emptyMidLine = na
+                array.set(zoneMidLines, i, emptyMidLine)
+            label zoneCaption = array.get(zoneCaptionLabels, i)
+            if not tallZone and not suppressCaption
+                float captionY = zoneMid
+                if i > 0
+                    for j = 0 to i - 1
+                        label otherCaption = array.get(zoneCaptionLabels, j)
+                        if not na(otherCaption) and array.get(zoneVisible, j) and math.abs(captionY - label.get_y(otherCaption)) <= atr * annotationATRSpacing
+                            if poi and not array.get(zonePoi, j)
+                                label.delete(otherCaption)
+                                label emptyCaption = na
+                                array.set(zoneCaptionLabels, j, emptyCaption)
+                            else
+                                captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
+                float developingReference = developingDirection == 1 ? developingHigh : developingDirection == -1 ? developingLow : na
+                if not na(developingReference) and math.abs(captionY - developingReference) <= atr * annotationATRSpacing
+                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
+                if not na(activeProtected) and math.abs(captionY - activeProtected) <= atr * annotationATRSpacing
+                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
+                if not na(lastSwingHigh) and math.abs(captionY - lastSwingHigh) <= atr * annotationATRSpacing
+                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
+                if not na(lastSwingLow) and math.abs(captionY - lastSwingLow) <= atr * annotationATRSpacing
+                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
+                if na(zoneCaption)
+                    zoneCaption := label.new(bar_index + 6, captionY, shortTitle, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 18), textcolor = tone, size = zoneTextSize, tooltip = zoneTooltip)
+                    array.set(zoneCaptionLabels, i, zoneCaption)
+                else
+                    label.set_xy(zoneCaption, bar_index + 6, captionY)
+                    label.set_text(zoneCaption, shortTitle)
+                    label.set_color(zoneCaption, color.new(#090D18, 18))
+                    label.set_textcolor(zoneCaption, tone)
+                    label.set_size(zoneCaption, zoneTextSize)
+                    label.set_tooltip(zoneCaption, zoneTooltip)
+            else if not na(zoneCaption)
+                label.delete(zoneCaption)
+                label emptyCaption = na
+                array.set(zoneCaptionLabels, i, emptyCaption)
+        else
+            if not na(zoneBox)
+                box.delete(zoneBox)
+                box hiddenBox = na
+                array.set(zones, i, hiddenBox)
+            label hiddenCaption = array.get(zoneCaptionLabels, i)
+            if not na(hiddenCaption)
+                label.delete(hiddenCaption)
+                label emptyCaption = na
+                array.set(zoneCaptionLabels, i, emptyCaption)
+            line hiddenMid = array.get(zoneMidLines, i)
+            if not na(hiddenMid)
+                line.delete(hiddenMid)
+                line emptyMidLine = na
+                array.set(zoneMidLines, i, emptyMidLine)
+    0
+
 // Closed-bar zone management. FVG invalidation follows the selected wick,
 // midpoint, or close policy; OB and supply/demand require a far-edge close.
 float nearestBullPoi = na
@@ -1863,124 +1998,7 @@ if array.size(zones) > 0
             else
                 break
 
-        // Rendering pass. Hidden zones have no box object, so they cannot distort
-        // chart autoscaling; they can be recreated later when ranking qualifies them.
-        for i = 0 to array.size(zones) - 1
-            box zoneBox = array.get(zones, i)
-            bool visible = array.get(zoneVisible, i)
-            if visible
-                float top = array.get(zoneTops, i)
-                float bottom = array.get(zoneBottoms, i)
-                int origin = array.get(zoneOrigins, i)
-                int kind = array.get(zoneKinds, i)
-                int side = array.get(zoneSides, i)
-                bool touched = array.get(zoneTouched, i)
-                bool poi = array.get(zonePoi, i)
-                color tone = array.get(zoneColors, i)
-                string title = poi ? array.get(zonePoiTitles, i) : array.get(zoneTitles, i)
-                bool isOB = kind == 1
-                int obClass = array.get(zoneClasses, i)
-                string obName = (obClass == 1 ? "iOB" : "OB") + (touched ? " · T" : "")
-                string shortTitle = poi ? title : isOB ? obName : array.get(zoneTitles, i)
-                float mitigation = array.get(zoneMitigation, i)
-                string zoneState = array.get(zoneQualification, i)
-                string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
-                string zoneTooltip = title + "\n" + obTipLine + zoneState + "\nMitigated " + str.tostring(mitigation * 100.0, "#.0") + "%\n" + str.tostring(bottom, format.mintick) + " — " + str.tostring(top, format.mintick)
-                float zoneMid = (top + bottom) / 2.0
-                bool tallZone = top - bottom >= atr * (largeText ? 0.45 : compactText ? 0.20 : 0.32)
-                bool suppressCaption = false
-                if not poi and array.size(zones) > 1
-                    for j = 0 to array.size(zones) - 1
-                        if j != i and array.get(zoneVisible, j) and array.get(zonePoi, j)
-                            float poiTop = array.get(zoneTops, j)
-                            float poiBottom = array.get(zoneBottoms, j)
-                            suppressCaption := suppressCaption or math.min(top, poiTop) - math.max(bottom, poiBottom) > 0
-                string insideText = tallZone and not suppressCaption ? shortTitle : ""
-                color zoneBorder = isOB ? color.new(tone, touched ? 72 : 42) : poi ? color.new(tone, 10) : color.new(tone, touched ? 75 : 50)
-                int zoneBorderWidth = isOB ? 1 : poi ? 2 : 1
-                string zoneBorderStyle = isOB and touched ? line.style_dashed : line.style_solid
-                color zoneFill = isOB ? color.new(tone, touched ? 95 : math.min(97, zoneOpacity + 2)) : color.new(tone, touched ? 96 : poi ? math.max(82, zoneOpacity - 3) : zoneOpacity)
-                int drawLeft = math.max(origin, bar_index - maxDrawBars)
-                if na(zoneBox)
-                    zoneBox := box.new(left = drawLeft, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
-                    array.set(zones, i, zoneBox)
-                else
-                    box.set_left(zoneBox, drawLeft)
-                    box.set_right(zoneBox, bar_index + 5)
-                    box.set_border_color(zoneBox, zoneBorder)
-                    box.set_border_width(zoneBox, zoneBorderWidth)
-                    box.set_border_style(zoneBox, zoneBorderStyle)
-                    box.set_bgcolor(zoneBox, zoneFill)
-                    box.set_text(zoneBox, insideText)
-                    box.set_text_color(zoneBox, tone)
-                    box.set_text_size(zoneBox, zoneTextSize)
-                    box.set_text_halign(zoneBox, text.align_right)
-                line zoneMidLine = array.get(zoneMidLines, i)
-                if isOB and showOBMidline
-                    if na(zoneMidLine)
-                        zoneMidLine := line.new(drawLeft, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
-                        array.set(zoneMidLines, i, zoneMidLine)
-                    else
-                        line.set_x1(zoneMidLine, drawLeft)
-                        line.set_x2(zoneMidLine, bar_index + 5)
-                else if not na(zoneMidLine)
-                    line.delete(zoneMidLine)
-                    line emptyMidLine = na
-                    array.set(zoneMidLines, i, emptyMidLine)
-                label zoneCaption = array.get(zoneCaptionLabels, i)
-                if not tallZone and not suppressCaption
-                    float captionY = zoneMid
-                    if i > 0
-                        for j = 0 to i - 1
-                            label otherCaption = array.get(zoneCaptionLabels, j)
-                            if not na(otherCaption) and array.get(zoneVisible, j) and math.abs(captionY - label.get_y(otherCaption)) <= atr * annotationATRSpacing
-                                if poi and not array.get(zonePoi, j)
-                                    label.delete(otherCaption)
-                                    label emptyCaption = na
-                                    array.set(zoneCaptionLabels, j, emptyCaption)
-                                else
-                                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                    float developingReference = developingDirection == 1 ? developingHigh : developingDirection == -1 ? developingLow : na
-                    if not na(developingReference) and math.abs(captionY - developingReference) <= atr * annotationATRSpacing
-                        captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                    if not na(activeProtected) and math.abs(captionY - activeProtected) <= atr * annotationATRSpacing
-                        captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                    if not na(lastSwingHigh) and math.abs(captionY - lastSwingHigh) <= atr * annotationATRSpacing
-                        captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                    if not na(lastSwingLow) and math.abs(captionY - lastSwingLow) <= atr * annotationATRSpacing
-                        captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                    if na(zoneCaption)
-                        zoneCaption := label.new(bar_index + 6, captionY, shortTitle, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 18), textcolor = tone, size = zoneTextSize, tooltip = zoneTooltip)
-                        array.set(zoneCaptionLabels, i, zoneCaption)
-                    else
-                        label.set_xy(zoneCaption, bar_index + 6, captionY)
-                        label.set_text(zoneCaption, shortTitle)
-                        label.set_color(zoneCaption, color.new(#090D18, 18))
-                        label.set_textcolor(zoneCaption, tone)
-                        label.set_size(zoneCaption, zoneTextSize)
-                        label.set_tooltip(zoneCaption, zoneTooltip)
-                else if not na(zoneCaption)
-                    label.delete(zoneCaption)
-                    label emptyCaption = na
-                    array.set(zoneCaptionLabels, i, emptyCaption)
-                visibleOB += kind == 1 ? 1 : 0
-                visibleFVG += kind == 2 ? 1 : 0
-                visibleSD += kind == 3 ? 1 : 0
-            else
-                if not na(zoneBox)
-                    box.delete(zoneBox)
-                    box hiddenBox = na
-                    array.set(zones, i, hiddenBox)
-                label hiddenCaption = array.get(zoneCaptionLabels, i)
-                if not na(hiddenCaption)
-                    label.delete(hiddenCaption)
-                    label emptyCaption = na
-                    array.set(zoneCaptionLabels, i, emptyCaption)
-                line hiddenMid = array.get(zoneMidLines, i)
-                if not na(hiddenMid)
-                    line.delete(hiddenMid)
-                    line emptyMidLine = na
-                    array.set(zoneMidLines, i, emptyMidLine)
+        f_renderZones()
 
         // Visibility audit: every active candidate ends in one deterministic
         // state—visible, outside the distance budget, or hidden by ranking.
@@ -1989,6 +2007,9 @@ if array.size(zones) > 0
             activeOB += auditKind == 1 ? 1 : 0
             activeFVG += auditKind == 2 ? 1 : 0
             activeSD += auditKind == 3 ? 1 : 0
+            visibleOB += auditKind == 1 and array.get(zoneVisible, i) ? 1 : 0
+            visibleFVG += auditKind == 2 and array.get(zoneVisible, i) ? 1 : 0
+            visibleSD += auditKind == 3 and array.get(zoneVisible, i) ? 1 : 0
             bool auditBase = auditKind == 3 and array.get(zoneClasses, i) == 1
             activeBaseSD += auditBase ? 1 : 0
             visibleBaseSD += auditBase and array.get(zoneVisible, i) ? 1 : 0
@@ -2595,7 +2616,8 @@ if barstate.isfirst
     table.merge_cells(dashboard, 0, 17, 1, 17)
     table.merge_cells(dashboard, 0, 21, 1, 21)
 
-if barstate.islast
+// Panel drawing is a function so the main script body stays within TradingView's size limit.
+f_renderPanel() =>
     table.clear(dashboard, 0, 0, 1, 27)
     if showDashboard
         color valueColor = bias == 1 ? bullColor : bias == -1 ? bearColor : color.silver
@@ -2752,12 +2774,16 @@ if barstate.islast
             if expandedPanel
                 table.cell(dashboard, 0, 26, "Zone Audit", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
                 table.cell(dashboard, 1, 26, auditShort, text_color = color.new(color.white, 12), text_size = dashboardValueSize, text_halign = text.align_right, tooltip = auditText)
+    0
+
+if barstate.islast
+    f_renderPanel()
 
 // ------- OB DEBUG VIEW (TEMPORARY, OFF BY DEFAULT) -------
 // Lists every active block with its lifecycle state and visibility reason, then the
 // most recent candidate evaluations (accepted and rejected) with the exact reason.
 var table obDebugTable = table.new(position.bottom_left, 1, 30, bgcolor = color.new(#090D18, 6), frame_color = color.new(bullColor, 45), frame_width = 1, border_width = 0)
-if barstate.islast
+f_renderObDebug() =>
     table.clear(obDebugTable, 0, 0, 0, 29)
     if showOBDebug
         table.cell(obDebugTable, 0, 0, "OB DEBUG · active " + str.tostring(activeOB) + " (visible " + str.tostring(visibleBullOB + visibleBearOB) + ") · far " + str.tostring(hiddenOBFar) + " · overlap " + str.tostring(hiddenOBOverlap) + " · budget " + str.tostring(hiddenOBBudget), text_color = color.white, text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
@@ -2772,6 +2798,10 @@ if barstate.islast
             for r = array.size(obDebugLog) - 1 to math.max(0, array.size(obDebugLog) - 14)
                 table.cell(obDebugTable, 0, debugRow, array.get(obDebugLog, r), text_color = str.contains(array.get(obDebugLog, r), "ACCEPT") ? bullColor : str.contains(array.get(obDebugLog, r), "REJECT") ? color.new(bearColor, 10) : color.silver, text_size = size.tiny, text_halign = text.align_left)
                 debugRow += 1
+    0
+
+if barstate.islast
+    f_renderObDebug()
 
 // ------- BAR-CLOSE ALERT EVENTS (EXTERNAL STRUCTURE, CONFIRMED ONLY) -------
 // BOS/CHoCH alerts now refer to confirmed external swings; internal breaks are
