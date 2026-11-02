@@ -1,60 +1,39 @@
 # ADR-007: Shared cross-service contracts live at the repo root
 
 ## Status
-Accepted; `contracts/configuration/` already implements this pattern.
-`contracts/market/`, `contracts/analysis/`, `contracts/execution/` created
-as skeletons by the architecture-freeze task. `contracts/market/`,
-`contracts/analysis/`, and a new `contracts/common/` (the shared event
-envelope, §31 of the Kafka transport task) were promoted to real,
-implemented transport contracts by the Kafka transport task — see
-[ADR-008](008-go-kafka-client.md) and
-[`../transport/kafka.md`](../transport/kafka.md). `contracts/execution/`
-remains a skeleton; execution Kafka is explicitly out of that task's
-scope.
+Accepted. `contracts/configuration/` implements the pattern; `contracts/market/`,
+`contracts/analysis/` and `contracts/common/` (the shared event envelope) are the
+implemented transport contracts (see [ADR-008](008-go-kafka-client.md) and
+[`../transport/kafka.md`](../transport/kafka.md)). `contracts/execution/` is still a skeleton.
 
 ## Context
-`contracts/configuration/` already proves the pattern this ADR generalizes:
-one JSON Schema, read/validated by Python (`v3_root.py`), Go
-(`internal/config`), and referenced by `.NET`'s config path, with
-cross-language configuration and contract tests proving no language silently
-drifted from the schema. Without
-this discipline, a cross-service event contract (bar-closed, opportunity,
-trade-plan, trade-event) risks becoming three independently-maintained
-structs that happen to agree today and silently diverge tomorrow — exactly
-the ATR-divergence failure mode, but at the
-service boundary instead of inside one process.
+`contracts/configuration/` already proves the pattern: one JSON Schema, read and validated by
+Python, Go and referenced by .NET, with cross-language tests proving no language drifted from the
+schema. Without this discipline a cross-service event contract (bar-closed, opportunity,
+trade-plan, trade-event) becomes three independently maintained structs that agree today and
+diverge tomorrow, the same failure mode as an indicator computed differently in two processes.
 
 ## Decision
-Cross-service contracts live outside every individual service, at
-`contracts/`:
+Cross-service contracts live outside every individual service, under `contracts/`:
 
 ```text
 contracts/
-├── configuration/   (exists)
-├── market/           market/bar-closed-v1.schema.json, tick-v1.schema.json
-├── analysis/          analysis/opportunity-v1.schema.json, opportunity-invalidated-v1.schema.json
-└── execution/          execution/trade-plan-v1.schema.json, trade-event-v1.schema.json
+├── configuration/   (implemented)
+├── common/           shared event envelope
+├── market/           bar-closed-v1, tick-v1
+├── analysis/         opportunity-v1, opportunity-invalidated-v1
+└── execution/        trade-plan-v1, trade-event-v1 (skeleton)
 ```
 
-No service's source tree contains its own private copy of a schema another
-service also reads. `contracts/autotrade/*` (the current TradePlan V8
-Python/C# fixture set) is not deleted by this task — it remains the real,
-live contract until `execution/trade-plan-v1.schema.json` is adopted at
-Kafka cutover (ADR-004), at which point it is superseded.
+No service's source tree contains a private copy of a schema another service also reads.
+`contracts/autotrade/*` (the TradePlan V8 fixture set) stays the live contract until
+`execution/trade-plan-v1.schema.json` is adopted ([ADR-010](010-redis-market-data-kafka-events.md)),
+at which point it is superseded.
 
 ## Consequences
-- A schema change is a PR against `contracts/`, reviewed by every service
-  that reads or writes it — never a unilateral change inside one service's
-  tree that the others discover at runtime.
-- The four new schema files created this task are skeletons (field names
-  and types sketched from the real Go/Python/C# shapes already in the
-  codebase — `TimeframeAnalysis`, `opportunity.Candidate`, TradePlan V8's
-  own `contracts/autotrade/trade-plan-v8.json` fixture shape) — not yet
-  wired into any service's validation path. Wiring them in is Stage 4+
-  work (once analysis-engine has a real opportunity to publish), not this
-  task.
-- This does not create a second configuration authority
-  (`contracts/configuration/` stays exactly as-is) — it extends the same
-  root-level-contracts pattern to the three new event classes, per the
-  source task's own §6 instruction that configuration values remain owned
-  by root YAML and no service package should own business defaults.
+- A schema change is a PR against `contracts/`, reviewed by every service that reads or writes
+  it, never a unilateral change inside one service's tree.
+- Skeleton schemas are sketches of the real Go, Python and C# shapes and are not yet wired into a
+  validation path; wiring them in belongs with the first real publisher.
+- Configuration stays owned by the root YAML (`contracts/configuration/`); no service package owns
+  business defaults.

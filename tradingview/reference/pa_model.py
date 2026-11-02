@@ -6,7 +6,7 @@ available in CI. The model mirrors the Pine decision logic bar by bar. It does
 not render anything and it cannot prove that the Pine file compiles.
 
 `legacy` = v2.0 behaviour (used to reproduce the missing-OB defect).
-`v21`    = v2.1 behaviour (see tradingview/docs/ob-liquidity-v2.1.md).
+`v21`    = v2.1 behaviour (see tradingview/README.md).
 """
 import math
 from dataclasses import dataclass, field

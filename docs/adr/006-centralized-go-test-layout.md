@@ -68,15 +68,14 @@ requirement.
 `analysis-engine` module (`module
 github.com/st-mich43l/apexvoid-trading-bot/analysis-engine`); every test
 file imports `internal/*` by its module path like any other Go code in the
-tree, and `go test ./...` from `analysis-engine/` runs everything —
-confirmed by running it after this task's scaffolding (`go build ./... &&
-go vet ./... && go test ./...`, all green).
+tree, and `go test ./...` from `analysis-engine/` runs everything (`go build ./... &&
+go vet ./... && go test ./...`).
 
 ## Consequences
 - Adding a package with no corresponding `test/<domain>/` directory is
   incomplete by convention, not by tooling — reviewers should expect a new
   `internal/<pkg>/` to arrive with a `test/<pkg>/` sibling.
-- `test/architecture/dependency_test.go` (added this task) lives in this
+- `test/architecture/dependency_test.go` lives in this
   same centralized tree, `package architecture_test`, and is itself the
   concrete example of why centralizing by domain matters: it tests
   *every* `internal/*` package's import list, which has no single natural

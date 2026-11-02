@@ -6,13 +6,8 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, currently v2.8). |
-| `docs/supply-demand-v2.2.md` | v2.2 base-and-impulse supply/demand definition, gates, results on real bars and limits. |
-| `docs/trade-plan-v2.8.md` | v2.8 trade plan: rules, position boxes, paper results (descriptive, no edge shown) and limits. |
-| `docs/labels-and-bos-v2.7.md` | v2.7 research and rules for the label column and BOS lines. |
-| `docs/ob-liquidity-v2.1.md` | v2.1 order-block and liquidity definitions, the root-cause analysis of the missing order blocks, verification status and known limitations. |
-| `docs/img/` | Before/after renders from the reference model (not TradingView screenshots). |
-| `reference/` | Python models of the order-block, liquidity, supply/demand and trade-plan logic, regression checks on real XAUUSD closed bars, and the chart renderer. |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.9.1). |
+| `reference/` | Python models of the indicator's order-block, liquidity, supply/demand and trade-plan logic with rule checks on real XAUUSD closed bars (`python tradingview/reference/test_<name>.py`). They validate the algorithm only; they do not compile or draw the Pine file. |
 
 ## ApexVoid Price Action
 
@@ -23,7 +18,6 @@ needs a **closed** chart bar, so nothing repaints once a bar has closed. A zone,
 pool or sweep is an analytical reference, not an entry signal. Since v2.8 the
 indicator can also draw a rule-based **trade plan** as long/short position boxes (last 5
 trades) with paper-tracked results; it sends no orders and the rules have not shown an edge
-(`docs/trade-plan-v2.8.md`).
 
 ### Install
 
@@ -78,16 +72,14 @@ pivot and the break, and it must pass gates for base position, range, net
 displacement and an impulse candle. Fresh → Tested (price entered) → Mitigated
 (your chosen rule) / Invalidated (close beyond the far edge). A partial touch never
 invalidates. Blocks have their own display budget (default 2 bullish + 2 bearish)
-and are never deleted just because they are hidden. No volume is used. Full rules:
-`docs/ob-liquidity-v2.1.md` §3.
+and are never deleted just because they are hidden. No volume is used.
 
 **Base-and-impulse supply / demand (v2.2).** Independent of swing pivots. A base is 1–5
 small candles; a zone is built once price leaves it within 3 bars with a real impulse
 candle and enough net distance (1.5 ATR and 2× the base height) without closing back
 through it. Patterns: `DBR` / `RBD` reversals, `RBR` / `DBD` continuations (filterable).
 Invalidated by a close beyond the far edge; a touch only marks it Tested. A fresh base
-zone on the bias side qualifies as a `Base-impulse zone` POI. Details and results:
-`docs/supply-demand-v2.2.md`.
+zone on the bias side qualifies as a `Base-impulse zone` POI.
 
 **FVG.** A three-candle gap whose size is at least `Minimum gap size` and whose
 middle candle has a real body. Invalidation follows `Wick`, `Close` or `Midpoint`.
@@ -134,28 +126,25 @@ decisions.
 | Detailed | at least 12 | at least 12 | internal structure available |
 | Debug | up to 20, distance limits off | all retained | `xEH` / `xEL` raw-pivot labels, OB and pool distance limits off |
 
-### Keeping candles readable (v2.3)
+### Keeping candles readable
 
 Distant zones and lines stretch the price scale and squash the candles, and heavy fills
-hide them. v2.3 adds:
+hide them, so:
 
 - **Candle-scale protection** (`Keep candles readable…`, default on): a zone, order block
   or liquidity pool is drawn only if it is within `Candle-scale window` (15 ATR) of the close
   **or** inside the price range the last `Candle range reference` (300) bars already span (plus
   one ATR). An object inside that range cannot stretch the price scale, so it is kept; one
-  outside it is not drawn. (v2.3 used the ATR window alone, which hid a BSL 16 ATR away that
-  the candles themselves already spanned.) The panel and OB debug table report the reason, and
+  outside it is not drawn. The panel and OB debug table report the reason, and
   hidden objects keep their state. The Debug profile ignores the limit; turn the toggle off to
   ignore it everywhere. Each object type also keeps its own distance setting.
 - **Maximum drawn length** (250 bars): the left edge of zone boxes, midlines, pool lines
   and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
   chart.
-- **Lighter zones:** default `Zone transparency` 92 (range now up to 98), fainter borders;
-  POI keeps a stronger border.
-- **One label column (v2.7):** `PROTECTED`, `DEV HIGH/LOW`, `BSL/SSL`, `EQ`, `Asia H/L`, `iBSL/iSSL` and `PREMIUM/DISCOUNT` are drawn as one column at the right edge. Labels at nearly the same price merge into one (`PROTECTED · BSL · PREMIUM`); hover for every member and its price. See `docs/labels-and-bos-v2.7.md`.
-- **Larger labels:** the `Standard` text scale now uses the normal size for zone and
-  liquidity labels (`Large` uses large), captions need a taller box before they appear
-  inside it, and the default annotation spacing is wider (6 bars, 0.30 ATR).
+- **Lighter zones:** default `Zone transparency` 92, fainter borders; POI keeps a stronger border.
+- **One label column:** `PROTECTED`, `DEV HIGH/LOW`, `BSL/SSL`, `EQ`, `Asia H/L`, `iBSL/iSSL` and `PREMIUM/DISCOUNT` are drawn as one column at the right edge. Labels at nearly the same price merge into one (`PROTECTED · BSL · PREMIUM`); hover for every member and its price.
+- **Zone captions:** text inside a box needs a box tall enough (zoom-aware) and a free slot;
+  otherwise the caption joins the label column.
 
 Not covered: Asian levels, optional HTF lines and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
@@ -278,15 +267,29 @@ All fire on bar close. Create them from the indicator's alert dialog.
   between independent tests` / `Minimum pullback between tests`.
 - **Different symbols:** every threshold is ATR-based, but defaults were tuned on one
   week of XAUUSD; retune sensitivity and gates per instrument.
-- Upgrading from v2.0: `Break candle minimum body` and `Sweep consolidation window`
-  were removed, and `Retained liquidity levels` became `Retained liquidity pools`.
 
-### Verification and known limits
+### Limits
 
-`reference/test_pa_model.py` runs the order-block and liquidity decision logic on
-real XAUUSD M5 / M15 / H1 / H4 bars and the v2.0 reproduction of the hidden-block
-defect (`python tradingview/reference/test_pa_model.py`, `test_sd_base_model.py` for the v2.2 supply/demand detector, and `test_pine_builtins.py`, which fails if the indicator calls a Pine built-in that has not been confirmed to exist (the syntax-only parser cannot catch those; v2.7 shipped with a call to a non-existent `line.get_color`); `render.py` regenerates the
-images). It validates the algorithm only: it does not compile or draw the Pine file.
-Compile errors, label placement, object limits and alert behaviour must still be
-checked in TradingView, and a comparison with other indicators has not been done. See
-`docs/ob-liquidity-v2.1.md` §0, §9 and §10 for the exact status and checklist.
+- Compile errors, label placement, object limits and alert behaviour are only checked in
+  TradingView; the reference tests cover the decision logic, not the drawing code.
+- `reference/test_pine_builtins.py` fails if the indicator calls a Pine built-in that has not
+  been confirmed to exist, or if the script body outside functions grows past TradingView's
+  size limit (CE10295).
+- The trade plan sends no orders. On about two weeks of XAUUSD its paper results showed no edge;
+  treat the in-chart tracker as a way to collect evidence on your own history.
+- Defaults were tuned on a week or two of XAUUSD; retune per instrument.
+
+### Version history
+
+| Version | Change |
+| --- | --- |
+| 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
+| 2.9 | Planned RR box for the nearest qualified POI; trade boxes show only R:R |
+| 2.8 | Trade plan: price-action trigger at a qualified POI, next-key-level take-profit, last 5 trades drawn, paper stats |
+| 2.7 | One right-edge label column; one BOS per candle; slim premium/discount gauge |
+| 2.6 | BOS/CHoCH lines end on the candle that closed beyond the swing |
+| 2.5 | BSL/SSL kept when inside the candle range; nearest unswept internal swing markers |
+| 2.4 | Compact "major only" panel; premium/discount range |
+| 2.3 | Candle-scale protection; lighter zones |
+| 2.2 | Base-and-impulse supply/demand (DBR, RBR, RBD, DBD) |
+| 2.1 | Order blocks (swing + internal, lifecycle) and level-first BSL/SSL pools |
