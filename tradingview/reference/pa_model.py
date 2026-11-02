@@ -131,6 +131,19 @@ class Structure:
     self.last_sweep_side = 0
     self.last_sweep_bar = None
 
+  def first_close_beyond(self, i, swing_bar, level, up):
+    """Bar of the first close beyond the swing (the candle a BOS/CHoCH line must end on).
+    The swing is published late, so this can precede the publication bar i."""
+    need = self.p.confirm_atr + self.p.break_buffer
+    span = i - swing_bar - 1
+    if span < 1 or span > 750:
+      return i
+    for k in range(swing_bar + 1, i):
+      a = self.atr[k] if not isna(self.atr[k]) else self.atr[i]
+      if (self.c[k] > level + a * need) if up else (self.c[k] < level - a * need):
+        return k
+    return i
+
   def a_at(self, i):
     return self.atr[i] if i >= 0 else NAN
 
@@ -208,6 +221,7 @@ class Structure:
       choch = self.bias == -1 and not isna(self.protected_high)
       ev["up_break"], ev["choch"] = True, choch
       ev["broken_high"], ev["broken_high_bar"] = self.last_swing_high, self.last_high_bar
+      ev["break_bar"] = self.first_close_beyond(i, self.last_high_bar, self.last_swing_high, True)
       self.high_broken = True
       self.bias = 1
       self.last_break_bar, self.last_break_choch = i, choch
@@ -216,6 +230,7 @@ class Structure:
       choch = self.bias == 1 and not isna(self.protected_low)
       ev["down_break"], ev["choch"] = True, choch
       ev["broken_low"], ev["broken_low_bar"] = self.last_swing_low, self.last_low_bar
+      ev["break_bar"] = self.first_close_beyond(i, self.last_low_bar, self.last_swing_low, False)
       self.low_broken = True
       self.bias = -1
       self.last_break_bar, self.last_break_choch = i, choch
@@ -475,13 +490,16 @@ class P21(Params):
   visible_liquidity: int = 6
   liq_display_distance_atr: float = 30.0
   grab_min_wick_atr: float = 0.20
-  ring_size: int = 24
+  ring_size: int = 80
+  scale_lookback_bars: int = 300
   protect_scale: bool = True
   scale_window_atr: float = 15.0
 
-  def eff(self, value):
-    """Effective display distance: capped by the candle-scale window when protection is on."""
-    return min(value, self.scale_window_atr) if self.protect_scale else value
+  def scale_ok(self, price, close, atr, band_hi, band_lo):
+    """Candle-scale protection: near price (ATR window) or inside the range the candles already span."""
+    if not self.protect_scale:
+      return True
+    return abs(price - close) / atr <= self.scale_window_atr or (band_lo - atr <= price <= band_hi + atr)
 
 
 class V21Pipeline(LegacyPipeline):
@@ -664,6 +682,8 @@ class V21Pipeline(LegacyPipeline):
     i = s.n - 1
     atr, close = s.atr[i], s.c[i]
     bias = s.bias
+    band_hi = max(s.h[-p.scale_lookback_bars:])
+    band_lo = min(s.l[-p.scale_lookback_bars:])
     # OB-specific selection
     for z in obs:
       z.visible = False
@@ -677,7 +697,7 @@ class V21Pipeline(LegacyPipeline):
         if z.visible or n_side[z.side] >= budget[z.side]:
           continue
         dist = abs(close - (z.top + z.bottom) / 2) / atr
-        if dist > p.eff(p.ob_display_distance_atr):
+        if dist > p.ob_display_distance_atr or not p.scale_ok((z.top + z.bottom) / 2, close, atr, band_hi, band_lo):
           continue
         if any(o.visible and o.side == z.side and min(z.top, o.top) - max(z.bottom, o.bottom) > 0 and (min(z.top, o.top) - max(z.bottom, o.bottom)) / min(z.top - z.bottom, o.top - o.bottom) >= 0.5 for o in pool):
           continue
@@ -691,7 +711,7 @@ class V21Pipeline(LegacyPipeline):
     for z in obs:
       if not z.visible:
         dist = abs(close - (z.top + z.bottom) / 2) / atr
-        z.hidden_reason = "far (%.1f ATR > %.0f)" % (dist, p.eff(p.ob_display_distance_atr)) if dist > p.eff(p.ob_display_distance_atr) else ("overlap" if any(o.visible and o.side == z.side and min(z.top, o.top) > max(z.bottom, o.bottom) for o in obs) else "side budget")
+        z.hidden_reason = ("far (%.1f ATR > %.0f)" % (dist, p.ob_display_distance_atr) if dist > p.ob_display_distance_atr else "outside the candle range") if (dist > p.ob_display_distance_atr or not p.scale_ok((z.top + z.bottom) / 2, close, atr, band_hi, band_lo)) else ("overlap" if any(o.visible and o.side == z.side and min(z.top, o.top) > max(z.bottom, o.bottom) for o in obs) else "side budget")
     # generic zones (FVG, S/D): legacy rule, OBs excluded from the shared budget
     saved = self.zones
     self.zones = [z for z in saved if z.kind != 1]
@@ -709,6 +729,8 @@ class V21Pipeline(LegacyPipeline):
     s, p = self.s, self.p
     i = s.n - 1
     atr, close, bias = s.atr[i], s.c[i], s.bias
+    band_hi = max(s.h[-p.scale_lookback_bars:])
+    band_lo = min(s.l[-p.scale_lookback_bars:])
     for z in full:
       has = {1: z.kind == 1, 2: z.kind == 2, 3: z.kind == 3}
       for o in full:
@@ -733,7 +755,7 @@ class V21Pipeline(LegacyPipeline):
           continue
         mid = (z.top + z.bottom) / 2
         dist = abs(close - mid) / max(atr, 1e-9)
-        if dist > p.eff(p.zone_display_distance_atr):
+        if dist > p.zone_display_distance_atr or not p.scale_ok(mid, close, atr, band_hi, band_lo):
           continue
         if any(o.visible and o.side == z.side and min(z.top, o.top) - max(z.bottom, o.bottom) > 0 and (min(z.top, o.top) - max(z.bottom, o.bottom)) / min(z.top - z.bottom, o.top - o.bottom) >= 0.60 for o in full):
           continue
@@ -947,10 +969,12 @@ class LiquidityModel:
     p = self.p
     budget = min(p.visible_liquidity, 8) if budget is None else budget
     shown = []
+    band_hi = max(self.s.h[-p.scale_lookback_bars:])
+    band_lo = min(self.s.l[-p.scale_lookback_bars:])
     near_b = min((x for x in self.pools if x.state == 0 and x.side == 1 and x.edge > close), key=lambda x: x.edge - close, default=None)
     near_s = min((x for x in self.pools if x.state == 0 and x.side == -1 and x.edge < close), key=lambda x: close - x.edge, default=None)
     for cand in (near_b, near_s):
-      if cand is not None and abs(cand.edge - close) / atr <= p.eff(p.liq_display_distance_atr * 2) and len(shown) < budget:
+      if cand is not None and abs(cand.edge - close) / atr <= p.liq_display_distance_atr * 2 and p.scale_ok(cand.edge, close, atr, band_hi, band_lo) and len(shown) < budget:
         shown.append(cand)
     while len(shown) < budget:
       best, best_score = None, None
@@ -958,7 +982,7 @@ class LiquidityModel:
         if x in shown:
           continue
         dist = abs(close - x.edge) / atr
-        if dist > p.eff(p.liq_display_distance_atr):
+        if dist > p.liq_display_distance_atr or not p.scale_ok(x.edge, close, atr, band_hi, band_lo):
           continue
         score = x.degree * 1000 + (500 if x.state == 0 else 0) - dist * 10
         if best is None or score > best_score:
@@ -967,3 +991,25 @@ class LiquidityModel:
         break
       shown.append(best)
     return shown
+
+  # ---- nearest unswept internal swing (iBSL / iSSL markers) -------------
+  def nearest_internal(self, close, atr):
+    """Nearest internal swing high above / low below price that no later bar traded through
+    and that is not already an active pool. Markers only: no state, no alerts."""
+    s, p = self.s, self.p
+    n = s.n
+    band_hi = max(s.h[-p.scale_lookback_bars:])
+    band_lo = min(s.l[-p.scale_lookback_bars:])
+    best = {1: None, -1: None}
+    for price, bar, side in self.ring:
+      if not ((side == 1 and price > close) or (side == -1 and price < close)):
+        continue
+      if not p.scale_ok(price, close, atr, band_hi, band_lo) or n - 1 - bar < 1 or n - 1 - bar > 750:
+        continue
+      if best[side] is not None and abs(price - close) >= abs(best[side][0] - close):
+        continue
+      swept = any((s.h[k] > price) if side == 1 else (s.l[k] < price) for k in range(bar + 1, n))
+      dup = any(x.state == 0 and x.side == side and abs(x.edge - price) <= atr * 0.5 for x in self.pools)
+      if not swept and not dup:
+        best[side] = (price, bar)
+    return best[1], best[-1]
