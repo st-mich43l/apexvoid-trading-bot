@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.9", "AV PA v2.9", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.9.1", "AV PA v2.9.1", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,8 @@ indicator("ApexVoid | Price Action v2.9", "AV PA v2.9", overlay = true, scale = 
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.9.1: zone captions share the right-edge label column (merged, zoom-aware); text inside boxes only
+// when the box is tall enough and no other box text sits at that price; consumed-pool labels removed.
 // v2.9: a planned long/short RR box is always drawn for the nearest qualified POI (preview), trade boxes
 // carry only the R:R number.
 // v2.8: trade plan - price-action entry at a qualified POI, stop beyond the zone, target at the
@@ -1250,14 +1252,12 @@ f_renderPools() =>
                         label emptyActiveLabel = na
                         array.set(poolLabels, i, emptyActiveLabel)
                 else
-                    // Consumed pools keep a small label at the event bar, away from the edge column.
-                    if na(poolLabel)
-                        poolLabel := label.new(rightX, pEdge, labelText, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 70), textcolor = color.new(liquidityColor, 55), size = contextTextSize, tooltip = poolTip)
-                        array.set(poolLabels, i, poolLabel)
-                    else
-                        label.set_xy(poolLabel, rightX, pEdge)
-                        label.set_text(poolLabel, labelText)
-                        label.set_tooltip(poolLabel, poolTip)
+                    // Consumed pools show no label (the fading line ends at the event bar); a label there
+                    // only collided with candles and other captions.
+                    if not na(poolLabel)
+                        label.delete(poolLabel)
+                        label emptyConsumedLabel = na
+                        array.set(poolLabels, i, emptyConsumedLabel)
             else
                 if not na(poolLine)
                     line.delete(poolLine)
@@ -1595,6 +1595,10 @@ f_poiPath(int i, bool fresh) =>
 f_renderZones() =>
     // Rendering pass. Hidden zones have no box object, so they cannot distort
     // chart autoscaling; they can be recreated later when ranking qualifies them.
+    // One label is about 1/48 of the candle range tall (zoom-aware); text inside a box needs room for
+    // it and a free slot, otherwise the caption joins the right-edge label column (merged there).
+    float labelGap = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 48.0)
+    float[] placedText = array.new_float()
     for i = 0 to array.size(zones) - 1
         box zoneBox = array.get(zones, i)
         bool visible = array.get(zoneVisible, i)
@@ -1617,7 +1621,7 @@ f_renderZones() =>
             string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
             string zoneTooltip = title + "\n" + obTipLine + zoneState + "\nMitigated " + str.tostring(mitigation * 100.0, "#.0") + "%\n" + str.tostring(bottom, format.mintick) + " — " + str.tostring(top, format.mintick)
             float zoneMid = (top + bottom) / 2.0
-            bool tallZone = top - bottom >= atr * (largeText ? 0.45 : compactText ? 0.20 : 0.32)
+            bool tallEnough = top - bottom >= labelGap * 1.4
             bool suppressCaption = false
             if not poi and array.size(zones) > 1
                 for j = 0 to array.size(zones) - 1
@@ -1625,7 +1629,14 @@ f_renderZones() =>
                         float poiTop = array.get(zoneTops, j)
                         float poiBottom = array.get(zoneBottoms, j)
                         suppressCaption := suppressCaption or math.min(top, poiTop) - math.max(bottom, poiBottom) > 0
-            string insideText = tallZone and not suppressCaption ? shortTitle : ""
+            bool textFree = true
+            if array.size(placedText) > 0
+                for t = 0 to array.size(placedText) - 1
+                    textFree := textFree and math.abs(zoneMid - array.get(placedText, t)) >= labelGap
+            bool showInside = tallEnough and not suppressCaption and textFree
+            if showInside
+                array.push(placedText, zoneMid)
+            string insideText = showInside ? shortTitle : ""
             color zoneBorder = isOB ? color.new(tone, touched ? 72 : 42) : poi ? color.new(tone, 10) : color.new(tone, touched ? 75 : 50)
             int zoneBorderWidth = isOB ? 1 : poi ? 2 : 1
             string zoneBorderStyle = isOB and touched ? line.style_dashed : line.style_solid
@@ -1658,41 +1669,13 @@ f_renderZones() =>
                 line emptyMidLine = na
                 array.set(zoneMidLines, i, emptyMidLine)
             label zoneCaption = array.get(zoneCaptionLabels, i)
-            if not tallZone and not suppressCaption
-                float captionY = zoneMid
-                if i > 0
-                    for j = 0 to i - 1
-                        label otherCaption = array.get(zoneCaptionLabels, j)
-                        if not na(otherCaption) and array.get(zoneVisible, j) and math.abs(captionY - label.get_y(otherCaption)) <= atr * annotationATRSpacing
-                            if poi and not array.get(zonePoi, j)
-                                label.delete(otherCaption)
-                                label emptyCaption = na
-                                array.set(zoneCaptionLabels, j, emptyCaption)
-                            else
-                                captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                float developingReference = developingDirection == 1 ? developingHigh : developingDirection == -1 ? developingLow : na
-                if not na(developingReference) and math.abs(captionY - developingReference) <= atr * annotationATRSpacing
-                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                if not na(activeProtected) and math.abs(captionY - activeProtected) <= atr * annotationATRSpacing
-                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                if not na(lastSwingHigh) and math.abs(captionY - lastSwingHigh) <= atr * annotationATRSpacing
-                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                if not na(lastSwingLow) and math.abs(captionY - lastSwingLow) <= atr * annotationATRSpacing
-                    captionY += side == 1 ? -atr * annotationATRSpacing : atr * annotationATRSpacing
-                if na(zoneCaption)
-                    zoneCaption := label.new(bar_index + 6, captionY, shortTitle, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 18), textcolor = tone, size = zoneTextSize, tooltip = zoneTooltip)
-                    array.set(zoneCaptionLabels, i, zoneCaption)
-                else
-                    label.set_xy(zoneCaption, bar_index + 6, captionY)
-                    label.set_text(zoneCaption, shortTitle)
-                    label.set_color(zoneCaption, color.new(#090D18, 18))
-                    label.set_textcolor(zoneCaption, tone)
-                    label.set_size(zoneCaption, zoneTextSize)
-                    label.set_tooltip(zoneCaption, zoneTooltip)
-            else if not na(zoneCaption)
+            if not na(zoneCaption)
                 label.delete(zoneCaption)
                 label emptyCaption = na
                 array.set(zoneCaptionLabels, i, emptyCaption)
+            if not showInside and not suppressCaption
+                string columnText = poi ? "◆ " + str.replace_all(title, "POI · ", "") : shortTitle
+                f_regLabel(zoneMid, columnText, tone, 45, zoneTooltip)
         else
             if not na(zoneBox)
                 box.delete(zoneBox)
@@ -2324,7 +2307,7 @@ f_renderTradePreview() =>
                     float rr = math.abs(targetPrice - entryPrice) / riskDistance
                     int leftBar = bar_index
                     int rightBar = bar_index + 14
-                    box profitBox = box.new(left = leftBar, top = isLong ? targetPrice : entryPrice, right = rightBar, bottom = isLong ? entryPrice : targetPrice, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, 55), border_style = line.style_dashed, bgcolor = color.new(tradeProfitColor, 86), text = "plan " + str.tostring(rr, "0.0") + "R", text_color = color.new(color.white, 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
+                    box profitBox = box.new(left = leftBar, top = isLong ? targetPrice : entryPrice, right = rightBar, bottom = isLong ? entryPrice : targetPrice, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, 55), border_style = line.style_dashed, bgcolor = color.new(tradeProfitColor, 86), text = math.abs(targetPrice - entryPrice) >= math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 48.0) * 1.4 ? "plan " + str.tostring(rr, "0.0") + "R" : "", text_color = color.new(color.white, 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
                     box riskBox = box.new(left = leftBar, top = isLong ? entryPrice : stopPrice, right = rightBar, bottom = isLong ? stopPrice : entryPrice, xloc = xloc.bar_index, border_color = color.new(tradeRiskColor, 55), border_style = line.style_dashed, bgcolor = color.new(tradeRiskColor, 86))
                     line entryLine = line.new(leftBar, entryPrice, rightBar, entryPrice, xloc = xloc.bar_index, color = color.new(color.white, 45), style = line.style_dashed, width = 1)
                     array.push(tradePreviewBoxes, profitBox)
