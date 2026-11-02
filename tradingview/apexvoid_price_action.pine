@@ -255,8 +255,8 @@ var int[] obStats = array.new_int(8, 0)
 var string[] obDebugLog = array.new_string()
 var label[] obDebugLabels = array.new_label()
 
-f_obLog(string line) =>
-    array.push(obDebugLog, line)
+f_obLog(string entry) =>
+    array.push(obDebugLog, entry)
     if array.size(obDebugLog) > 14
         array.shift(obDebugLog)
     0
@@ -430,14 +430,18 @@ if newInternalLow
 
 bool internalUpBreak = barstate.isconfirmed and not na(lastInternalHigh) and not internalHighBroken and close > lastInternalHigh + atr * breakBuffer
 bool internalDownBreak = barstate.isconfirmed and not na(lastInternalLow) and not internalLowBroken and close < lastInternalLow - atr * breakBuffer
+bool internalUpChoch = false
+bool internalDownChoch = false
 if internalUpBreak
     bool internalChoch = internalBias == -1
+    internalUpChoch := internalChoch
     if showInternal
         f_structureLine(lastInternalHighBar, bar_index, lastInternalHigh, true, internalChoch, true)
     internalHighBroken := true
     internalBias := 1
 if internalDownBreak
     bool internalChoch = internalBias == 1
+    internalDownChoch := internalChoch
     if showInternal
         f_structureLine(lastInternalLowBar, bar_index, lastInternalLow, false, internalChoch, true)
     internalLowBroken := true
@@ -687,207 +691,572 @@ else
         label.delete(protectedTag)
         protectedTag := na
 
-// ------- LIQUIDITY POOLS / ONE-TIME SWEEPS -------
-var line[] liquidityLines = array.new_line()
-var label[] liquidityLabels = array.new_label()
-var float[] liquidityPrices = array.new_float()
-var int[] liquiditySides = array.new_int()
-var int[] liquidityBirth = array.new_int()
-var bool[] liquidityTaken = array.new_bool()
+// ------- LIQUIDITY POOLS (LEVEL-FIRST BSL / SSL) -------
+// A pool exists only for a structurally significant level: a confirmed external
+// swing, an equal-high/low band formed by independent tests, or an optional
+// previous-day high/low. A lone internal pivot is held as an unpromoted candidate
+// and is never drawn. Pool states: 0 active, 1 swept (grab), 2 consumed (accepted
+// beyond, or broken by a close-confirmed structural BOS/CHoCH). Retired pools are
+// removed from the store. Display filtering never changes pool state.
+var line[] poolLines = array.new_line()
+var label[] poolLabels = array.new_label()
+var box[] poolBoxes = array.new_box()
+var float[] poolTops = array.new_float()
+var float[] poolBottoms = array.new_float()
+var int[] poolSides = array.new_int()          // +1 BSL (above price), -1 SSL (below)
+var int[] poolBirths = array.new_int()         // bar of the first qualifying test
+var int[] poolConfirms = array.new_int()       // bar at which the pool qualified
+var int[] poolLastTests = array.new_int()
+var int[] poolTests = array.new_int()
+var int[] poolDegrees = array.new_int()        // 1 internal EQ, 2 external swing, 3 external + EQ / session
+var string[] poolKinds = array.new_string()    // Swing, EQ, PDH, PDL
+var int[] poolStates = array.new_int()
+var int[] poolStateBars = array.new_int()
+var int[] poolPending = array.new_int()        // bar of first penetration awaiting a return, else -1
+var float[] poolExtremes = array.new_float()
+var int[] poolExtremeBars = array.new_int()
+var int[] poolBeyond = array.new_int()         // consecutive closes beyond the pool
+var bool[] poolVisible = array.new_bool()
+var float[] ringPrices = array.new_float()     // unpromoted internal pivots
+var int[] ringBars = array.new_int()
+var int[] ringSides = array.new_int()
+var int[] liqStats = array.new_int(5, 0)       // 0 created, 1 merged, 2 swept, 3 consumed, 4 retired
+var line[] grabLines = array.new_line()
 var string lastSweep = "—"
 var int lastSweepBar = na
 var int lastSweepSide = 0  // +1 supports bullish reversal; -1 bearish.
-var label[] sweepVisualLabels = array.new_label()
-var int[] sweepVisualBars = array.new_int()
-var float[] sweepVisualLevels = array.new_float()
-var int[] sweepVisualSides = array.new_int()
-var int[] sweepVisualCounts = array.new_int()
-var bool[] sweepVisualExternal = array.new_bool()
 
-f_renderSweep(int eventBar, float wickPrice, float poolLevel, int poolSide, bool externalPool) =>
-    bool consolidated = false
-    string degreeText = externalPool ? "EXT " : ""
-    string baseText = degreeText + (poolSide == 1 ? "BSL sweep ↓" : "SSL sweep ↑")
-    color tone = poolSide == 1 ? bearColor : bullColor
-    if array.size(sweepVisualLabels) > 0
-        int clusterIndex = -1
-        for i = array.size(sweepVisualLabels) - 1 to 0
-            bool sameCluster = array.get(sweepVisualSides, i) == poolSide and array.get(sweepVisualExternal, i) == externalPool and eventBar - array.get(sweepVisualBars, i) <= sweepClusterBars and math.abs(poolLevel - array.get(sweepVisualLevels, i)) <= atr * annotationATRSpacing
-            if sameCluster
-                clusterIndex := i
-                break
-        if clusterIndex >= 0
-            int count = array.get(sweepVisualCounts, clusterIndex) + 1
-            label clusterLabel = array.get(sweepVisualLabels, clusterIndex)
-            array.set(sweepVisualCounts, clusterIndex, count)
-            label.set_text(clusterLabel, baseText + " ×" + str.tostring(count))
-            label.set_tooltip(clusterLabel, "Consolidated visual annotation for " + str.tostring(count) + " nearby sweep detections. Alerts retain each underlying event.")
-            consolidated := true
-    if not consolidated
-        float renderY = wickPrice + (poolSide == 1 ? atr * primaryLabelOffsetATR : -atr * primaryLabelOffsetATR)
-        for pass = 0 to 2
-            bool occupied = false
-            if not na(currentMajorHighTag)
-                occupied := occupied or (math.abs(eventBar - label.get_x(currentMajorHighTag)) <= annotationBarSpacing and math.abs(renderY - label.get_y(currentMajorHighTag)) <= atr * annotationATRSpacing)
-            if not na(currentMajorLowTag)
-                occupied := occupied or (math.abs(eventBar - label.get_x(currentMajorLowTag)) <= annotationBarSpacing and math.abs(renderY - label.get_y(currentMajorLowTag)) <= atr * annotationATRSpacing)
-            if array.size(externalEventLabels) > 0
-                for i = 0 to array.size(externalEventLabels) - 1
-                    label existing = array.get(externalEventLabels, i)
-                    occupied := occupied or (math.abs(eventBar - label.get_x(existing)) <= annotationBarSpacing and math.abs(renderY - label.get_y(existing)) <= atr * annotationATRSpacing)
-            if occupied
-                renderY += poolSide == 1 ? atr * annotationATRSpacing : -atr * annotationATRSpacing
-        label sweepLabel = label.new(eventBar, renderY, baseText, xloc = xloc.bar_index, yloc = yloc.price, style = poolSide == 1 ? label.style_label_down : label.style_label_up, color = color.new(#090D18, 18), textcolor = tone, size = sweepTextSize, tooltip = "Liquidity rejection at " + str.tostring(poolLevel, format.mintick))
-        array.push(sweepVisualLabels, sweepLabel)
-        array.push(sweepVisualBars, eventBar)
-        array.push(sweepVisualLevels, poolLevel)
-        array.push(sweepVisualSides, poolSide)
-        array.push(sweepVisualCounts, 1)
-        array.push(sweepVisualExternal, externalPool)
-        if array.size(sweepVisualLabels) > sweepHistoryLimit
-            label.delete(array.shift(sweepVisualLabels))
-            array.shift(sweepVisualBars)
-            array.shift(sweepVisualLevels)
-            array.shift(sweepVisualSides)
-            array.shift(sweepVisualCounts)
-            array.shift(sweepVisualExternal)
+f_inc(int[] counters, int idx) =>
+    array.set(counters, idx, array.get(counters, idx) + 1)
     0
 
-// External swing sweeps are contextual events only. They do not consume the
-// swing, set broken flags, or change external bias.
+f_poolRemove(int idx) =>
+    line oldLine = array.get(poolLines, idx)
+    label oldLabel = array.get(poolLabels, idx)
+    box oldBox = array.get(poolBoxes, idx)
+    if not na(oldLine)
+        line.delete(oldLine)
+    if not na(oldLabel)
+        label.delete(oldLabel)
+    if not na(oldBox)
+        box.delete(oldBox)
+    array.remove(poolLines, idx)
+    array.remove(poolLabels, idx)
+    array.remove(poolBoxes, idx)
+    array.remove(poolTops, idx)
+    array.remove(poolBottoms, idx)
+    array.remove(poolSides, idx)
+    array.remove(poolBirths, idx)
+    array.remove(poolConfirms, idx)
+    array.remove(poolLastTests, idx)
+    array.remove(poolTests, idx)
+    array.remove(poolDegrees, idx)
+    array.remove(poolKinds, idx)
+    array.remove(poolStates, idx)
+    array.remove(poolStateBars, idx)
+    array.remove(poolPending, idx)
+    array.remove(poolExtremes, idx)
+    array.remove(poolExtremeBars, idx)
+    array.remove(poolBeyond, idx)
+    array.remove(poolVisible, idx)
+    0
+
+f_poolNew(int side, float top, float bottom, int birth, int tests, int degree, string kind, int lastTest) =>
+    line emptyLine = na
+    label emptyLabel = na
+    box emptyBox = na
+    array.push(poolLines, emptyLine)
+    array.push(poolLabels, emptyLabel)
+    array.push(poolBoxes, emptyBox)
+    array.push(poolTops, top)
+    array.push(poolBottoms, bottom)
+    array.push(poolSides, side)
+    array.push(poolBirths, math.max(birth, bar_index - 9999))
+    array.push(poolConfirms, bar_index)
+    array.push(poolLastTests, lastTest)
+    array.push(poolTests, tests)
+    array.push(poolDegrees, degree)
+    array.push(poolKinds, kind)
+    array.push(poolStates, 0)
+    array.push(poolStateBars, bar_index)
+    array.push(poolPending, -1)
+    array.push(poolExtremes, na)
+    array.push(poolExtremeBars, -1)
+    array.push(poolBeyond, 0)
+    array.push(poolVisible, false)
+    f_inc(liqStats, 0)
+    if array.size(poolStates) > maxLiquidity
+        // Evict consumed pools first, then the lowest structural degree, then the oldest.
+        int evictIdx = 0
+        float evictKey = 1.0e12
+        for j = 0 to array.size(poolStates) - 1
+            float key = (array.get(poolStates, j) != 0 ? 0.0 : 1.0e9) + array.get(poolDegrees, j) * 1.0e7 + array.get(poolConfirms, j)
+            if key < evictKey
+                evictKey := key
+                evictIdx := j
+        f_poolRemove(evictIdx)
+    0
+
+// Two tests are independent only if price pulled back between them and neither
+// level was exceeded in between (otherwise the first was already swept).
+f_pullbackOk(int side, int fromBar, int toBar, float priceA, float priceB, float tol, float atrRef) =>
+    bool ok = false
+    int span = bar_index - fromBar
+    int newest = bar_index - toBar
+    if span <= 750 and newest >= 0 and span >= newest
+        float segHigh = high[newest]
+        float segLow = low[newest]
+        for k = newest to span
+            segHigh := math.max(segHigh, high[k])
+            segLow := math.min(segLow, low[k])
+        if side == 1
+            ok := segHigh <= math.max(priceA, priceB) + tol and segLow <= math.min(priceA, priceB) - eqMinPullbackATR * atrRef
+        else
+            ok := segLow >= math.min(priceA, priceB) - tol and segHigh >= math.max(priceA, priceB) + eqMinPullbackATR * atrRef
+    ok
+
+// degree: 1 = internal pivot candidate, 2 = confirmed external swing.
+f_poolIngest(float price, int bar, int side, int degree, float tol, float atrRef) =>
+    bool handled = false
+    if array.size(poolStates) > 0
+        for i = 0 to array.size(poolStates) - 1
+            if not handled and array.get(poolStates, i) == 0 and array.get(poolSides, i) == side
+                float ref = side == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+                if math.abs(price - ref) <= tol
+                    int lastTest = array.get(poolLastTests, i)
+                    if bar - lastTest < eqMinSeparation
+                        handled := true
+                    else if not f_pullbackOk(side, lastTest, bar, ref, price, tol, atrRef)
+                        handled := true
+                    else
+                        float newTop = math.max(array.get(poolTops, i), price)
+                        float newBottom = math.min(array.get(poolBottoms, i), price)
+                        if newTop - newBottom <= 2.0 * tol
+                            array.set(poolTops, i, newTop)
+                            array.set(poolBottoms, i, newBottom)
+                            array.set(poolTests, i, array.get(poolTests, i) + 1)
+                            array.set(poolLastTests, i, bar)
+                            array.set(poolDegrees, i, degree >= 2 or array.get(poolDegrees, i) >= 2 ? 3 : 1)
+                            array.set(poolKinds, i, "EQ")
+                            f_inc(liqStats, 1)
+                            handled := true
+    if not handled and array.size(ringPrices) > 0
+        for r = array.size(ringPrices) - 1 to 0
+            if not handled and array.get(ringSides, r) == side and math.abs(price - array.get(ringPrices, r)) <= tol
+                int ringBar = array.get(ringBars, r)
+                float partner = array.get(ringPrices, r)
+                if bar - ringBar < eqMinSeparation
+                    if degree >= 2
+                        array.remove(ringPrices, r)
+                        array.remove(ringBars, r)
+                        array.remove(ringSides, r)
+                else if bar_index - ringBar <= 400 and f_pullbackOk(side, ringBar, bar, partner, price, tol, atrRef)
+                    array.remove(ringPrices, r)
+                    array.remove(ringBars, r)
+                    array.remove(ringSides, r)
+                    f_poolNew(side, math.max(price, partner), math.min(price, partner), ringBar, 2, degree >= 2 ? 3 : 1, "EQ", bar)
+                    handled := true
+    if not handled
+        if degree >= 2
+            f_poolNew(side, price, price, bar, 1, 2, "Swing", bar)
+        else
+            array.push(ringPrices, price)
+            array.push(ringBars, bar)
+            array.push(ringSides, side)
+            if array.size(ringPrices) > 24
+                array.shift(ringPrices)
+                array.shift(ringBars)
+                array.shift(ringSides)
+    0
+
+// A grab marks the rejection wick of the bar that made the extreme: the upper wick
+// after a BSL sweep (bearish rejection), the lower wick after an SSL sweep (bullish).
+// It is an annotation only; it never creates an entry or changes bias.
+f_grabHighlight(int side, int extremeBar, float atrRef) =>
+    int k = bar_index - extremeBar
+    float wickTop = side == 1 ? high[k] : math.min(open[k], close[k])
+    float wickBottom = side == 1 ? math.max(open[k], close[k]) : low[k]
+    if wickTop - wickBottom >= grabMinWickATR * atrRef
+        color grabTone = side == 1 ? bearColor : bullColor
+        line grabLine = line.new(extremeBar, wickBottom, extremeBar, wickTop, xloc = xloc.bar_index, color = color.new(grabTone, 30), style = line.style_solid, width = 2)
+        array.push(grabLines, grabLine)
+        if array.size(grabLines) > sweepHistoryLimit
+            line.delete(array.shift(grabLines))
+    0
+
+// External swing sweeps stay available as alert events. They no longer draw
+// labels: the grab highlight below is driven by the pool that was swept.
 if externalBslSweep
     externalHighSwept := true
     lastSweep := "External BSL swept"
     lastSweepBar := bar_index
     lastSweepSide := -1
-    if renderSweeps
-        f_renderSweep(bar_index, high, lastSwingHigh, 1, true)
 if externalSslSweep
     externalLowSwept := true
     lastSweep := "External SSL swept"
     lastSweepBar := bar_index
     lastSweepSide := 1
-    if renderSweeps
-        f_renderSweep(bar_index, low, lastSwingLow, -1, true)
 
-f_addLiquidity(int origin, float price, int side) =>
-    color c = side == 1 ? bearColor : bullColor
-    string name = side == 1 ? "BSL" : "SSL"
-    line liquidityLine = na
-    label liquidityLabel = na
-    if renderLiquidity
-        liquidityLine := line.new(origin, price, bar_index + 5, price, xloc = xloc.bar_index, color = color.new(c, 30), width = 1, style = line.style_dotted)
-        liquidityLabel := label.new(bar_index + 5, price + (side == 1 ? atr * 0.08 : -atr * 0.08), name, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 55), textcolor = color.new(c, 20), size = contextTextSize)
-    array.push(liquidityLines, liquidityLine)
-    array.push(liquidityLabels, liquidityLabel)
-    array.push(liquidityPrices, price)
-    array.push(liquiditySides, side)
-    array.push(liquidityBirth, bar_index)
-    array.push(liquidityTaken, false)
-    if array.size(liquidityLines) > maxLiquidity
-        line oldLine = array.shift(liquidityLines)
-        label oldLabel = array.shift(liquidityLabels)
-        if not na(oldLine)
-            line.delete(oldLine)
-        if not na(oldLabel)
-            label.delete(oldLabel)
-        array.shift(liquidityPrices)
-        array.shift(liquiditySides)
-        array.shift(liquidityBirth)
-        array.shift(liquidityTaken)
+// Previous-day high / low (completed day only, no repaint) are optional pools.
+[pdHigh, pdLow] = request.security(syminfo.tickerid, "D", [high[1], low[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+bool sessionPoolsValid = showSessionLiquidity and chartSecs <= 14400
+bool newPdHigh = barstate.isconfirmed and sessionPoolsValid and not na(pdHigh) and (na(pdHigh[1]) or pdHigh != pdHigh[1])
+bool newPdLow = barstate.isconfirmed and sessionPoolsValid and not na(pdLow) and (na(pdLow[1]) or pdLow != pdLow[1])
+
+f_sessionPool(float price, int side, string kind) =>
+    if array.size(poolStates) > 0
+        for i = array.size(poolStates) - 1 to 0
+            if array.get(poolKinds, i) == kind and array.get(poolStates, i) == 0
+                f_poolRemove(i)
+                f_inc(liqStats, 4)
+    f_poolNew(side, price, price, bar_index, 1, 3, kind, bar_index)
     0
 
-if newInternalHigh
-    f_addLiquidity(bar_index - internalLength, internalHigh, 1)
-if newInternalLow
-    f_addLiquidity(bar_index - internalLength, internalLow, -1)
+if barstate.isconfirmed and not na(atr)
+    if newInternalHigh
+        f_poolIngest(internalHigh, bar_index - internalLength, 1, 1, nz(atr[internalLength], atr) * equalTolerance, atr)
+    if newInternalLow
+        f_poolIngest(internalLow, bar_index - internalLength, -1, 1, nz(atr[internalLength], atr) * equalTolerance, atr)
+    if newMajorHigh
+        f_poolIngest(majorHighPrice, majorHighBar, 1, 2, nz(atr[externalLength], atr) * equalTolerance, atr)
+    if newMajorLow
+        f_poolIngest(majorLowPrice, majorLowBar, -1, 2, nz(atr[externalLength], atr) * equalTolerance, atr)
+    if newPdHigh
+        f_sessionPool(pdHigh, 1, "PDH")
+    if newPdLow
+        f_sessionPool(pdLow, -1, "PDL")
 
 bool bslSweep = false
 bool sslSweep = false
-int relevantLiquidityCount = 0
-if array.size(liquidityLines) > 0
-    for i = 0 to array.size(liquidityLines) - 1
-        if not array.get(liquidityTaken, i)
-            line liqLine = array.get(liquidityLines, i)
-            label liqLabel = array.get(liquidityLabels, i)
-            float level = array.get(liquidityPrices, i)
-            int side = array.get(liquiditySides, i)
-            color liquidityTone = side == 1 ? bearColor : bullColor
-            bool liquidityRelevant = debugMode or math.abs(close - level) <= atr * (rangeContext ? 12.0 : 8.0)
-            relevantLiquidityCount += liquidityRelevant ? 1 : 0
-            if not na(liqLine)
-                line.set_x2(liqLine, bar_index + 5)
-                line.set_color(liqLine, color.new(liquidityTone, liquidityRelevant ? 30 : 100))
-            if not na(liqLabel)
-                label.set_x(liqLabel, bar_index + 5)
-                label.set_y(liqLabel, level + (side == 1 ? atr * 0.08 : -atr * 0.08))
-                label.set_textcolor(liqLabel, color.new(liquidityTone, liquidityRelevant ? 0 : 100))
-                label.set_color(liqLabel, color.new(liquidityTone, liquidityRelevant ? 92 : 100))
-            bool penetrated = side == 1 ? high > level + atr * sweepBuffer : low < level - atr * sweepBuffer
-            if barstate.isconfirmed and bar_index > array.get(liquidityBirth, i) and penetrated
-                bool sweptBack = side == 1 ? close < level : close > level
-                bool clusteredPool = false
-                if array.size(liquidityPrices) > 1
-                    for j = 0 to array.size(liquidityPrices) - 1
-                        if j != i and array.get(liquiditySides, j) == side and math.abs(array.get(liquidityPrices, j) - level) <= atr * equalTolerance * 1.5
-                            clusteredPool := true
-                bool majorPool = side == 1 ? (not na(lastSwingHigh) and math.abs(level - lastSwingHigh) <= atr * equalTolerance * 2.0) : (not na(lastSwingLow) and math.abs(level - lastSwingLow) <= atr * equalTolerance * 2.0)
-                bool displaySignificantSweep = detailedMode or debugMode or majorPool or clusteredPool
-                if sweptBack and side == 1 and not bslSweep
-                    bslSweep := true
-                    lastSweep := "BSL swept"
-                    lastSweepBar := bar_index
-                    lastSweepSide := -1
-                    if renderSweeps and displaySignificantSweep
-                        f_renderSweep(bar_index, high, level, side, false)
-                if sweptBack and side == -1 and not sslSweep
-                    sslSweep := true
-                    lastSweep := "SSL swept"
-                    lastSweepBar := bar_index
-                    lastSweepSide := 1
-                    if renderSweeps and displaySignificantSweep
-                        f_renderSweep(bar_index, low, level, side, false)
-                array.set(liquidityTaken, i, true)
-                if not na(liqLine)
-                    line.set_x2(liqLine, bar_index)
-                    line.set_style(liqLine, line.style_solid)
-                    line.set_color(liqLine, color.new(side == 1 ? bearColor : bullColor, 85))
-                if not na(liqLabel)
-                    label.set_x(liqLabel, bar_index)
-                    label.set_textcolor(liqLabel, color.new(side == 1 ? bearColor : bullColor, 86))
-                    label.set_color(liqLabel, color.new(side == 1 ? bearColor : bullColor, 97))
+bool bslTaken = false
+bool sslTaken = false
 
-// ------- ORDER BLOCK CANDIDATES (LAST OPPOSITE CANDLE BEFORE STRONG BREAK) -------
+// A close-confirmed structural break consumes the pool resting on the broken
+// external swing at once; the structural rule (one close beyond the swing plus the
+// confirmation buffer) is deliberately separate from the sweep rule below.
+if barstate.isconfirmed and (upBreak or downBreak) and array.size(poolStates) > 0 and not na(atr)
+    for i = array.size(poolStates) - 1 to 0
+        int breakSide = array.get(poolSides, i)
+        bool brokenSide = (breakSide == 1 and upBreak) or (breakSide == -1 and downBreak)
+        if brokenSide and array.get(poolStates, i) == 0 and array.get(poolConfirms, i) < bar_index
+            float breakEdge = breakSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+            float brokenLevel = breakSide == 1 ? lastSwingHigh : lastSwingLow
+            if math.abs(breakEdge - brokenLevel) <= atr * equalTolerance
+                array.set(poolStates, i, 2)
+                array.set(poolStateBars, i, bar_index)
+                f_inc(liqStats, 3)
+                bslTaken := bslTaken or breakSide == 1
+                sslTaken := sslTaken or breakSide == -1
+
+// Sweep: wick penetration beyond the pool edge, then a close back inside it within
+// the configured window. Consume: N consecutive closes beyond the edge by the break
+// buffer. A pool leaves the active state once and therefore alerts once.
+if barstate.isconfirmed and array.size(poolStates) > 0 and not na(atr)
+    for i = array.size(poolStates) - 1 to 0
+        int poolState = array.get(poolStates, i)
+        int poolSide = array.get(poolSides, i)
+        bool removeNow = false
+        if poolState != 0
+            int sinceState = bar_index - array.get(poolStateBars, i)
+            removeNow := consumedPolicy == "Retire immediately" or (consumedPolicy == "Fade, then retire" and sinceState > consumedFadeBars)
+        else if bar_index - array.get(poolBirths, i) > liqMaxAge
+            removeNow := true
+        else if bar_index > array.get(poolConfirms, i)
+            float edge = poolSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+            bool penetrated = poolSide == 1 ? high > edge + atr * sweepBuffer : low < edge - atr * sweepBuffer
+            bool beyondClose = poolSide == 1 ? close > edge + atr * liqBreakBuffer : close < edge - atr * liqBreakBuffer
+            int beyond = beyondClose ? array.get(poolBeyond, i) + 1 : 0
+            array.set(poolBeyond, i, beyond)
+            int pending = array.get(poolPending, i)
+            if penetrated
+                if pending < 0
+                    pending := bar_index
+                    array.set(poolPending, i, pending)
+                    array.set(poolExtremes, i, poolSide == 1 ? high : low)
+                    array.set(poolExtremeBars, i, bar_index)
+                else
+                    float priorExtreme = array.get(poolExtremes, i)
+                    bool newExtreme = poolSide == 1 ? high > priorExtreme : low < priorExtreme
+                    if newExtreme
+                        array.set(poolExtremes, i, poolSide == 1 ? high : low)
+                        array.set(poolExtremeBars, i, bar_index)
+            bool returned = poolSide == 1 ? close < edge : close > edge
+            bool windowOk = pending >= 0 and (sweepRule == "Same bar" ? pending == bar_index : bar_index - pending < sweepReturnBars)
+            if beyond >= liqAcceptCloses
+                array.set(poolStates, i, 2)
+                array.set(poolStateBars, i, bar_index)
+                f_inc(liqStats, 3)
+                bslTaken := bslTaken or poolSide == 1
+                sslTaken := sslTaken or poolSide == -1
+            else if pending >= 0 and returned and windowOk
+                array.set(poolStates, i, 1)
+                array.set(poolStateBars, i, bar_index)
+                f_inc(liqStats, 2)
+                lastSweepBar := bar_index
+                if poolSide == 1
+                    bslSweep := true
+                    lastSweep := "BSL swept · " + str.tostring(edge, format.mintick)
+                    lastSweepSide := -1
+                else
+                    sslSweep := true
+                    lastSweep := "SSL swept · " + str.tostring(edge, format.mintick)
+                    lastSweepSide := 1
+                if renderSweeps
+                    f_grabHighlight(poolSide, array.get(poolExtremeBars, i), atr)
+            else if pending >= 0 and not windowOk
+                array.set(poolPending, i, -1)
+        if removeNow
+            f_inc(liqStats, 4)
+            f_poolRemove(i)
+
+int relevantLiquidityCount = 0
+int poolActiveCount = 0
+int poolSweptCount = 0
+int poolConsumedCount = 0
+float nearestBslPrice = na
+float nearestSslPrice = na
+
+if barstate.islast and array.size(poolStates) > 0
+    int nearBsl = -1
+    int nearSsl = -1
+    float nearBslGap = 1.0e10
+    float nearSslGap = 1.0e10
+    for i = 0 to array.size(poolStates) - 1
+        array.set(poolVisible, i, false)
+        int scanState = array.get(poolStates, i)
+        poolActiveCount += scanState == 0 ? 1 : 0
+        poolSweptCount += scanState == 1 ? 1 : 0
+        poolConsumedCount += scanState == 2 ? 1 : 0
+        if scanState == 0
+            int scanSide = array.get(poolSides, i)
+            float scanEdge = scanSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+            if scanSide == 1 and scanEdge > close and scanEdge - close < nearBslGap
+                nearBsl := i
+                nearBslGap := scanEdge - close
+            if scanSide == -1 and scanEdge < close and close - scanEdge < nearSslGap
+                nearSsl := i
+                nearSslGap := close - scanEdge
+    nearestBslPrice := nearBsl >= 0 ? array.get(poolTops, nearBsl) : na
+    nearestSslPrice := nearSsl >= 0 ? array.get(poolBottoms, nearSsl) : na
+    float atrSafe = math.max(atr, syminfo.mintick)
+
+    // Balanced selection: the nearest active BSL above and SSL below are always
+    // considered; remaining slots go to structural degree first, then proximity.
+    int shown = 0
+    if renderLiquidity and effectiveVisibleLiquidity > 0
+        if nearBsl >= 0 and nearBslGap / atrSafe <= liqDisplayDistanceATR * 2.0
+            array.set(poolVisible, nearBsl, true)
+            shown += 1
+        if nearSsl >= 0 and nearSslGap / atrSafe <= liqDisplayDistanceATR * 2.0 and shown < effectiveVisibleLiquidity
+            array.set(poolVisible, nearSsl, true)
+            shown += 1
+        if shown < effectiveVisibleLiquidity
+            for pick = shown to effectiveVisibleLiquidity - 1
+                int bestPool = -1
+                float bestPoolScore = -1.0e10
+                for i = 0 to array.size(poolStates) - 1
+                    if not array.get(poolVisible, i)
+                        int candSide = array.get(poolSides, i)
+                        float candEdge = candSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
+                        float candDistance = math.abs(close - candEdge) / atrSafe
+                        if debugMode or candDistance <= liqDisplayDistanceATR
+                            float candScore = array.get(poolDegrees, i) * 1000.0 + (array.get(poolStates, i) == 0 ? 500.0 : 0.0) - candDistance * 10.0
+                            if candScore > bestPoolScore
+                                bestPool := i
+                                bestPoolScore := candScore
+                if bestPool >= 0
+                    array.set(poolVisible, bestPool, true)
+                else
+                    break
+
+    float[] placedLabelY = array.new_float()
+    for i = 0 to array.size(poolStates) - 1
+        line poolLine = array.get(poolLines, i)
+        label poolLabel = array.get(poolLabels, i)
+        box poolBox = array.get(poolBoxes, i)
+        if array.get(poolVisible, i)
+            int pSide = array.get(poolSides, i)
+            int pState = array.get(poolStates, i)
+            int pDegree = array.get(poolDegrees, i)
+            int pTests = array.get(poolTests, i)
+            int pBirth = array.get(poolBirths, i)
+            int pStateBar = array.get(poolStateBars, i)
+            float pTop = array.get(poolTops, i)
+            float pBottom = array.get(poolBottoms, i)
+            float pEdge = pSide == 1 ? pTop : pBottom
+            string pKind = array.get(poolKinds, i)
+            bool pActive = pState == 0
+            relevantLiquidityCount += pActive ? 1 : 0
+            int leftX = math.max(pBirth, bar_index - 9999)
+            int rightX = pActive ? bar_index + 5 : math.max(pStateBar, leftX + 1)
+            color lineTone = color.new(liquidityColor, pActive ? 25 : 78)
+            string baseName = pKind == "EQ" ? (pSide == 1 ? "EQH · BSL" : "EQL · SSL") : pKind == "PDH" ? "PDH · BSL" : pKind == "PDL" ? "PDL · SSL" : (pSide == 1 ? "BSL" : "SSL")
+            string labelText = baseName + (pState == 1 ? " · swept" : pState == 2 ? " · taken" : "")
+            string degreeText = pDegree == 1 ? "Internal equal level" : pDegree == 2 ? "External swing" : "External + equal / session level"
+            string poolTip = baseName + " " + str.tostring(pEdge, format.mintick) + "\n" + degreeText + " · tests " + str.tostring(pTests) + "\n" + (pState == 0 ? "Active" : pState == 1 ? "Swept (grab)" : "Consumed") + " · age " + str.tostring(bar_index - pBirth) + " bars"
+            if na(poolLine)
+                poolLine := line.new(leftX, pEdge, rightX, pEdge, xloc = xloc.bar_index, color = lineTone, style = line.style_dotted, width = 1)
+                array.set(poolLines, i, poolLine)
+            else
+                line.set_xy1(poolLine, leftX, pEdge)
+                line.set_xy2(poolLine, rightX, pEdge)
+                line.set_color(poolLine, lineTone)
+            if pKind == "EQ"
+                float bandMid = (pTop + pBottom) / 2.0
+                float bandHalf = math.max((pTop - pBottom) / 2.0, atrSafe * 0.03)
+                color bandFill = color.new(liquidityColor, pActive ? 86 : 95)
+                if na(poolBox)
+                    poolBox := box.new(left = leftX, top = bandMid + bandHalf, right = rightX, bottom = bandMid - bandHalf, xloc = xloc.bar_index, border_color = color.new(liquidityColor, 100), bgcolor = bandFill)
+                    array.set(poolBoxes, i, poolBox)
+                else
+                    box.set_lefttop(poolBox, leftX, bandMid + bandHalf)
+                    box.set_rightbottom(poolBox, rightX, bandMid - bandHalf)
+                    box.set_bgcolor(poolBox, bandFill)
+            else if not na(poolBox)
+                box.delete(poolBox)
+                box emptyPoolBox = na
+                array.set(poolBoxes, i, emptyPoolBox)
+            float labelY = pEdge + (pSide == 1 ? atrSafe * 0.08 : -atrSafe * 0.08)
+            for pass = 0 to 3
+                bool occupied = false
+                if array.size(placedLabelY) > 0
+                    for j = 0 to array.size(placedLabelY) - 1
+                        occupied := occupied or math.abs(labelY - array.get(placedLabelY, j)) < atrSafe * annotationATRSpacing
+                if occupied
+                    labelY += pSide == 1 ? atrSafe * annotationATRSpacing : -atrSafe * annotationATRSpacing
+            array.push(placedLabelY, labelY)
+            int labelX = pActive ? bar_index + 7 : rightX
+            if na(poolLabel)
+                poolLabel := label.new(labelX, labelY, labelText, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, pActive ? 45 : 70), textcolor = color.new(liquidityColor, pActive ? 10 : 55), size = contextTextSize, tooltip = poolTip)
+                array.set(poolLabels, i, poolLabel)
+            else
+                label.set_xy(poolLabel, labelX, labelY)
+                label.set_text(poolLabel, labelText)
+                label.set_color(poolLabel, color.new(#090D18, pActive ? 45 : 70))
+                label.set_textcolor(poolLabel, color.new(liquidityColor, pActive ? 10 : 55))
+                label.set_tooltip(poolLabel, poolTip)
+        else
+            if not na(poolLine)
+                line.delete(poolLine)
+                line emptyPoolLine = na
+                array.set(poolLines, i, emptyPoolLine)
+            if not na(poolLabel)
+                label.delete(poolLabel)
+                label emptyPoolLabel = na
+                array.set(poolLabels, i, emptyPoolLabel)
+            if not na(poolBox)
+                box.delete(poolBox)
+                box emptyPoolBox2 = na
+                array.set(poolBoxes, i, emptyPoolBox2)
+
+// ------- ORDER BLOCKS (STRUCTURE-ORIGIN, DISPLACEMENT-QUALIFIED) -------
+// A block is built when an internal or external structure break closes. Origin: among
+// the opposite-colour candles between the broken pivot and the break (capped by the
+// search window), the one at the leg extreme (lowest low for a bullish block, highest
+// high for a bearish one; the nearest wins ties). Qualification: base within tolerance
+// of the leg extreme, bounded range, net displacement from the origin, a real impulse
+// candle, and not already mitigated or invalidated before detection. Detection is
+// independent of POI qualification and of the display budget.
+f_obBuild(bool bull, int cls, string eventName, int anchorBar, float atrNow) =>
+    int added = 0
+    int maxBack = math.min(obSearchBars, bar_index - 1)
+    int window = na(anchorBar) ? maxBack : math.min(maxBack, bar_index - anchorBar - 1)
+    string reason = ""
+    int bestK = -1
+    float bestVal = na
+    float extreme = na
+    if window < 2
+        reason := "window <2 bars"
+    else
+        for k = 1 to window
+            float legValue = bull ? low[k] : high[k]
+            extreme := na(extreme) ? legValue : bull ? math.min(extreme, legValue) : math.max(extreme, legValue)
+            bool opposite = bull ? close[k] < open[k] : close[k] > open[k]
+            if opposite
+                if bestK < 0 or (bull ? legValue < bestVal : legValue > bestVal)
+                    bestK := k
+                    bestVal := legValue
+    if reason == "" and bestK < 0
+        reason := "no opposite-colour candle in window"
+    float originHigh = bestK >= 0 ? high[bestK] : na
+    float originLow = bestK >= 0 ? low[bestK] : na
+    float baseGap = bestK >= 0 ? (bull ? bestVal - extreme : extreme - bestVal) : na
+    if reason == "" and baseGap > obBaseToleranceATR * atrNow
+        reason := "base is not an opposite candle (" + str.tostring(baseGap / atrNow, "0.00") + " ATR from leg extreme)"
+    if reason == "" and originHigh - originLow > obMaxRangeATR * atrNow
+        reason := "origin too wide (" + str.tostring((originHigh - originLow) / atrNow, "0.00") + " ATR)"
+    float netMove = bestK >= 0 ? (bull ? close - originHigh : originLow - close) : na
+    if reason == "" and netMove < obDisplacementATR * atrNow
+        reason := "weak displacement (" + str.tostring(netMove / atrNow, "0.00") + " ATR < " + str.tostring(obDisplacementATR, "0.00") + ")"
+    if reason == ""
+        float bodyMax = 0.0
+        for k = 0 to bestK - 1
+            float bodySize = bull ? close[k] - open[k] : open[k] - close[k]
+            bodyMax := math.max(bodyMax, bodySize)
+        if bodyMax < obImpulseBodyATR * atrNow
+            reason := "no impulse candle (max body " + str.tostring(bodyMax / atrNow, "0.00") + " ATR < " + str.tostring(obImpulseBodyATR, "0.00") + ")"
+    float zTop = na
+    float zBottom = na
+    if reason == ""
+        zTop := obWicks ? originHigh : math.max(open[bestK], close[bestK])
+        zBottom := obWicks ? originLow : math.min(open[bestK], close[bestK])
+        float zMid = (zTop + zBottom) / 2.0
+        for k = 0 to bestK - 1
+            bool dead = bull ? close[k] < zBottom : close[k] > zTop
+            bool spent = obMitigationMethod == "Wick" ? (bull ? low[k] <= zBottom : high[k] >= zTop) : obMitigationMethod == "Midpoint" ? (bull ? low[k] <= zMid : high[k] >= zMid) : dead
+            if reason == "" and (dead or spent)
+                reason := "already " + (dead ? "invalidated" : "mitigated") + " before detection"
+    int side = bull ? 1 : -1
+    int finalClass = cls
+    if reason == "" and array.size(zones) > 0
+        // Prefer the newest relevant block; an internal block never displaces a swing block.
+        for i = array.size(zones) - 1 to 0
+            if reason == "" and array.get(zoneKinds, i) == 1 and array.get(zoneSides, i) == side
+                float otherTop = array.get(zoneTops, i)
+                float otherBottom = array.get(zoneBottoms, i)
+                float overlapSize = math.min(zTop, otherTop) - math.max(zBottom, otherBottom)
+                float smallerHeight = math.min(zTop - zBottom, otherTop - otherBottom)
+                if overlapSize > 0 and smallerHeight > 0 and overlapSize / smallerHeight >= 0.5
+                    if cls < array.get(zoneClasses, i)
+                        reason := "covered by an existing swing OB"
+                        f_inc(obStats, 3)
+                    else
+                        finalClass := math.max(cls, array.get(zoneClasses, i))
+                        f_removeZone(i)
+                        f_inc(obStats, 2)
+    if reason == ""
+        string titleText = (bull ? "Bull " : "Bear ") + (finalClass == 2 ? "OB" : "iOB")
+        f_addZone(bar_index - bestK, zTop, zBottom, side, 1, titleText, bull ? bullColor : bearColor, finalClass, eventName)
+        added := 1
+        f_inc(obStats, 0)
+        reason := "accepted"
+    else if not str.contains(reason, "covered")
+        f_inc(obStats, 1)
+    string srcText = bestK >= 0 and bestK <= 790 ? str.format_time(time[bestK], "MM-dd HH:mm", syminfo.timezone) : "n/a"
+    string logLine = (bull ? "BULL " : "BEAR ") + (cls == 2 ? "swing " : "int ") + eventName + " · src " + srcText + (added == 1 ? " · " + str.tostring(zBottom, format.mintick) + "-" + str.tostring(zTop, format.mintick) + " · ACCEPT" : " · REJECT: " + reason)
+    f_obLog(logLine)
+    if showOBDebug
+        label debugLabel = label.new(bar_index, bull ? low : high, (added == 1 ? "✓ " : "✗ ") + (cls == 2 ? "OB" : "iOB"), xloc = xloc.bar_index, yloc = yloc.price, style = bull ? label.style_label_up : label.style_label_down, color = color.new(#090D18, 25), textcolor = added == 1 ? bullColor : bearColor, size = size.tiny, tooltip = logLine)
+        array.push(obDebugLabels, debugLabel)
+        if array.size(obDebugLabels) > 14
+            label.delete(array.shift(obDebugLabels))
+    added
+
 bool bullOB = false
 bool bearOB = false
-var int rejectedOBCount = 0
-// An external break already supplies the displacement requirement. The origin
-// search is independent of the final break candle's color/body so valid bases
-// are not lost when displacement spans several candles.
-if showOB and upBreak
-    for i = 1 to obLookback
-        float originRange = high[i] - low[i]
-        bool displacedFromOrigin = close - high[i] >= atr * obImpulseATR
-        if close[i] < open[i] and displacedFromOrigin and originRange <= nz(atr[i], atr) * 2.5
-            float upper = obWicks ? high[i] : math.max(open[i], close[i])
-            float lower = obWicks ? low[i] : math.min(open[i], close[i])
-            f_addZone(bar_index - i, upper, lower, 1, 1, "Bull OB", bullColor)
-            bullOB := true
-            break
-
-if showOB and downBreak
-    for i = 1 to obLookback
-        float originRange = high[i] - low[i]
-        bool displacedFromOrigin = low[i] - close >= atr * obImpulseATR
-        if close[i] > open[i] and displacedFromOrigin and originRange <= nz(atr[i], atr) * 2.5
-            float upper = obWicks ? high[i] : math.max(open[i], close[i])
-            float lower = obWicks ? low[i] : math.min(open[i], close[i])
-            f_addZone(bar_index - i, upper, lower, -1, 1, "Bear OB", bearColor)
-            bearOB := true
-            break
-
-if showOB and (upBreak or downBreak) and not bullOB and not bearOB
-    rejectedOBCount += 1
+if showOB and barstate.isconfirmed and not na(atr)
+    if upBreak
+        int added = f_obBuild(true, 2, "External " + (upCHOCH ? "CHoCH" : "BOS"), lastHighBar, atr)
+        bullOB := bullOB or added == 1
+    if downBreak
+        int added = f_obBuild(false, 2, "External " + (downCHOCH ? "CHoCH" : "BOS"), lastLowBar, atr)
+        bearOB := bearOB or added == 1
+    if showInternalOB and internalUpBreak
+        int added = f_obBuild(true, 1, "Internal " + (internalUpChoch ? "CHoCH" : "BOS"), lastInternalHighBar, atr)
+        bullOB := bullOB or added == 1
+    if showInternalOB and internalDownBreak
+        int added = f_obBuild(false, 1, "Internal " + (internalDownChoch ? "CHoCH" : "BOS"), lastInternalLowBar, atr)
+        bearOB := bearOB or added == 1
 
 // ------- SUPPLY / DEMAND FROM REJECTED, CONFIRMED EXTERNAL SWINGS -------
 bool bullSD = false
