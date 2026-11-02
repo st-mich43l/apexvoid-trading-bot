@@ -29,7 +29,6 @@ flowchart TD
 | [bot-commands](bot-commands.md) | Telegram commands and channel features |
 | [security](security.md) | threat model and controls |
 | [schema.sql](schema.sql) | PostgreSQL schema reference |
-| [adr/](adr/) | boundary decisions that are not obvious from the code |
 
 Diagrams are Mermaid and render on GitHub. When a diagram and the code disagree,
 the code is right and the diagram is a bug.

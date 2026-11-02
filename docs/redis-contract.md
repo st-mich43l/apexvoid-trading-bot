@@ -3,7 +3,7 @@
 Redis is ApexVoid's authoritative **operational market-data plane**, shared by
 `ctrader-engine`, Analysis Engine, Algo Bot and future dashboards. PostgreSQL remains the durable trade/accounting store. Kafka is
 reserved for durable business events and commands, never the bar/tick feed;
-see [ADR-010](adr/010-redis-market-data-kafka-events.md).
+see [Architecture](architecture.md).
 
 ## Who writes and who reads
 

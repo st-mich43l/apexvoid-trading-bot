@@ -1,12 +1,12 @@
 // Package contracts_test proves the Go event DTOs
 // (internal/transport/kafka) and the shared JSON schemas under
 // contracts/ have not independently drifted (source task §59) — a
-// schema and its Go mirror are maintained by hand (ADR-007's
-// discipline; no generator exists yet), so this is the check that
+// schema and its Go mirror are maintained by hand (no
+// generator exists yet), so this is the check that
 // catches a hand-edit to one side without the other. The validator
 // (github.com/santhosh-tekuri/jsonschema/v5) is used ONLY here, never
-// from production code (ADR-008's "keep it out of the hot path unless
-// runtime validation is deliberately desired").
+// from production code (keep it out of the hot path unless
+// runtime validation is deliberately desired).
 package contracts_test
 
 import (
