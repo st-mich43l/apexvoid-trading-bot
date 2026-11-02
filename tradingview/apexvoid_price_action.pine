@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.4", "AV Price Action v2.4", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.6", "AV Price Action v2.6", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,10 @@ indicator("ApexVoid | Price Action v2.4", "AV Price Action v2.4", overlay = true
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.6: BOS / CHoCH lines end on the candle that actually closed beyond the swing, not on
+// the later bar where the swing was published (up to 38 bars late on XAUUSD M15).
+// v2.5: BSL/SSL restored - objects may use the price range the candles already span (so
+// they cannot squash the scale), plus the nearest unswept internal swing high/low.
 // v2.4: compact "major only" panel, premium / discount range, POI captions name the zone kind.
 // v2.3: candle-scale protection (objects limited to a window around price), lighter zone
 // fills, shorter drawn lengths, larger and better-spaced labels.
@@ -108,6 +112,8 @@ color asiaColor = input.color(#B48AFF, "Asian levels color", group = G6)
 color liquidityColor = input.color(#AEB8CC, "Liquidity pool color", group = G6)
 bool showPremiumDiscount = input.bool(true, "Show premium / discount range (equilibrium)", group = G6)
 bool protectCandleScale = input.bool(true, "Keep candles readable: limit objects to a window around price", group = G6)
+int scaleLookbackBars = input.int(300, "Candle range reference (bars)", minval = 50, maxval = 780, group = G6)
+bool showNearestInternal = input.bool(true, "Show nearest unswept internal swing high / low (iBSL / iSSL)", group = G2)
 float scaleWindowATR = input.float(15.0, "Candle-scale window (ATR)", minval = 3, maxval = 60, step = 0.5, group = G6)
 int maxDrawBars = input.int(250, "Maximum drawn length of zones and pool lines (bars)", minval = 30, maxval = 2000, group = G6)
 int zoneOpacity = input.int(92, "Zone transparency", minval = 65, maxval = 98, group = G6)
@@ -135,6 +141,14 @@ int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
 int externalLength = sensitivity == "Manual" ? manualExternal : chartSecs <= 300 ? 12 : chartSecs <= 900 ? 16 : chartSecs <= 3600 ? 20 : chartSecs <= 14400 ? 24 : 30
 float atr = ta.atr(14)
+// Candle-scale protection: an object may be drawn if it is near price (window in ATR) or
+// inside the price range the last `Candle range reference` bars already span, so it can
+// never stretch the chart's price scale beyond what the candles themselves need.
+float scaleBandHigh = ta.highest(high, scaleLookbackBars)
+float scaleBandLow = ta.lowest(low, scaleLookbackBars)
+f_scaleOk(float price) =>
+    float pad = nz(atr, 0.0)
+    not protectCandleScale or math.abs(price - close) <= scaleWindowATR * nz(atr, syminfo.mintick) or (price <= scaleBandHigh + pad and price >= scaleBandLow - pad)
 float internalHigh = ta.pivothigh(high, internalLength, internalLength)
 float internalLow = ta.pivotlow(low, internalLength, internalLength)
 bool newInternalHigh = barstate.isconfirmed and not na(internalHigh)
@@ -151,10 +165,10 @@ bool showInternal = showInternalSwing and (detailedMode or debugMode)
 bool renderLiquidity = showLiquidity and not minimalMode
 bool renderSweeps = showSweeps and not minimalMode
 int effectiveVisibleZones = minimalMode ? math.min(visibleZones, 4) : balancedMode ? math.min(visibleZones, 8) : detailedMode ? math.max(visibleZones, 12) : math.min(maxZones, 20)
-float effZoneDistanceATR = protectCandleScale ? math.min(zoneDisplayDistanceATR, scaleWindowATR) : zoneDisplayDistanceATR
-float effObDistanceATR = protectCandleScale ? math.min(obDisplayDistanceATR, scaleWindowATR) : obDisplayDistanceATR
-float effLiqDistanceATR = protectCandleScale ? math.min(liqDisplayDistanceATR, scaleWindowATR) : liqDisplayDistanceATR
-float effLiqNearestATR = protectCandleScale ? math.min(liqDisplayDistanceATR * 2.0, scaleWindowATR) : liqDisplayDistanceATR * 2.0
+float effZoneDistanceATR = zoneDisplayDistanceATR
+float effObDistanceATR = obDisplayDistanceATR
+float effLiqDistanceATR = liqDisplayDistanceATR
+float effLiqNearestATR = liqDisplayDistanceATR * 2.0
 int effectiveVisibleLiquidity = minimalMode ? 0 : balancedMode ? math.min(visibleLiquidity, 8) : detailedMode ? math.max(visibleLiquidity, 12) : maxLiquidity
 int effectiveExternalEvents = minimalMode ? math.min(majorEventLimit, 3) : balancedMode ? math.min(majorEventLimit, 6) : majorEventLimit
 int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
@@ -641,6 +655,26 @@ bool downBOS = false
 bool upCHOCH = false
 bool downCHOCH = false
 
+// An external swing is published only after pivot confirmation and a displaced leg, so
+// price may already have closed beyond it. Draw the break at the first such close; the
+// event itself (bias, alerts, order blocks) still happens on the publication bar.
+int upBreakBar = bar_index
+int downBreakBar = bar_index
+if upBreak and not na(lastHighBar)
+    int upSpan = bar_index - lastHighBar - 1
+    if upSpan >= 1 and upSpan <= 750
+        for k = upSpan to 1
+            if close[k] > lastSwingHigh + nz(atr[k], atr) * (breakBuffer + confirmATR)
+                upBreakBar := bar_index - k
+                break
+if downBreak and not na(lastLowBar)
+    int downSpan = bar_index - lastLowBar - 1
+    if downSpan >= 1 and downSpan <= 750
+        for k = downSpan to 1
+            if close[k] < lastSwingLow - nz(atr[k], atr) * (breakBuffer + confirmATR)
+                downBreakBar := bar_index - k
+                break
+
 if upBreak
     bool initialBreak = bias == 0
     bool choch = bias == -1 and not na(protectedHigh)
@@ -649,9 +683,9 @@ if upBreak
     upCHOCH := choch
     upBOS := not choch
     if showBreaks
-        f_structureLine(lastHighBar, bar_index, lastSwingHigh, true, choch, false)
+        f_structureLine(lastHighBar, upBreakBar, lastSwingHigh, true, choch, false)
     highBroken := true
-    highBreakBar := bar_index
+    highBreakBar := upBreakBar
     bias := 1
     developingDirection := 1
     developingHigh := high
@@ -659,7 +693,7 @@ if upBreak
     developingLow := na
     developingLowBar := na
     lastBreakBar := bar_index
-    lastBreakTime := time
+    lastBreakTime := time[bar_index - upBreakBar]
     protectedLow := lastSwingLow
     protectedLowBar := lastLowBar
     lastBreak := initialBreak ? "Bull initial break" : choch ? "Bull CHoCH" : "Bull BOS"
@@ -671,9 +705,9 @@ else if downBreak
     downCHOCH := choch
     downBOS := not choch
     if showBreaks
-        f_structureLine(lastLowBar, bar_index, lastSwingLow, false, choch, false)
+        f_structureLine(lastLowBar, downBreakBar, lastSwingLow, false, choch, false)
     lowBroken := true
-    lowBreakBar := bar_index
+    lowBreakBar := downBreakBar
     bias := -1
     developingDirection := -1
     developingLow := low
@@ -681,7 +715,7 @@ else if downBreak
     developingHigh := na
     developingHighBar := na
     lastBreakBar := bar_index
-    lastBreakTime := time
+    lastBreakTime := time[bar_index - downBreakBar]
     protectedHigh := lastSwingHigh
     protectedHighBar := lastHighBar
     lastBreak := initialBreak ? "Bear initial break" : choch ? "Bear CHoCH" : "Bear BOS"
@@ -900,7 +934,7 @@ f_poolIngest(float price, int bar, int side, int degree, float tol, float atrRef
             array.push(ringPrices, price)
             array.push(ringBars, bar)
             array.push(ringSides, side)
-            if array.size(ringPrices) > 24
+            if array.size(ringPrices) > 80
                 array.shift(ringPrices)
                 array.shift(ringBars)
                 array.shift(ringSides)
@@ -1083,10 +1117,10 @@ if barstate.islast and array.size(poolStates) > 0
     // considered; remaining slots go to structural degree first, then proximity.
     int shown = 0
     if renderLiquidity and effectiveVisibleLiquidity > 0
-        if nearBsl >= 0 and nearBslGap / atrSafe <= effLiqNearestATR
+        if nearBsl >= 0 and nearBslGap / atrSafe <= effLiqNearestATR and f_scaleOk(array.get(poolTops, nearBsl))
             array.set(poolVisible, nearBsl, true)
             shown += 1
-        if nearSsl >= 0 and nearSslGap / atrSafe <= effLiqNearestATR and shown < effectiveVisibleLiquidity
+        if nearSsl >= 0 and nearSslGap / atrSafe <= effLiqNearestATR and f_scaleOk(array.get(poolBottoms, nearSsl)) and shown < effectiveVisibleLiquidity
             array.set(poolVisible, nearSsl, true)
             shown += 1
         if shown < effectiveVisibleLiquidity
@@ -1098,7 +1132,7 @@ if barstate.islast and array.size(poolStates) > 0
                         int candSide = array.get(poolSides, i)
                         float candEdge = candSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
                         float candDistance = math.abs(close - candEdge) / atrSafe
-                        if debugMode or candDistance <= effLiqDistanceATR
+                        if debugMode or (candDistance <= effLiqDistanceATR and f_scaleOk(candEdge))
                             float candScore = array.get(poolDegrees, i) * 1000.0 + (array.get(poolStates, i) == 0 ? 500.0 : 0.0) - candDistance * 10.0
                             if candScore > bestPoolScore
                                 bestPool := i
@@ -1675,7 +1709,7 @@ if array.size(zones) > 0
                         float obBottom = array.get(zoneBottoms, i)
                         float obDistance = math.abs(close - (obTop + obBottom) / 2.0) / math.max(atr, syminfo.mintick)
                         bool budgetOpen = obSide == 1 ? obBullShown < maxVisibleBullOB : obBearShown < maxVisibleBearOB
-                        bool obEligible = budgetOpen and (debugMode or obDistance <= effObDistanceATR)
+                        bool obEligible = budgetOpen and (debugMode or (obDistance <= effObDistanceATR and f_scaleOk((obTop + obBottom) / 2.0)))
                         bool obOverlaps = false
                         if obEligible
                             for j = 0 to array.size(zones) - 1
@@ -1723,7 +1757,7 @@ if array.size(zones) > 0
                     float bottom = array.get(zoneBottoms, i)
                     float zoneMid = (top + bottom) / 2.0
                     float distanceATR = math.abs(close - zoneMid) / math.max(atr, syminfo.mintick)
-                    bool eligible = array.get(zoneKinds, i) != 1 and (debugMode or distanceATR <= effZoneDistanceATR)
+                    bool eligible = array.get(zoneKinds, i) != 1 and (debugMode or (distanceATR <= effZoneDistanceATR and f_scaleOk(zoneMid)))
                     bool redundant = false
                     if eligible and not debugMode
                         for j = 0 to array.size(zones) - 1
@@ -1890,7 +1924,7 @@ if array.size(zones) > 0
             qualifiedPoiCount += array.get(zonePoi, i) ? 1 : 0
             float auditMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
             float auditDistance = math.abs(close - auditMid) / math.max(atr, syminfo.mintick)
-            bool withinDistance = debugMode or auditDistance <= (auditKind == 1 ? effObDistanceATR : effZoneDistanceATR)
+            bool withinDistance = debugMode or (auditDistance <= (auditKind == 1 ? effObDistanceATR : effZoneDistanceATR) and f_scaleOk(auditMid))
             if not array.get(zoneVisible, i)
                 hiddenDistanceCount += withinDistance ? 0 : 1
                 hiddenRankingCount += withinDistance ? 1 : 0
@@ -1914,7 +1948,7 @@ if array.size(zones) > 0
                                 overlapsShown := true
                     if not withinDistance
                         hiddenOBFar += 1
-                        hiddenReason := "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(effObDistanceATR, "0") + (protectCandleScale and effObDistanceATR < obDisplayDistanceATR ? ", candle-scale window" : "") + ")"
+                        hiddenReason := auditDistance <= effObDistanceATR ? "outside the candle range (scale protection)" : "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(effObDistanceATR, "0") + ")"
                     else if overlapsShown
                         hiddenOBOverlap += 1
                         hiddenReason := "overlaps a higher-ranked OB"
@@ -2057,10 +2091,86 @@ if showAsia and array.size(asiaHighLines) > 0
     label.set_y(asiaHighTag, asiaHigh + atr * 0.08)
     label.set_y(asiaLowTag, asiaLow - atr * 0.08)
 
+// ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------
+// A confirmed pool needs an external swing or two independent tests, so in a clean trend
+// the obvious recent highs/lows are not pools. These two lines mark only the nearest
+// internal swing high above and low below price that no later bar has traded through and
+// that is not already a pool. They are drawn markers, not pools: no state, no alerts.
+var line nearIntBslLine = na
+var label nearIntBslTag = na
+var line nearIntSslLine = na
+var label nearIntSslTag = na
+if barstate.islast
+    int pickBsl = -1
+    int pickSsl = -1
+    float gapBsl = 1.0e10
+    float gapSsl = 1.0e10
+    float safeAtr = math.max(nz(atr, syminfo.mintick), syminfo.mintick)
+    if showNearestInternal and not minimalMode and not na(atr) and array.size(ringPrices) > 0
+        for r = 0 to array.size(ringPrices) - 1
+            float rp = array.get(ringPrices, r)
+            int rb = array.get(ringBars, r)
+            int rs = array.get(ringSides, r)
+            bool onSide = (rs == 1 and rp > close) or (rs == -1 and rp < close)
+            float gap = math.abs(rp - close)
+            bool nearer = rs == 1 ? gap < gapBsl : gap < gapSsl
+            if onSide and nearer and f_scaleOk(rp) and bar_index - rb >= 1 and bar_index - rb <= 750
+                bool intact = true
+                for k = 0 to bar_index - rb - 1
+                    if intact and (rs == 1 ? high[k] > rp : low[k] < rp)
+                        intact := false
+                if intact and array.size(poolStates) > 0
+                    for q = 0 to array.size(poolStates) - 1
+                        float poolEdge = array.get(poolSides, q) == 1 ? array.get(poolTops, q) : array.get(poolBottoms, q)
+                        if array.get(poolSides, q) == rs and array.get(poolStates, q) == 0 and math.abs(poolEdge - rp) <= safeAtr * 0.5
+                            intact := false
+                if intact
+                    if rs == 1
+                        pickBsl := r
+                        gapBsl := gap
+                    else
+                        pickSsl := r
+                        gapSsl := gap
+    if pickBsl >= 0
+        float bslPrice = array.get(ringPrices, pickBsl)
+        int bslLeft = math.max(array.get(ringBars, pickBsl), bar_index - maxDrawBars)
+        string bslTip = "iBSL " + str.tostring(bslPrice, format.mintick) + "\nNearest unswept internal swing high above price (" + str.tostring(gapBsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool."
+        if na(nearIntBslLine)
+            nearIntBslLine := line.new(bslLeft, bslPrice, bar_index + 5, bslPrice, xloc = xloc.bar_index, color = color.new(liquidityColor, 55), style = line.style_dashed, width = 1)
+            nearIntBslTag := label.new(bar_index + 7, bslPrice + safeAtr * 0.08, "iBSL", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 60), textcolor = color.new(liquidityColor, 25), size = contextTextSize, tooltip = bslTip)
+        else
+            line.set_xy1(nearIntBslLine, bslLeft, bslPrice)
+            line.set_xy2(nearIntBslLine, bar_index + 5, bslPrice)
+            label.set_xy(nearIntBslTag, bar_index + 7, bslPrice + safeAtr * 0.08)
+            label.set_tooltip(nearIntBslTag, bslTip)
+    else if not na(nearIntBslLine)
+        line.delete(nearIntBslLine)
+        label.delete(nearIntBslTag)
+        nearIntBslLine := na
+        nearIntBslTag := na
+    if pickSsl >= 0
+        float sslPrice = array.get(ringPrices, pickSsl)
+        int sslLeft = math.max(array.get(ringBars, pickSsl), bar_index - maxDrawBars)
+        string sslTip = "iSSL " + str.tostring(sslPrice, format.mintick) + "\nNearest unswept internal swing low below price (" + str.tostring(gapSsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool."
+        if na(nearIntSslLine)
+            nearIntSslLine := line.new(sslLeft, sslPrice, bar_index + 5, sslPrice, xloc = xloc.bar_index, color = color.new(liquidityColor, 55), style = line.style_dashed, width = 1)
+            nearIntSslTag := label.new(bar_index + 7, sslPrice - safeAtr * 0.08, "iSSL", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 60), textcolor = color.new(liquidityColor, 25), size = contextTextSize, tooltip = sslTip)
+        else
+            line.set_xy1(nearIntSslLine, sslLeft, sslPrice)
+            line.set_xy2(nearIntSslLine, bar_index + 5, sslPrice)
+            label.set_xy(nearIntSslTag, bar_index + 7, sslPrice - safeAtr * 0.08)
+            label.set_tooltip(nearIntSslTag, sslTip)
+    else if not na(nearIntSslLine)
+        line.delete(nearIntSslLine)
+        label.delete(nearIntSslTag)
+        nearIntSslLine := na
+        nearIntSslTag := na
+
 // ------- PREMIUM / DISCOUNT (EQUILIBRIUM OF THE CONFIRMED EXTERNAL RANGE) -------
 // Premium = upper half of the last confirmed external high-low range (supply side),
 // discount = lower half (demand side); the 50% line is equilibrium. Bands are clipped
-// to the candle-scale window so they never stretch the price scale.
+// to the candle-scale window or the range the candles already span, so they never
+// stretch the price scale.
 var box pdPremiumBox = na
 var box pdDiscountBox = na
 var line pdEqLine = na
@@ -2071,8 +2181,8 @@ if barstate.islast
     bool pdValid = showPremiumDiscount and not minimalMode and not na(lastSwingHigh) and not na(lastSwingLow) and not na(lastHighBar) and not na(lastLowBar) and not na(atr) and lastSwingHigh > lastSwingLow
     float pdMid = pdValid ? (lastSwingHigh + lastSwingLow) / 2.0 : na
     float pdWindow = protectCandleScale ? scaleWindowATR * nz(atr, syminfo.mintick) : 1.0e10
-    float pdTop = pdValid ? math.min(lastSwingHigh, close + pdWindow) : na
-    float pdBottom = pdValid ? math.max(lastSwingLow, close - pdWindow) : na
+    float pdTop = pdValid ? math.min(lastSwingHigh, math.max(close + pdWindow, scaleBandHigh + nz(atr, 0.0))) : na
+    float pdBottom = pdValid ? math.max(lastSwingLow, math.min(close - pdWindow, scaleBandLow - nz(atr, 0.0))) : na
     int pdLeft = pdValid ? math.max(math.min(lastHighBar, lastLowBar), bar_index - maxDrawBars) : bar_index
     float premiumLow = pdValid ? math.max(pdMid, pdBottom) : na
     float discountHigh = pdValid ? math.min(pdMid, pdTop) : na
@@ -2194,7 +2304,7 @@ if barstate.islast
         string zonesCompact = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + " · S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " · FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG)
         string swingTip = "High " + highText + (na(lastHighTime) ? "" : " · " + str.format_time(lastHighTime, "MM-dd HH:mm", syminfo.timezone)) + "\nLow " + lowText + (na(lastLowTime) ? "" : " · " + str.format_time(lastLowTime, "MM-dd HH:mm", syminfo.timezone)) + "\nDeveloping extreme " + developingText + "\nLast confirmed external swings (chart time zone)."
         if compactPanel
-            table.cell(dashboard, 0, 0, "APEXVOID v2.4", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.6", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 2, "Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 2, biasText + htfBiasSuffix, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Directional leg: " + legText)
@@ -2219,7 +2329,7 @@ if barstate.islast
             table.cell(dashboard, 0, 22, "Zones", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 22, zonesCompact, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
         else
-            table.cell(dashboard, 0, 0, "APEXVOID v2.4", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.6", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
             table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)

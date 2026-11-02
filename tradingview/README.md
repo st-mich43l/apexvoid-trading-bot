@@ -34,7 +34,7 @@ pool or sweep is an analytical reference, not an entry signal.
 
 | Element | Look | Meaning |
 | --- | --- | --- |
-| BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. |
+| BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. The line ends on the candle that first closed beyond the swing. A swing is confirmed late (pivot lag plus a displaced leg), so the BOS alert and the bias change can arrive a few bars after that candle; v2.6 draws the line on the real break candle (before v2.6 it ended on the later confirmation bar, up to 38 bars late on XAUUSD M15). |
 | `MAJOR HIGH` / `MAJOR LOW` | tag plus a line extending from the swing | The latest confirmed external swing. Retired (dotted, faded) once broken. |
 | `DEV HIGH` / `DEV LOW` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
 | `PROTECTED` | dashed line | The external level whose break would flip bias. |
@@ -44,7 +44,8 @@ pool or sweep is an analytical reference, not an entry signal.
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
 | `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
 | `PREMIUM` / `DISCOUNT` / `EQ` | very light rose / green bands and a dashed 50 % line | Upper half (supply side) and lower half (demand side) of the last confirmed external range, and its equilibrium. Clipped to the candle-scale window. |
-| `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below. |
+| `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
+| `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
@@ -133,12 +134,14 @@ decisions.
 Distant zones and lines stretch the price scale and squash the candles, and heavy fills
 hide them. v2.3 adds:
 
-- **Candle-scale window** (`Keep candles readable…`, default on, 15 ATR): every zone, order
-  block and liquidity pool further than this from the current close is not drawn, whatever
-  its own distance setting says (the effective distance is the smaller of the two). The panel
-  and the OB debug table report such blocks as `far … candle-scale window`; they keep their
-  state and reappear when price comes back. Debug profile still ignores the limit. Turn the
-  toggle off to get the v2.1/v2.2 distances back.
+- **Candle-scale protection** (`Keep candles readable…`, default on): a zone, order block
+  or liquidity pool is drawn only if it is within `Candle-scale window` (15 ATR) of the close
+  **or** inside the price range the last `Candle range reference` (300) bars already span (plus
+  one ATR). An object inside that range cannot stretch the price scale, so it is kept; one
+  outside it is not drawn. (v2.3 used the ATR window alone, which hid a BSL 16 ATR away that
+  the candles themselves already spanned.) The panel and OB debug table report the reason, and
+  hidden objects keep their state. The Debug profile ignores the limit; turn the toggle off to
+  ignore it everywhere. Each object type also keeps its own distance setting.
 - **Maximum drawn length** (250 bars): the left edge of zone boxes, midlines, pool lines
   and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
   chart.
@@ -191,7 +194,7 @@ Inputs are grouped as in the indicator's settings dialog.
 (0.15), `BOS/CHOCH close buffer`, historical major classifications, extended
 major high/low, internal structure, draw BOS/CHoCH, external event history (6).
 
-**02 Liquidity** — show pools, highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
+**02 Liquidity** — show pools, nearest unswept internal swing marker (`iBSL` / `iSSL`), highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
 `Minimum bars between independent tests` (8), `Minimum pullback between tests`
 (0.5 ATR), `Sweep penetration` (0.01 ATR), `Sweep return rule` / window,
 `Pool break buffer` (0.10 ATR), `Closes beyond a pool to consume it` (2),
@@ -212,7 +215,7 @@ reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 
 **05 Asian Session** — show, session hours, timezone, retained ranges.
 
-**06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Maximum drawn length` (250 bars), colours, zone transparency (92),
+**06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
