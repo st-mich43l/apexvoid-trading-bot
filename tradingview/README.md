@@ -7,6 +7,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 | Path | Purpose |
 | --- | --- |
 | `apexvoid_price_action.pine` | The indicator (Pine Script v6, currently v2.1). |
+| `docs/supply-demand-v2.2.md` | v2.2 base-and-impulse supply/demand definition, gates, results on real bars and limits. |
 | `docs/ob-liquidity-v2.1.md` | v2.1 order-block and liquidity definitions, the root-cause analysis of the missing order blocks, verification status and known limitations. |
 | `docs/img/` | Before/after renders from the reference model (not TradingView screenshots). |
 | `reference/` | Python model of the order-block and liquidity logic, regression checks on real XAUUSD closed bars, and the chart renderer. |
@@ -40,6 +41,7 @@ pool or sweep is an analytical reference, not an entry signal.
 | `OB` / `iOB` | box with thin border, midpoint dotted line, right-aligned label | Swing / internal order block. Dashed border and `· T` when Tested. |
 | FVG | blue (bullish) / orange (bearish) box | Three-candle fair value gap. |
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
+| `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
 | `POI · Bull` / `POI · Bear` | thicker border | A zone that passed a named qualification path (below). |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
@@ -71,6 +73,14 @@ displacement and an impulse candle. Fresh → Tested (price entered) → Mitigat
 invalidates. Blocks have their own display budget (default 2 bullish + 2 bearish)
 and are never deleted just because they are hidden. No volume is used. Full rules:
 `docs/ob-liquidity-v2.1.md` §3.
+
+**Base-and-impulse supply / demand (v2.2).** Independent of swing pivots. A base is 1–5
+small candles; a zone is built once price leaves it within 3 bars with a real impulse
+candle and enough net distance (1.5 ATR and 2× the base height) without closing back
+through it. Patterns: `DBR` / `RBD` reversals, `RBR` / `DBD` continuations (filterable).
+Invalidated by a close beyond the far edge; a touch only marks it Tested. A fresh base
+zone on the bias side qualifies as a `Base-impulse zone` POI. Details and results:
+`docs/supply-demand-v2.2.md`.
 
 **FVG.** A three-candle gap whose size is at least `Minimum gap size` and whose
 middle candle has a real body. Invalidation follows `Wick`, `Close` or `Midpoint`.
@@ -117,6 +127,29 @@ decisions.
 | Detailed | at least 12 | at least 12 | internal structure available |
 | Debug | up to 20, distance limits off | all retained | `xEH` / `xEL` raw-pivot labels, OB and pool distance limits off |
 
+### Keeping candles readable (v2.3)
+
+Distant zones and lines stretch the price scale and squash the candles, and heavy fills
+hide them. v2.3 adds:
+
+- **Candle-scale window** (`Keep candles readable…`, default on, 15 ATR): every zone, order
+  block and liquidity pool further than this from the current close is not drawn, whatever
+  its own distance setting says (the effective distance is the smaller of the two). The panel
+  and the OB debug table report such blocks as `far … candle-scale window`; they keep their
+  state and reappear when price comes back. Debug profile still ignores the limit. Turn the
+  toggle off to get the v2.1/v2.2 distances back.
+- **Maximum drawn length** (250 bars): the left edge of zone boxes, midlines, pool lines
+  and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
+  chart.
+- **Lighter zones:** default `Zone transparency` 92 (range now up to 98), fainter borders;
+  POI keeps a stronger border.
+- **Larger labels:** the `Standard` text scale now uses the normal size for zone and
+  liquidity labels (`Large` uses large), captions need a taller box before they appear
+  inside it, and the default annotation spacing is wider (6 bars, 0.30 ATR).
+
+Not covered: Asian levels, optional HTF lines and the current major/protected lines are not
+limited by the window. If one of them squashes the candles, switch it off in its group.
+
 ### Market Intelligence panel
 
 Default `Compact`; `Standard` and `Expanded` add rows. Hover cells for tooltips.
@@ -127,7 +160,7 @@ Default `Compact`; `Standard` and `Expanded` add rows. Hover cells for tooltips.
 | Structure | Confirmed major high/low, developing extreme, protected level, last BOS/CHoCH, invalidated level (Expanded) |
 | Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
 | Session | Asian high / low |
-| Blocks & liquidity | **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** |
+| Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** |
 
 The Order Blocks tooltip splits hidden blocks into far / overlapping / budget and
 shows lifetime counters (accepted, rejected, replaced, covered, mitigated,
@@ -150,7 +183,7 @@ major high/low, internal structure, draw BOS/CHoCH, external event history (6).
 `Maximum visible pool distance` (30 ATR), pool maximum age, previous-day pools
 (off), `Minimum rejection wick for grab highlight` (0.20 ATR), grab history (10).
 
-**03 Order Blocks & Zones** — show OBs, internal OBs, `Origin search window` (40),
+**03 Order Blocks & Zones** — (v2.2) `Show base-and-impulse supply / demand`, pattern filter, base candle limits, departure gates, proximal edge, retained base zones; show OBs, internal OBs, `Origin search window` (40),
 `POI: OB-to-break proximity` (12), `Minimum displacement from OB` (1.0 ATR),
 `Minimum impulse candle body` (0.6), `Maximum origin candle range` (2.5),
 `Base tolerance vs leg extreme` (0.5), wicks, `OB mitigation method`
@@ -163,7 +196,7 @@ reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 
 **05 Asian Session** — show, session hours, timezone, retained ranges.
 
-**06 Visuals & Performance** — display profile, colours, zone transparency,
+**06 Visuals & Performance** — display profile, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
@@ -194,6 +227,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | `ApexVoid Buy-Side / Sell-Side Sweep` | A liquidity pool is swept (once per pool) |
 | `ApexVoid External Buy-Side / Sell-Side Sweep` | The current external swing is swept |
 | `ApexVoid Buy-Side / Sell-Side Liquidity Consumed` | A pool is accepted through or broken by structure (once per pool) |
+| `ApexVoid Demand / Supply Base Zone` | A new base-and-impulse zone is accepted |
 | `ApexVoid Bullish / Bearish FVG` | A new FVG forms |
 | `ApexVoid Bullish / Bearish OB` | A new qualified order block is accepted |
 | `ApexVoid Asian Range Complete` | A new Asian range completes |
@@ -221,7 +255,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 `reference/test_pa_model.py` runs the order-block and liquidity decision logic on
 real XAUUSD M5 / M15 / H1 / H4 bars and the v2.0 reproduction of the hidden-block
-defect (`python tradingview/reference/test_pa_model.py`; `render.py` regenerates the
+defect (`python tradingview/reference/test_pa_model.py`, and `test_sd_base_model.py` for the v2.2 supply/demand detector; `render.py` regenerates the
 images). It validates the algorithm only: it does not compile or draw the Pine file.
 Compile errors, label placement, object limits and alert behaviour must still be
 checked in TradingView, and a comparison with other indicators has not been done. See

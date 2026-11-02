@@ -25,7 +25,7 @@ invisible to it.
 ## 1. Order-block root cause (v2.0)
 
 Evidence: v2.0 logic replayed on real closed bars. `live` = production Redis capture of
-2026-11-02 02:33 UTC (`reference/data/xau-closed-bars-20261102.json`); `repo` = the
+2026-11-02 02:33 UTC (`reference/fixtures/xau-closed-bars-20261102.json`); `repo` = the
 2026-10-29 capture already in `analysis-engine/testdata/`. H4 is resampled from H1.
 
 | Capture | TF | v2.0 blocks created | v2.0 active / visible at the last bar |

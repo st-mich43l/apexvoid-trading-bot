@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.1", "AV Price Action v2.1", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.3", "AV Price Action v2.3", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,9 @@ indicator("ApexVoid | Price Action v2.1", "AV Price Action v2.1", overlay = true
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.3: candle-scale protection (objects limited to a window around price), lighter zone
+// fills, shorter drawn lengths, larger and better-spaced labels.
+// v2.2: base-and-impulse supply/demand zones (DBR / RBR / RBD / DBD) beside the swing zones.
 // v2.1: order blocks restored (swing + internal, own display budget, lifecycle) and
 // BSL/SSL rebuilt as a level-first liquidity-pool model (sweep != break). See
 // tradingview/docs/ob-liquidity-v2.1.md for definitions and known limitations.
@@ -69,8 +72,20 @@ float obDisplayDistanceATR = input.float(25.0, "Maximum visible OB distance (ATR
 bool showOBMidline = input.bool(true, "Show OB midpoint line", group = G3)
 bool showOBDebug = input.bool(false, "Debug: OB candidate log and rejection reasons", group = G3)
 bool showSD = input.bool(true, "Show swing supply / demand", group = G3)
+bool showBaseSD = input.bool(true, "Show base-and-impulse supply / demand", group = G3)
+string sdPatternFilter = input.string("All", "Base-and-impulse patterns", options = ["All", "Reversal only", "Continuation only"], group = G3)
+int sdBaseMaxBars = input.int(5, "Base maximum candles", minval = 1, maxval = 10, group = G3)
+float sdBaseBarRangeATR = input.float(0.90, "Base candle maximum range (ATR)", minval = 0.1, maxval = 3, step = 0.05, group = G3)
+float sdBaseBodyATR = input.float(0.45, "Base candle maximum body (ATR)", minval = 0.05, maxval = 2, step = 0.05, group = G3)
+float sdBaseDepartATR = input.float(1.50, "Minimum departure from base (ATR)", minval = 0.2, maxval = 8, step = 0.1, group = G3)
+float sdDepartRatio = input.float(2.00, "Minimum departure vs base height (x)", minval = 0.5, maxval = 10, step = 0.25, group = G3)
+float sdImpulseBodyATR = input.float(0.80, "Minimum departure candle body (ATR)", minval = 0.1, maxval = 4, step = 0.05, group = G3)
+int sdDepartBars = input.int(3, "Departure window (bars)", minval = 1, maxval = 6, group = G3)
+int sdLegInBars = input.int(3, "Leg-in lookback for pattern type (bars)", minval = 1, maxval = 10, group = G3)
+string sdProximal = input.string("Wick", "Base proximal edge", options = ["Wick", "Body"], group = G3)
+int sdMaxBaseZones = input.int(12, "Retained base-and-impulse zones", minval = 2, maxval = 40, group = G3)
 float sdDepartureATR = input.float(0.80, "Supply/demand departure (ATR)", minval = 0.1, maxval = 5, step = 0.1, group = G3)
-float sdMaxWidthATR = input.float(1.00, "Max supply/demand width (ATR)", minval = 0.1, maxval = 5, step = 0.1, group = G3)
+float sdMaxWidthATR = input.float(1.00, "Max supply/demand width / base height (ATR)", minval = 0.1, maxval = 5, step = 0.1, group = G3)
 
 bool showFVG = input.bool(true, "Show three-candle FVG", group = G4)
 float minGapATR = input.float(0.10, "Minimum gap size (ATR)", minval = 0.01, maxval = 2, step = 0.01, group = G4)
@@ -90,7 +105,10 @@ color demandColor = input.color(#36D399, "Demand color", group = G6)
 color supplyColor = input.color(#FF7892, "Supply color", group = G6)
 color asiaColor = input.color(#B48AFF, "Asian levels color", group = G6)
 color liquidityColor = input.color(#AEB8CC, "Liquidity pool color", group = G6)
-int zoneOpacity = input.int(88, "Zone transparency", minval = 65, maxval = 96, group = G6)
+bool protectCandleScale = input.bool(true, "Keep candles readable: limit objects to a window around price", group = G6)
+float scaleWindowATR = input.float(15.0, "Candle-scale window (ATR)", minval = 3, maxval = 60, step = 0.5, group = G6)
+int maxDrawBars = input.int(250, "Maximum drawn length of zones and pool lines (bars)", minval = 30, maxval = 2000, group = G6)
+int zoneOpacity = input.int(92, "Zone transparency", minval = 65, maxval = 98, group = G6)
 int maxZones = input.int(80, "Maximum retained zone state", minval = 10, maxval = 120, group = G6)
 int visibleZones = input.int(8, "Visible qualified zones", minval = 1, maxval = 40, group = G6)
 float zoneDisplayDistanceATR = input.float(10.0, "Maximum visible zone distance (ATR)", minval = 2, maxval = 50, step = 0.5, group = G6)
@@ -103,8 +121,8 @@ bool showDashboard = input.bool(true, "Show Market Intelligence panel", group = 
 string textScaleInput = input.string("Standard", "Global text scale", options = ["Compact", "Standard", "Large"], group = G6)
 string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard", "Expanded"], group = G6)
 string dashboardPositionInput = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right"], group = G6)
-int annotationBarSpacing = input.int(5, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
-float annotationATRSpacing = input.float(0.24, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
+int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
+float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
 
 bool showHTFContext = input.bool(false, "Show confirmed HTF context", group = G7)
 string htfTimeframe = input.timeframe("240", "Higher timeframe", group = G7)
@@ -131,6 +149,10 @@ bool showInternal = showInternalSwing and (detailedMode or debugMode)
 bool renderLiquidity = showLiquidity and not minimalMode
 bool renderSweeps = showSweeps and not minimalMode
 int effectiveVisibleZones = minimalMode ? math.min(visibleZones, 4) : balancedMode ? math.min(visibleZones, 8) : detailedMode ? math.max(visibleZones, 12) : math.min(maxZones, 20)
+float effZoneDistanceATR = protectCandleScale ? math.min(zoneDisplayDistanceATR, scaleWindowATR) : zoneDisplayDistanceATR
+float effObDistanceATR = protectCandleScale ? math.min(obDisplayDistanceATR, scaleWindowATR) : obDisplayDistanceATR
+float effLiqDistanceATR = protectCandleScale ? math.min(liqDisplayDistanceATR, scaleWindowATR) : liqDisplayDistanceATR
+float effLiqNearestATR = protectCandleScale ? math.min(liqDisplayDistanceATR * 2.0, scaleWindowATR) : liqDisplayDistanceATR * 2.0
 int effectiveVisibleLiquidity = minimalMode ? 0 : balancedMode ? math.min(visibleLiquidity, 8) : detailedMode ? math.max(visibleLiquidity, 12) : maxLiquidity
 int effectiveExternalEvents = minimalMode ? math.min(majorEventLimit, 3) : balancedMode ? math.min(majorEventLimit, 6) : majorEventLimit
 int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
@@ -138,8 +160,8 @@ bool compactText = textScaleInput == "Compact"
 bool largeText = textScaleInput == "Large"
 string majorTextSize = compactText ? size.small : largeText ? size.large : size.normal
 string structureTextSize = compactText ? size.small : largeText ? size.large : size.normal
-string zoneTextSize = compactText ? size.small : largeText ? size.normal : size.small
-string contextTextSize = compactText ? size.small : largeText ? size.normal : size.small
+string zoneTextSize = compactText ? size.small : largeText ? size.large : size.normal
+string contextTextSize = compactText ? size.small : largeText ? size.large : size.normal
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.
 string dashboardTitleSize = dashboardDensity == "Expanded" ? size.large : dashboardDensity == "Compact" ? size.small : size.normal
@@ -1044,10 +1066,10 @@ if barstate.islast and array.size(poolStates) > 0
     // considered; remaining slots go to structural degree first, then proximity.
     int shown = 0
     if renderLiquidity and effectiveVisibleLiquidity > 0
-        if nearBsl >= 0 and nearBslGap / atrSafe <= liqDisplayDistanceATR * 2.0
+        if nearBsl >= 0 and nearBslGap / atrSafe <= effLiqNearestATR
             array.set(poolVisible, nearBsl, true)
             shown += 1
-        if nearSsl >= 0 and nearSslGap / atrSafe <= liqDisplayDistanceATR * 2.0 and shown < effectiveVisibleLiquidity
+        if nearSsl >= 0 and nearSslGap / atrSafe <= effLiqNearestATR and shown < effectiveVisibleLiquidity
             array.set(poolVisible, nearSsl, true)
             shown += 1
         if shown < effectiveVisibleLiquidity
@@ -1059,7 +1081,7 @@ if barstate.islast and array.size(poolStates) > 0
                         int candSide = array.get(poolSides, i)
                         float candEdge = candSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
                         float candDistance = math.abs(close - candEdge) / atrSafe
-                        if debugMode or candDistance <= liqDisplayDistanceATR
+                        if debugMode or candDistance <= effLiqDistanceATR
                             float candScore = array.get(poolDegrees, i) * 1000.0 + (array.get(poolStates, i) == 0 ? 500.0 : 0.0) - candDistance * 10.0
                             if candScore > bestPoolScore
                                 bestPool := i
@@ -1087,7 +1109,7 @@ if barstate.islast and array.size(poolStates) > 0
             string pKind = array.get(poolKinds, i)
             bool pActive = pState == 0
             relevantLiquidityCount += pActive ? 1 : 0
-            int leftX = math.max(pBirth, bar_index - 9999)
+            int leftX = math.max(pBirth, bar_index - maxDrawBars)
             int rightX = pActive ? bar_index + 5 : math.max(pStateBar, leftX + 1)
             color lineTone = color.new(liquidityColor, pActive ? 25 : 78)
             string baseName = pKind == "EQ" ? (pSide == 1 ? "EQH · BSL" : "EQL · SSL") : pKind == "PDH" ? "PDH · BSL" : pKind == "PDL" ? "PDL · SSL" : (pSide == 1 ? "BSL" : "SSL")
@@ -1284,6 +1306,130 @@ if showSD and newMajorHigh
 if showSD and (newMajorLow or newMajorHigh) and not bullSD and not bearSD
     rejectedSDCount += 1
 
+// ------- BASE-AND-IMPULSE SUPPLY / DEMAND (DBR / RBR / RBD / DBD) -------
+// A base is 1..N consecutive small candles. A zone exists once price leaves the base
+// with a real impulse and enough net distance, without closing back through it.
+// Demand = departure up, supply = departure down. The pattern names the move into the
+// base: drop-base-rally / rise-base-drop are reversals, rally-base-rally / drop-base-drop
+// continuations. The zone is built on the bar the departure qualifies (up to
+// `Departure window` bars after the base), so it appears with a short, bounded lag.
+// sdStats: 0 accepted, 1 weak departure, 2 no impulse candle, 3 closed back through
+// the base, 4 filtered by pattern, 5 duplicate, 6 retired by the retained-zone cap.
+var int[] sdStats = array.new_int(7, 0)
+var string[] sdLastOutcome = array.new_string(1, "no base yet")
+
+// Returns 1 = demand added, 2 = supply added, 3 = duplicate (stop scanning), 0 = nothing.
+f_baseImpulse(int nDep, float atrNow) =>
+    int result = 0
+    int baseCount = 0
+    float baseHigh = na
+    float baseLow = na
+    bool scanning = true
+    for m = 0 to sdBaseMaxBars - 1
+        if scanning
+            int k = nDep + m
+            if k > bar_index - 1
+                scanning := false
+            else
+                bool smallBar = high[k] - low[k] <= sdBaseBarRangeATR * atrNow and math.abs(close[k] - open[k]) <= sdBaseBodyATR * atrNow
+                float newHigh = na(baseHigh) ? high[k] : math.max(baseHigh, high[k])
+                float newLow = na(baseLow) ? low[k] : math.min(baseLow, low[k])
+                if smallBar and newHigh - newLow <= sdMaxWidthATR * atrNow
+                    baseHigh := newHigh
+                    baseLow := newLow
+                    baseCount += 1
+                else
+                    scanning := false
+    if baseCount > 0
+        float height = baseHigh - baseLow
+        int firstBack = nDep + baseCount - 1
+        bool up = close[nDep - 1] > baseHigh
+        bool down = close[nDep - 1] < baseLow
+        if up or down
+            float bestClose = na
+            float bodyMax = 0.0
+            bool brokeBack = false
+            for d = 0 to nDep - 1
+                bestClose := na(bestClose) ? close[d] : up ? math.max(bestClose, close[d]) : math.min(bestClose, close[d])
+                bodyMax := math.max(bodyMax, up ? close[d] - open[d] : open[d] - close[d])
+                brokeBack := brokeBack or (up ? close[d] < baseLow : close[d] > baseHigh)
+            float netDepart = up ? bestClose - baseHigh : baseLow - bestClose
+            float needed = math.max(sdBaseDepartATR * atrNow, sdDepartRatio * height)
+            string reason = ""
+            if brokeBack
+                reason := "departure closed back through the base"
+                if nDep == 1
+                    f_inc(sdStats, 3)
+            else if netDepart < needed
+                reason := "weak departure (" + str.tostring(netDepart / atrNow, "0.00") + " ATR < " + str.tostring(needed / atrNow, "0.00") + ")"
+                if nDep == 1
+                    f_inc(sdStats, 1)
+            else if bodyMax < sdImpulseBodyATR * atrNow
+                reason := "no impulse candle (max body " + str.tostring(bodyMax / atrNow, "0.00") + " ATR)"
+                if nDep == 1
+                    f_inc(sdStats, 2)
+            if reason == ""
+                float legIn = close[firstBack + 1] - close[firstBack + 1 + sdLegInBars]
+                string pattern = up ? (legIn < 0 ? "DBR" : "RBR") : (legIn > 0 ? "RBD" : "DBD")
+                bool reversal = pattern == "DBR" or pattern == "RBD"
+                if sdPatternFilter == "Reversal only" and not reversal
+                    reason := "continuation filtered"
+                    f_inc(sdStats, 4)
+                else if sdPatternFilter == "Continuation only" and reversal
+                    reason := "reversal filtered"
+                    f_inc(sdStats, 4)
+                if reason == ""
+                    float bodyHigh = na
+                    float bodyLow = na
+                    for b = nDep to firstBack
+                        bodyHigh := na(bodyHigh) ? math.max(open[b], close[b]) : math.max(bodyHigh, math.max(open[b], close[b]))
+                        bodyLow := na(bodyLow) ? math.min(open[b], close[b]) : math.min(bodyLow, math.min(open[b], close[b]))
+                    float zTop = up ? (sdProximal == "Wick" ? baseHigh : bodyHigh) : baseHigh
+                    float zBottom = up ? baseLow : (sdProximal == "Wick" ? baseLow : bodyLow)
+                    int zSide = up ? 1 : -1
+                    bool duplicate = false
+                    if array.size(zones) > 0 and zTop > zBottom
+                        for z = 0 to array.size(zones) - 1
+                            if array.get(zoneKinds, z) == 3 and array.get(zoneSides, z) == zSide
+                                float ot = array.get(zoneTops, z)
+                                float ob = array.get(zoneBottoms, z)
+                                float ov = math.min(zTop, ot) - math.max(zBottom, ob)
+                                float sm = math.min(zTop - zBottom, ot - ob)
+                                duplicate := duplicate or (ov > 0 and sm > 0 and ov / sm >= 0.85)
+                    if duplicate
+                        f_inc(sdStats, 5)
+                        result := 3
+                    else if zTop > zBottom
+                        string zTitle = (up ? "Demand · " : "Supply · ") + pattern
+                        f_addZone(bar_index - firstBack, zTop, zBottom, zSide, 3, zTitle, up ? demandColor : supplyColor, 1, pattern)
+                        f_inc(sdStats, 0)
+                        array.set(sdLastOutcome, 0, "last base accepted · " + pattern)
+                        result := up ? 1 : 2
+            if reason != ""
+                array.set(sdLastOutcome, 0, "last base rejected: " + reason)
+    result
+
+bool bullBase = false
+bool bearBase = false
+if showBaseSD and barstate.isconfirmed and not na(atr) and bar_index > 40
+    for nDep = 1 to sdDepartBars
+        int baseResult = f_baseImpulse(nDep, atr)
+        if baseResult != 0
+            bullBase := bullBase or baseResult == 1
+            bearBase := bearBase or baseResult == 2
+            break
+    // Keep the newest `Retained base-and-impulse zones`; swing zones are never touched.
+    int baseZoneCount = 0
+    if array.size(zones) > 0
+        for i = 0 to array.size(zones) - 1
+            baseZoneCount += array.get(zoneKinds, i) == 3 and array.get(zoneClasses, i) == 1 ? 1 : 0
+        for i = 0 to array.size(zones) - 1
+            if baseZoneCount > sdMaxBaseZones and array.get(zoneKinds, i) == 3 and array.get(zoneClasses, i) == 1
+                f_removeZone(i)
+                f_inc(sdStats, 6)
+                baseZoneCount -= 1
+                break
+
 // ------- FAIR VALUE GAPS: [0] and [2] do not overlap; [1] is displaced -------
 bool rawBullFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and low > high[2]
 bool rawBearFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and high < low[2]
@@ -1321,6 +1467,8 @@ int visibleSD = 0
 int activeOB = 0
 int activeFVG = 0
 int activeSD = 0
+int activeBaseSD = 0
+int visibleBaseSD = 0
 int qualifiedPoiCount = 0
 int hiddenDistanceCount = 0
 int hiddenRankingCount = 0
@@ -1401,12 +1549,13 @@ if array.size(zones) > 0
             bool componentConfluence = (hasOB and hasFVG) or (hasOB and hasSD) or (hasFVG and hasSD)
             bool structureRelated = not na(lastBreakBar) and born >= lastBreakBar - obLookback and born - lastBreakBar <= poiStructureWindow
             bool structureOriginOB = kind == 1 and array.get(zoneClasses, i) == 2 and side == bias and structureRelated
-            bool displacedSwingZone = kind == 3 and side == bias
+            bool displacedSwingZone = kind == 3 and array.get(zoneClasses, i) == 0 and side == bias
+            bool baseImpulseZone = kind == 3 and array.get(zoneClasses, i) == 1 and side == bias and fresh
             bool sweptImbalance = kind == 2 and side == bias and lastSweepSide == side and not na(lastSweepBar) and math.abs(born - lastSweepBar) <= poiStructureWindow
             // Named qualification paths replace the v1.x summed confluence score.
             // Proximity and display rank never promote a candidate.
-            bool qualifiedPoi = componentConfluence or structureOriginOB or displacedSwingZone or sweptImbalance
-            string qualificationPath = componentConfluence ? "Composite" : structureOriginOB ? "Structure-origin OB" : displacedSwingZone ? "Displaced swing zone" : sweptImbalance ? "Swept imbalance" : "Candidate"
+            bool qualifiedPoi = componentConfluence or structureOriginOB or displacedSwingZone or baseImpulseZone or sweptImbalance
+            string qualificationPath = componentConfluence ? "Composite" : structureOriginOB ? "Structure-origin OB" : displacedSwingZone ? "Displaced swing zone" : baseImpulseZone ? "Base-impulse zone" : sweptImbalance ? "Swept imbalance" : "Candidate"
             string sideName = side == 1 ? "Bull" : "Bear"
             string sdName = side == 1 ? "Demand" : "Supply"
             string poiTitle = hasOB and hasFVG ? "POI · " + sideName + " OB + FVG" : hasOB and hasSD ? "POI · " + sdName + " + OB" : hasFVG and hasSD ? "POI · " + sdName + " + FVG" : "POI · " + array.get(zoneTitles, i)
@@ -1507,7 +1656,7 @@ if array.size(zones) > 0
                         float obBottom = array.get(zoneBottoms, i)
                         float obDistance = math.abs(close - (obTop + obBottom) / 2.0) / math.max(atr, syminfo.mintick)
                         bool budgetOpen = obSide == 1 ? obBullShown < maxVisibleBullOB : obBearShown < maxVisibleBearOB
-                        bool obEligible = budgetOpen and (debugMode or obDistance <= obDisplayDistanceATR)
+                        bool obEligible = budgetOpen and (debugMode or obDistance <= effObDistanceATR)
                         bool obOverlaps = false
                         if obEligible
                             for j = 0 to array.size(zones) - 1
@@ -1555,7 +1704,7 @@ if array.size(zones) > 0
                     float bottom = array.get(zoneBottoms, i)
                     float zoneMid = (top + bottom) / 2.0
                     float distanceATR = math.abs(close - zoneMid) / math.max(atr, syminfo.mintick)
-                    bool eligible = array.get(zoneKinds, i) != 1 and (debugMode or distanceATR <= zoneDisplayDistanceATR)
+                    bool eligible = array.get(zoneKinds, i) != 1 and (debugMode or distanceATR <= effZoneDistanceATR)
                     bool redundant = false
                     if eligible and not debugMode
                         for j = 0 to array.size(zones) - 1
@@ -1611,10 +1760,10 @@ if array.size(zones) > 0
                 string shortTitle = poi ? (side == 1 ? "POI · Bull" : "POI · Bear") : isOB ? obName : array.get(zoneTitles, i)
                 float mitigation = array.get(zoneMitigation, i)
                 string zoneState = array.get(zoneQualification, i)
-                string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : ""
+                string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
                 string zoneTooltip = title + "\n" + obTipLine + zoneState + "\nMitigated " + str.tostring(mitigation * 100.0, "#.0") + "%\n" + str.tostring(bottom, format.mintick) + " — " + str.tostring(top, format.mintick)
                 float zoneMid = (top + bottom) / 2.0
-                bool tallZone = top - bottom >= atr * (largeText ? 0.34 : compactText ? 0.18 : 0.24)
+                bool tallZone = top - bottom >= atr * (largeText ? 0.45 : compactText ? 0.20 : 0.32)
                 bool suppressCaption = false
                 if not poi and array.size(zones) > 1
                     for j = 0 to array.size(zones) - 1
@@ -1623,14 +1772,16 @@ if array.size(zones) > 0
                             float poiBottom = array.get(zoneBottoms, j)
                             suppressCaption := suppressCaption or math.min(top, poiTop) - math.max(bottom, poiBottom) > 0
                 string insideText = tallZone and not suppressCaption ? shortTitle : ""
-                color zoneBorder = isOB ? color.new(tone, touched ? 60 : 25) : poi ? tone : color.new(tone, touched ? 65 : 35)
+                color zoneBorder = isOB ? color.new(tone, touched ? 72 : 42) : poi ? color.new(tone, 10) : color.new(tone, touched ? 75 : 50)
                 int zoneBorderWidth = isOB ? 1 : poi ? 2 : 1
                 string zoneBorderStyle = isOB and touched ? line.style_dashed : line.style_solid
-                color zoneFill = isOB ? color.new(tone, touched ? 93 : math.min(95, zoneOpacity + 2)) : color.new(tone, touched ? 95 : poi ? math.max(78, zoneOpacity - 3) : zoneOpacity)
+                color zoneFill = isOB ? color.new(tone, touched ? 95 : math.min(97, zoneOpacity + 2)) : color.new(tone, touched ? 96 : poi ? math.max(82, zoneOpacity - 3) : zoneOpacity)
+                int drawLeft = math.max(origin, bar_index - maxDrawBars)
                 if na(zoneBox)
-                    zoneBox := box.new(left = origin, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
+                    zoneBox := box.new(left = drawLeft, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
                     array.set(zones, i, zoneBox)
                 else
+                    box.set_left(zoneBox, drawLeft)
                     box.set_right(zoneBox, bar_index + 5)
                     box.set_border_color(zoneBox, zoneBorder)
                     box.set_border_width(zoneBox, zoneBorderWidth)
@@ -1643,9 +1794,10 @@ if array.size(zones) > 0
                 line zoneMidLine = array.get(zoneMidLines, i)
                 if isOB and showOBMidline
                     if na(zoneMidLine)
-                        zoneMidLine := line.new(origin, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
+                        zoneMidLine := line.new(drawLeft, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
                         array.set(zoneMidLines, i, zoneMidLine)
                     else
+                        line.set_x1(zoneMidLine, drawLeft)
                         line.set_x2(zoneMidLine, bar_index + 5)
                 else if not na(zoneMidLine)
                     line.delete(zoneMidLine)
@@ -1713,10 +1865,13 @@ if array.size(zones) > 0
             activeOB += auditKind == 1 ? 1 : 0
             activeFVG += auditKind == 2 ? 1 : 0
             activeSD += auditKind == 3 ? 1 : 0
+            bool auditBase = auditKind == 3 and array.get(zoneClasses, i) == 1
+            activeBaseSD += auditBase ? 1 : 0
+            visibleBaseSD += auditBase and array.get(zoneVisible, i) ? 1 : 0
             qualifiedPoiCount += array.get(zonePoi, i) ? 1 : 0
             float auditMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
             float auditDistance = math.abs(close - auditMid) / math.max(atr, syminfo.mintick)
-            bool withinDistance = debugMode or auditDistance <= (auditKind == 1 ? obDisplayDistanceATR : zoneDisplayDistanceATR)
+            bool withinDistance = debugMode or auditDistance <= (auditKind == 1 ? effObDistanceATR : effZoneDistanceATR)
             if not array.get(zoneVisible, i)
                 hiddenDistanceCount += withinDistance ? 0 : 1
                 hiddenRankingCount += withinDistance ? 1 : 0
@@ -1740,7 +1895,7 @@ if array.size(zones) > 0
                                 overlapsShown := true
                     if not withinDistance
                         hiddenOBFar += 1
-                        hiddenReason := "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(obDisplayDistanceATR, "0") + ")"
+                        hiddenReason := "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(effObDistanceATR, "0") + (protectCandleScale and effObDistanceATR < obDisplayDistanceATR ? ", candle-scale window" : "") + ")"
                     else if overlapsShown
                         hiddenOBOverlap += 1
                         hiddenReason := "overlaps a higher-ranked OB"
@@ -1882,7 +2037,7 @@ if showAsia and array.size(asiaHighLines) > 0
     label.set_y(asiaLowTag, asiaLow - atr * 0.08)
 
 // ------- DASHBOARD v2 / MARKET INTELLIGENCE -------
-var table dashboard = table.new(dashboardPosition, 2, 24, bgcolor = color.new(#090D18, 7), frame_color = color.new(#B48AFF, 30), frame_width = 1, border_color = color.new(#493D64, 75), border_width = 1)
+var table dashboard = table.new(dashboardPosition, 2, 25, bgcolor = color.new(#090D18, 7), frame_color = color.new(#B48AFF, 30), frame_width = 1, border_color = color.new(#493D64, 75), border_width = 1)
 if barstate.isfirst
     table.merge_cells(dashboard, 0, 1, 1, 1)
     table.merge_cells(dashboard, 0, 5, 1, 5)
@@ -1891,7 +2046,7 @@ if barstate.isfirst
     table.merge_cells(dashboard, 0, 21, 1, 21)
 
 if barstate.islast
-    table.clear(dashboard, 0, 0, 1, 23)
+    table.clear(dashboard, 0, 0, 1, 24)
     if showDashboard
         color valueColor = bias == 1 ? bullColor : bias == -1 ? bearColor : color.silver
         string biasText = bias == 1 ? "BULLISH" : bias == -1 ? "BEARISH" : "NEUTRAL"
@@ -1903,13 +2058,16 @@ if barstate.islast
         string developingText = developingDirection == 1 and not na(developingHigh) ? "High · " + str.tostring(developingHigh, format.mintick) : developingDirection == -1 and not na(developingLow) ? "Low · " + str.tostring(developingLow, format.mintick) : "—"
         string legText = developingDirection == 1 ? "UP · " + rangeText : developingDirection == -1 ? "DOWN · " + rangeText : "UNDEFINED"
         string protectedText = bias == 1 ? (na(protectedLow) ? "—" : "Low · " + str.tostring(protectedLow, format.mintick)) : bias == -1 ? (na(protectedHigh) ? "—" : "High · " + str.tostring(protectedHigh, format.mintick)) : "—"
-        string zoneText = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + "  FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG) + "  S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD)
+        string zoneText = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + "  FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG) + "  S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " (base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD) + ")"
         string liquidityText = str.tostring(relevantLiquidityCount) + " shown · " + str.tostring(poolActiveCount) + " active · " + str.tostring(poolSweptCount) + " swept · " + str.tostring(poolConsumedCount) + " consumed · " + lastSweep
         int hiddenOBTotal = hiddenOBFar + hiddenOBOverlap + hiddenOBBudget
         string obLastText = array.get(obLastOutcome, 0)
         string obShortText = str.length(obLastText) > 34 ? str.substring(obLastText, 0, 34) + "…" : obLastText
         string obSummary = activeOB == 0 ? "none active · " + obShortText : "Bull " + str.tostring(visibleBullOB) + "/" + str.tostring(activeBullOB) + " · Bear " + str.tostring(visibleBearOB) + "/" + str.tostring(activeBearOB) + (hiddenOBTotal > 0 ? " · hid " + str.tostring(hiddenOBTotal) : "")
         string obTooltip = "Visible / active. Hidden: far " + str.tostring(hiddenOBFar) + " · overlap " + str.tostring(hiddenOBOverlap) + " · budget " + str.tostring(hiddenOBBudget) + "\nAccepted " + str.tostring(array.get(obStats, 0)) + " · rejected " + str.tostring(array.get(obStats, 1)) + " · replaced " + str.tostring(array.get(obStats, 2)) + " · covered " + str.tostring(array.get(obStats, 3)) + "\nMitigated " + str.tostring(array.get(obStats, 4)) + " · invalidated " + str.tostring(array.get(obStats, 5)) + " · aged " + str.tostring(array.get(obStats, 6)) + " · evicted " + str.tostring(array.get(obStats, 7)) + "\n" + obLastText
+        string sdLastText = array.get(sdLastOutcome, 0)
+        string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
+        string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + str.tostring(array.get(sdStats, 0)) + " · duplicate " + str.tostring(array.get(sdStats, 5)) + " · retired by cap " + str.tostring(array.get(sdStats, 6)) + "\nRejected: weak departure " + str.tostring(array.get(sdStats, 1)) + " · no impulse " + str.tostring(array.get(sdStats, 2)) + " · closed back " + str.tostring(array.get(sdStats, 3)) + " · pattern filter " + str.tostring(array.get(sdStats, 4)) + "\n" + sdLastText
         string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + str.tostring(nearestBslPrice, format.mintick)) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + str.tostring(nearestSslPrice, format.mintick))
         string asiaHighText = na(asiaHigh) ? "Waiting for close" : str.tostring(asiaHigh, format.mintick)
         string asiaLowText = na(asiaLow) ? "Waiting for close" : str.tostring(asiaLow, format.mintick)
@@ -1926,7 +2084,7 @@ if barstate.islast
         string compactBarrier = bias == 1 ? (na(bullPoiBarrier) ? "Open above" : "OH " + str.tostring(bullPoiBarrier, format.mintick)) : bias == -1 ? (na(bearPoiBarrier) ? "Open below" : "SUP " + str.tostring(bearPoiBarrier, format.mintick)) : "Bias pending"
         string barrierLiquidityText = (compactPanel ? compactBarrier : opposingBarrierText) + " · LQ " + str.tostring(relevantLiquidityCount)
 
-        table.cell(dashboard, 0, 0, "APEXVOID v2.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.3", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
         table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
@@ -1970,6 +2128,8 @@ if barstate.islast
         table.cell(dashboard, 1, 22, obSummary, text_color = activeOB == 0 ? color.new(color.silver, 18) : color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = obTooltip)
         table.cell(dashboard, 0, 23, "Nearest BSL / SSL", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
         table.cell(dashboard, 1, 23, liqRowText, text_color = liquidityColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = liquidityText)
+        table.cell(dashboard, 0, 24, "Supply / Demand", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+        table.cell(dashboard, 1, 24, sdSummary, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = sdTooltip)
         if expandedPanel
             table.cell(dashboard, 0, 20, "Zone Audit", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 20, auditShort, text_color = color.new(color.white, 12), text_size = dashboardValueSize, text_halign = text.align_right, tooltip = auditText)
@@ -2009,6 +2169,8 @@ alertcondition(bslTaken, "ApexVoid Buy-Side Liquidity Consumed", "Buy-side liqui
 alertcondition(sslTaken, "ApexVoid Sell-Side Liquidity Consumed", "Sell-side liquidity pool consumed (close-confirmed acceptance or structural break) on {{ticker}} ({{interval}})")
 alertcondition(bullFVG, "ApexVoid Bullish FVG", "New bullish FVG on {{ticker}} ({{interval}})")
 alertcondition(bearFVG, "ApexVoid Bearish FVG", "New bearish FVG on {{ticker}} ({{interval}})")
+alertcondition(bullBase, "ApexVoid Demand Base Zone", "New base-and-impulse demand zone on {{ticker}} ({{interval}})")
+alertcondition(bearBase, "ApexVoid Supply Base Zone", "New base-and-impulse supply zone on {{ticker}} ({{interval}})")
 alertcondition(bullOB, "ApexVoid Bullish OB", "New qualified bullish order block on {{ticker}} ({{interval}})")
 alertcondition(bearOB, "ApexVoid Bearish OB", "New qualified bearish order block on {{ticker}} ({{interval}})")
 alertcondition(newAsianRange and showAsia, "ApexVoid Asian Range Complete", "A new Asian session H/L range completed on {{ticker}} ({{interval}})")
