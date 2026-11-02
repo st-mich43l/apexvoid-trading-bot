@@ -387,6 +387,9 @@ var int lowBreakBar = na
 var int bias = 0   // +1 bullish; -1 bearish; 0 neutral. External only.
 var string lastBreak = "—"
 var int lastBreakBar = na
+var int lastBreakTime = na
+var int lastHighTime = na
+var int lastLowTime = na
 var float protectedHigh = na
 var float protectedLow = na
 var int protectedHighBar = na
@@ -452,11 +455,15 @@ if newInternalLow
 
 bool internalUpBreak = barstate.isconfirmed and not na(lastInternalHigh) and not internalHighBroken and close > lastInternalHigh + atr * breakBuffer
 bool internalDownBreak = barstate.isconfirmed and not na(lastInternalLow) and not internalLowBroken and close < lastInternalLow - atr * breakBuffer
+var string lastInternalBreak = "—"
+var int lastInternalBreakTime = na
 bool internalUpChoch = false
 bool internalDownChoch = false
 if internalUpBreak
     bool internalChoch = internalBias == -1
     internalUpChoch := internalChoch
+    lastInternalBreak := internalChoch ? "Bull CHoCH" : "Bull BOS"
+    lastInternalBreakTime := time
     if showInternal
         f_structureLine(lastInternalHighBar, bar_index, lastInternalHigh, true, internalChoch, true)
     internalHighBroken := true
@@ -464,6 +471,8 @@ if internalUpBreak
 if internalDownBreak
     bool internalChoch = internalBias == 1
     internalDownChoch := internalChoch
+    lastInternalBreak := internalChoch ? "Bear CHoCH" : "Bear BOS"
+    lastInternalBreakTime := time
     if showInternal
         f_structureLine(lastInternalLowBar, bar_index, lastInternalLow, false, internalChoch, true)
     internalLowBroken := true
@@ -486,6 +495,7 @@ if newExternalHigh
         previousSwingLow := lastSwingLow
         lastSwingLow := candidateLow
         lastLowBar := candidateLowBar
+        lastLowTime := bar_index - candidateLowBar <= 790 ? time[bar_index - candidateLowBar] : na
         lowBroken := false
         externalLowSwept := false
         lowBreakBar := na
@@ -530,6 +540,7 @@ if newExternalLow
         previousSwingHigh := lastSwingHigh
         lastSwingHigh := candidateHigh
         lastHighBar := candidateHighBar
+        lastHighTime := bar_index - candidateHighBar <= 790 ? time[bar_index - candidateHighBar] : na
         highBroken := false
         externalHighSwept := false
         highBreakBar := na
@@ -646,6 +657,7 @@ if upBreak
     developingLow := na
     developingLowBar := na
     lastBreakBar := bar_index
+    lastBreakTime := time
     protectedLow := lastSwingLow
     protectedLowBar := lastLowBar
     lastBreak := initialBreak ? "Bull initial break" : choch ? "Bull CHoCH" : "Bull BOS"
@@ -667,6 +679,7 @@ else if downBreak
     developingHigh := na
     developingHighBar := na
     lastBreakBar := bar_index
+    lastBreakTime := time
     protectedHigh := lastSwingHigh
     protectedHighBar := lastHighBar
     lastBreak := initialBreak ? "Bear initial break" : choch ? "Bear CHoCH" : "Bear BOS"
@@ -2000,14 +2013,16 @@ f_asiaSnapshot() =>
         completedHigh := workingHigh
         completedLow := workingLow
         completedStart := workingStart
-    [completedHigh, completedLow, completedStart]
+    [completedHigh, completedLow, completedStart, inside ? workingHigh : na, inside ? workingLow : na]
 
-[nativeAsiaHigh, nativeAsiaLow, nativeAsiaStart] = f_asiaSnapshot()
-[fiveAsiaHigh, fiveAsiaLow, fiveAsiaStart] = request.security(syminfo.tickerid, "5", f_asiaSnapshot(), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[nativeAsiaHigh, nativeAsiaLow, nativeAsiaStart, nativeAsiaLiveHigh, nativeAsiaLiveLow] = f_asiaSnapshot()
+[fiveAsiaHigh, fiveAsiaLow, fiveAsiaStart, fiveAsiaLiveHigh, fiveAsiaLiveLow] = request.security(syminfo.tickerid, "5", f_asiaSnapshot(), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
 bool nativeSession = chartSecs <= 300
 float asiaHigh = nativeSession ? nativeAsiaHigh : fiveAsiaHigh
 float asiaLow = nativeSession ? nativeAsiaLow : fiveAsiaLow
 int asiaStart = nativeSession ? nativeAsiaStart : fiveAsiaStart
+float asiaLiveHigh = nativeSession ? nativeAsiaLiveHigh : fiveAsiaLiveHigh
+float asiaLiveLow = nativeSession ? nativeAsiaLiveLow : fiveAsiaLiveLow
 bool newAsianRange = barstate.isconfirmed and not na(asiaStart) and (na(asiaStart[1]) or asiaStart != asiaStart[1])
 
 var line[] asiaHighLines = array.new_line()
@@ -2040,8 +2055,16 @@ if showAsia and array.size(asiaHighLines) > 0
     label.set_y(asiaHighTag, asiaHigh + atr * 0.08)
     label.set_y(asiaLowTag, asiaLow - atr * 0.08)
 
+// Wall-clock age (weekends and market closures count) of an event time.
+f_age(int fromTime) =>
+    string out = "—"
+    if not na(fromTime)
+        int mins = math.max(0, int((time - fromTime) / 60000))
+        out := mins >= 1440 ? str.tostring(int(mins / 1440)) + "d " + str.tostring(int((mins % 1440) / 60)) + "h" : mins >= 60 ? str.tostring(int(mins / 60)) + "h " + str.tostring(mins % 60) + "m" : str.tostring(mins) + "m"
+    out
+
 // ------- DASHBOARD v2 / MARKET INTELLIGENCE -------
-var table dashboard = table.new(dashboardPosition, 2, 25, bgcolor = color.new(#090D18, 7), frame_color = color.new(#B48AFF, 30), frame_width = 1, border_color = color.new(#493D64, 75), border_width = 1)
+var table dashboard = table.new(dashboardPosition, 2, 27, bgcolor = color.new(#090D18, 7), frame_color = color.new(#B48AFF, 30), frame_width = 1, border_color = color.new(#493D64, 75), border_width = 1)
 if barstate.isfirst
     table.merge_cells(dashboard, 0, 1, 1, 1)
     table.merge_cells(dashboard, 0, 5, 1, 5)
@@ -2050,7 +2073,7 @@ if barstate.isfirst
     table.merge_cells(dashboard, 0, 21, 1, 21)
 
 if barstate.islast
-    table.clear(dashboard, 0, 0, 1, 24)
+    table.clear(dashboard, 0, 0, 1, 26)
     if showDashboard
         color valueColor = bias == 1 ? bullColor : bias == -1 ? bearColor : color.silver
         string biasText = bias == 1 ? "BULLISH" : bias == -1 ? "BEARISH" : "NEUTRAL"
@@ -2064,6 +2087,7 @@ if barstate.islast
         string protectedText = bias == 1 ? (na(protectedLow) ? "—" : "Low · " + str.tostring(protectedLow, format.mintick)) : bias == -1 ? (na(protectedHigh) ? "—" : "High · " + str.tostring(protectedHigh, format.mintick)) : "—"
         string zoneText = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + "  FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG) + "  S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " (base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD) + ")"
         string liquidityText = (nearestBslShown and nearestSslShown) or (na(nearestBslPrice) and na(nearestSslPrice)) ? "" : "* nearest pool is active but not drawn (beyond the candle-scale window, hidden by profile, or over budget)\n"
+        liquidityText += (na(nearestBslPrice) ? "" : "Nearest BSL " + str.tostring(nearestBslPrice, format.mintick) + " (" + str.tostring((nearestBslPrice - close) / math.max(atr, syminfo.mintick), "0.0") + " ATR)\n") + (na(nearestSslPrice) ? "" : "Nearest SSL " + str.tostring(nearestSslPrice, format.mintick) + " (" + str.tostring((close - nearestSslPrice) / math.max(atr, syminfo.mintick), "0.0") + " ATR)\n")
         liquidityText += str.tostring(relevantLiquidityCount) + " shown · " + str.tostring(poolActiveCount) + " active · " + str.tostring(poolSweptCount) + " swept · " + str.tostring(poolConsumedCount) + " consumed · " + lastSweep
         int hiddenOBTotal = hiddenOBFar + hiddenOBOverlap + hiddenOBBudget
         string obLastText = array.get(obLastOutcome, 0)
@@ -2100,7 +2124,8 @@ if barstate.islast
         table.cell(dashboard, 1, 4, legText, text_color = developingDirection == 1 ? bullColor : developingDirection == -1 ? bearColor : color.silver, text_size = dashboardValueSize, text_halign = text.align_right)
         table.cell(dashboard, 0, 5, "STRUCTURE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
         table.cell(dashboard, 0, 6, compactPanel ? "Confirmed H / L" : "Confirmed Major High", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-        table.cell(dashboard, 1, 6, compactPanel ? highText + " / " + lowText : highText, text_color = compactPanel ? color.white : bearColor, text_size = dashboardValueSize, text_halign = text.align_right)
+        string swingWhen = "High " + highText + (na(lastHighTime) ? "" : " · " + str.format_time(lastHighTime, "MM-dd HH:mm", syminfo.timezone)) + "\nLow " + lowText + (na(lastLowTime) ? "" : " · " + str.format_time(lastLowTime, "MM-dd HH:mm", syminfo.timezone)) + "\nLast confirmed external swings (chart time zone). A newer lower high or higher low is not listed until it is confirmed by a displaced leg."
+        table.cell(dashboard, 1, 6, compactPanel ? highText + " / " + lowText : highText, text_color = compactPanel ? color.white : bearColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = swingWhen)
         if not compactPanel
             table.cell(dashboard, 0, 7, "Confirmed Major Low", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 7, lowText, text_color = bullColor, text_size = dashboardValueSize, text_halign = text.align_right)
@@ -2109,10 +2134,16 @@ if barstate.islast
         table.cell(dashboard, 0, 9, "Protected Level", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
         table.cell(dashboard, 1, 9, protectedText, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right)
         table.cell(dashboard, 0, 10, "Last BOS / CHoCH", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-        table.cell(dashboard, 1, 10, lastBreak, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right)
+        string lastBreakAge = na(lastBreakTime) ? "" : " · " + f_age(lastBreakTime)
+        string lastBreakWhen = na(lastBreakTime) ? "No external break yet" : "External break at " + str.format_time(lastBreakTime, "MM-dd HH:mm", syminfo.timezone) + " (chart time zone). External structure only: lower lows that were never confirmed as swings do not create a new BOS. See the internal break below."
+        table.cell(dashboard, 1, 10, lastBreak + lastBreakAge, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = lastBreakWhen)
+        string internalAge = na(lastInternalBreakTime) ? "" : " · " + f_age(lastInternalBreakTime)
+        color internalTone = str.startswith(lastInternalBreak, "Bull") ? bullColor : str.startswith(lastInternalBreak, "Bear") ? bearColor : color.silver
+        table.cell(dashboard, 0, 11, "Last Internal Break", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+        table.cell(dashboard, 1, 11, lastInternalBreak + internalAge, text_color = internalTone, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = na(lastInternalBreakTime) ? "No internal break yet" : "Internal break at " + str.format_time(lastInternalBreakTime, "MM-dd HH:mm", syminfo.timezone) + " (chart time zone). Internal structure never changes the external bias.")
         if expandedPanel
-            table.cell(dashboard, 0, 11, "Invalidated Level", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 11, invalidatedText, text_color = color.new(color.silver, 18), text_size = dashboardValueSize, text_halign = text.align_right)
+            table.cell(dashboard, 0, 25, "Invalidated Level", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+            table.cell(dashboard, 1, 25, invalidatedText, text_color = color.new(color.silver, 18), text_size = dashboardValueSize, text_halign = text.align_right)
         table.cell(dashboard, 0, 12, "PRICE ACTION", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
         table.cell(dashboard, 0, 13, "Nearest Bullish POI", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
         table.cell(dashboard, 1, 13, bullPoiDisplay, text_color = bullColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = nearestBullPoiText)
@@ -2123,8 +2154,13 @@ if barstate.islast
         table.cell(dashboard, 0, 16, "Barrier / Liquidity", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
         table.cell(dashboard, 1, 16, barrierLiquidityText, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = liquidityText)
         table.cell(dashboard, 0, 17, "SESSION", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
-        table.cell(dashboard, 0, 18, compactPanel ? "Asian H / L" : "Asian High", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-        table.cell(dashboard, 1, 18, compactPanel ? asiaHighText + " / " + asiaLowText : asiaHighText, text_color = asiaColor, text_size = dashboardValueSize, text_halign = text.align_right)
+        string asiaDate = na(asiaStart) ? "" : " " + str.format_time(asiaStart, "MM-dd", asiaTZ)
+        string asiaNote = na(asiaStart) ? "No completed Asian session yet" : "Last COMPLETED session started " + str.format_time(asiaStart, "MM-dd HH:mm", asiaTZ) + " (" + asiaTZ + "). The session in progress is on the live row."
+        bool asiaLiveActive = not na(asiaLiveHigh) and not na(asiaLiveLow)
+        table.cell(dashboard, 0, 18, compactPanel ? "Asian H / L" + asiaDate : "Asian High" + asiaDate, height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+        table.cell(dashboard, 1, 18, compactPanel ? asiaHighText + " / " + asiaLowText : asiaHighText, text_color = asiaColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = asiaNote)
+        table.cell(dashboard, 0, 20, "Asian Live H / L", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+        table.cell(dashboard, 1, 20, asiaLiveActive ? str.tostring(asiaLiveHigh, format.mintick) + " / " + str.tostring(asiaLiveLow, format.mintick) : "Session closed", text_color = asiaLiveActive ? asiaColor : color.new(color.silver, 30), text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Range of the Asian session in progress so far; it becomes the completed range above when the session ends.")
         if not compactPanel
             table.cell(dashboard, 0, 19, "Asian Low", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 19, asiaLowText, text_color = asiaColor, text_size = dashboardValueSize, text_halign = text.align_right)
@@ -2136,8 +2172,8 @@ if barstate.islast
         table.cell(dashboard, 0, 24, "Supply / Demand", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
         table.cell(dashboard, 1, 24, sdSummary, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = sdTooltip)
         if expandedPanel
-            table.cell(dashboard, 0, 20, "Zone Audit", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 20, auditShort, text_color = color.new(color.white, 12), text_size = dashboardValueSize, text_halign = text.align_right, tooltip = auditText)
+            table.cell(dashboard, 0, 26, "Zone Audit", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+            table.cell(dashboard, 1, 26, auditShort, text_color = color.new(color.white, 12), text_size = dashboardValueSize, text_halign = text.align_right, tooltip = auditText)
 
 // ------- OB DEBUG VIEW (TEMPORARY, OFF BY DEFAULT) -------
 // Lists every active block with its lifecycle state and visibility reason, then the
