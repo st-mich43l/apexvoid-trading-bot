@@ -139,7 +139,6 @@ bool largeText = textScaleInput == "Large"
 string majorTextSize = compactText ? size.small : largeText ? size.large : size.normal
 string structureTextSize = compactText ? size.small : largeText ? size.large : size.normal
 string zoneTextSize = compactText ? size.small : largeText ? size.normal : size.small
-string sweepTextSize = compactText ? size.small : largeText ? size.normal : size.small
 string contextTextSize = compactText ? size.small : largeText ? size.normal : size.small
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.

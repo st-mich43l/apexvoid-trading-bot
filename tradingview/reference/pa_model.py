@@ -789,6 +789,7 @@ class LiquidityModel:
     self.ring = []  # unpromoted internal pivots: [price, bar, side]
     self.events = []  # (bar, kind, side, price, degree)
     self.stats = dict(created=0, merged=0, swept=0, consumed=0, retired=0, pivots_seen=0, grab_marks=0)
+    self.grabs = []  # (sweep bar, side, extreme bar, wick bottom, wick top) for rejection-wick highlights
 
   def pullback_ok(self, i, side, p_bar, n_bar, a_price, b_price, tol, atr):
     lo_i, hi_i = i - n_bar, i - p_bar  # offsets back from current bar
@@ -926,6 +927,10 @@ class LiquidityModel:
           wick = min(s.o[e], s.c[e]) - s.l[e]
         if wick >= p.grab_min_wick_atr * atr:
           self.stats["grab_marks"] += 1
+          if side == 1:
+            self.grabs.append((i, side, e, max(s.o[e], s.c[e]), s.h[e]))
+          else:
+            self.grabs.append((i, side, e, s.l[e], min(s.o[e], s.c[e])))
       elif pool.pending >= 0 and not window_ok:
         pool.pending = -1
 
