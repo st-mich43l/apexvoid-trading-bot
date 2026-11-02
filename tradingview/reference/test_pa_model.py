@@ -165,6 +165,20 @@ def test_right_edge_labels_never_overlap_and_lose_nothing():
   assert m.cluster_labels(many, gap)[0][1].endswith("+5")
 
 
+def test_zone_captions_never_overlap_inside_boxes():
+  """Regression for overlapping zone captions (stacked POI boxes at the right edge)."""
+  gap = m.label_gap(3.0, 4082.0, 3846.0)
+  stacked = [(3916.0, 8.0, False), (3917.5, 8.0, False), (3919.0, 3.0, False), (3925.0, 10.0, False), (3925.5, 10.0, True), (3960.0, 0.5, False)]
+  out = m.place_zone_captions(stacked, gap)
+  assert out[0] == "inside" and out[1] == "column", "a second text within one label height must move to the column"
+  assert out[2] == "column" and out[5] == "column", "boxes shorter than 1.4 labels never carry text"
+  assert out[4] == "none", "a box covered by a POI stays silent"
+  inside = [stacked[k][0] for k, o in enumerate(out) if o == "inside"]
+  assert all(b - a >= gap - 1e-9 for a, b in zip(sorted(inside), sorted(inside)[1:]))
+  # zoomed out (larger candle range) means fewer boxes tall enough: the same box needs more height
+  assert m.label_gap(3.0, 4500.0, 3500.0) > gap
+
+
 def test_one_bos_per_break_candle():
   evs = [(865, True, False, 330), (865, True, False, 662), (900, False, True, 700), (900, False, True, 710), (950, True, False, 10)]
   kept = m.dedupe_breaks(evs)

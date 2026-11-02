@@ -70,3 +70,19 @@ the internal view).
 - Zone captions drawn inside boxes (for example `POI · Supply + OB`) and box text are not part
   of the column; they can still sit under candles.
 - Not compiled or viewed in TradingView.
+
+## 5. v2.9.1 follow-up: zone captions and consumed-pool labels
+
+After v2.7 a chart with many stacked zones still showed overlapping text, because captions drawn **inside**
+zone boxes and the old consumed-pool labels were outside the label column. Changes:
+
+- Text inside a box needs a box at least 1.4 label heights tall (one label height = about 1/48 of the candle
+  range, so it follows the zoom) **and** a free slot: no other box text within one label height. A caption that
+  does not qualify joins the right-edge column instead (`◆ Supply + OB` for a POI, the zone name otherwise), where
+  nearby labels merge into one. A zone covered by a POI stays silent.
+- Consumed pools no longer carry a label; the fading line ends on the event bar.
+- The planned-box caption only appears when the box is tall enough.
+- Reference check: `test_zone_captions_never_overlap_inside_boxes`.
+
+Still not handled: BOS/CHoCH captions, `MAJOR HIGH/LOW` tags and grab marks are placed by their own rules and can
+still touch candles or each other on a very zoomed-out chart.

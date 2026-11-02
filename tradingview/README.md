@@ -6,12 +6,13 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, currently v2.1). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, currently v2.8). |
 | `docs/supply-demand-v2.2.md` | v2.2 base-and-impulse supply/demand definition, gates, results on real bars and limits. |
+| `docs/trade-plan-v2.8.md` | v2.8 trade plan: rules, position boxes, paper results (descriptive, no edge shown) and limits. |
 | `docs/labels-and-bos-v2.7.md` | v2.7 research and rules for the label column and BOS lines. |
 | `docs/ob-liquidity-v2.1.md` | v2.1 order-block and liquidity definitions, the root-cause analysis of the missing order blocks, verification status and known limitations. |
 | `docs/img/` | Before/after renders from the reference model (not TradingView screenshots). |
-| `reference/` | Python model of the order-block and liquidity logic, regression checks on real XAUUSD closed bars, and the chart renderer. |
+| `reference/` | Python models of the order-block, liquidity, supply/demand and trade-plan logic, regression checks on real XAUUSD closed bars, and the chart renderer. |
 
 ## ApexVoid Price Action
 
@@ -19,7 +20,10 @@ A market-structure indicator that draws structure, order blocks, imbalances,
 supply/demand, liquidity pools and session levels, then summarises them in a small
 "Market Intelligence" panel. Every structural event and every zone state change
 needs a **closed** chart bar, so nothing repaints once a bar has closed. A zone,
-pool or sweep is an analytical reference, not an entry signal.
+pool or sweep is an analytical reference, not an entry signal. Since v2.8 the
+indicator can also draw a rule-based **trade plan** as long/short position boxes (last 5
+trades) with paper-tracked results; it sends no orders and the rules have not shown an edge
+(`docs/trade-plan-v2.8.md`).
 
 ### Install
 
@@ -172,6 +176,7 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 | BSL / SSL | Nearest active pools (`*` = active but not drawn) |
 | Asia | Live range while the session runs, otherwise the last completed range |
 | Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
+| Trades | Open plan (`LONG open · 1.8R → Swing high`) or paper stats (`11 · 27% · −1.6R`); tooltip has profit factor, drawdown and the last 8 trades |
 
 Full panel (`Standard` / `Expanded`):
 
@@ -225,6 +230,8 @@ switch / density / position, global text scale, annotation spacing.
 
 **07 Higher-Timeframe Context** — show, timeframe (240), swing bars, draw levels.
 
+**08 Trade Plan** — show, planned RR box before the trigger (on), entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, trades drawn (5), box colours.
+
 ### Debug view for order blocks
 
 Enable `Debug: OB candidate log and rejection reasons`. A bottom-left table lists
@@ -248,6 +255,8 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | `ApexVoid Buy-Side / Sell-Side Sweep` | A liquidity pool is swept (once per pool) |
 | `ApexVoid External Buy-Side / Sell-Side Sweep` | The current external swing is swept |
 | `ApexVoid Buy-Side / Sell-Side Liquidity Consumed` | A pool is accepted through or broken by structure (once per pool) |
+| `ApexVoid Trade Plan Long / Short` | A trade-plan setup opens (price-action trigger at a qualified POI) |
+| `ApexVoid Trade Plan Target Hit / Stop Hit` | The paper trade reaches its target / stop |
 | `ApexVoid Demand / Supply Base Zone` | A new base-and-impulse zone is accepted |
 | `ApexVoid Bullish / Bearish FVG` | A new FVG forms |
 | `ApexVoid Bullish / Bearish OB` | A new qualified order block is accepted |

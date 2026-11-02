@@ -82,6 +82,7 @@ VETTED = {
     "str.contains",
     "str.format_time",
     "str.length",
+    "str.replace_all",
     "str.startswith",
     "str.substring",
     "str.tostring",
@@ -109,6 +110,32 @@ def test_only_vetted_builtins_are_called():
   assert not unknown, "unvetted Pine built-in calls (confirm they exist, then add to VETTED): %s" % unknown
 
 
+# TradingView rejects a script whose main body is too long (CE10295). Measured on the committed
+# versions, counting non-comment lines outside function bodies: v2.7.1 = 1645 lines (compiled),
+# v2.8 = 1850 lines (rejected). Keep a margin below the last version known to compile.
+MAIN_BODY_LINE_LIMIT = 1600
+
+
+def main_body_lines(src):
+  inside, count = False, 0
+  for line in src.splitlines():
+    if not line.strip() or line.lstrip().startswith("//"):
+      continue
+    if re.match(r"^f_\w+\(.*\) =>", line):
+      inside = True
+      continue
+    if inside and line.startswith(" "):
+      continue
+    inside = False
+    count += 1
+  return count
+
+
+def test_main_body_stays_within_the_size_limit():
+  n = main_body_lines(open(PINE, encoding="utf-8").read())
+  assert n <= MAIN_BODY_LINE_LIMIT, "main script body has %d lines (limit %d); move read-only/draw code into functions" % (n, MAIN_BODY_LINE_LIMIT)
+
+
 def test_known_non_existent_builtins_are_absent():
   src = open(PINE, encoding="utf-8").read()
   for bad in ("line.get_color", "label.get_textcolor", "box.get_color"):
@@ -117,5 +144,6 @@ def test_known_non_existent_builtins_are_absent():
 
 if __name__ == "__main__":
   test_only_vetted_builtins_are_called()
+  test_main_body_stays_within_the_size_limit()
   test_known_non_existent_builtins_are_absent()
   print("ok pine built-ins")
