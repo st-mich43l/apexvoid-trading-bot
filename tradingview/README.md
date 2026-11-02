@@ -8,6 +8,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 | --- | --- |
 | `apexvoid_price_action.pine` | The indicator (Pine Script v6, currently v2.1). |
 | `docs/supply-demand-v2.2.md` | v2.2 base-and-impulse supply/demand definition, gates, results on real bars and limits. |
+| `docs/labels-and-bos-v2.7.md` | v2.7 research and rules for the label column and BOS lines. |
 | `docs/ob-liquidity-v2.1.md` | v2.1 order-block and liquidity definitions, the root-cause analysis of the missing order blocks, verification status and known limitations. |
 | `docs/img/` | Before/after renders from the reference model (not TradingView screenshots). |
 | `reference/` | Python model of the order-block and liquidity logic, regression checks on real XAUUSD closed bars, and the chart renderer. |
@@ -34,7 +35,7 @@ pool or sweep is an analytical reference, not an entry signal.
 
 | Element | Look | Meaning |
 | --- | --- | --- |
-| BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. The line ends on the candle that first closed beyond the swing. A swing is confirmed late (pivot lag plus a displaced leg), so the BOS alert and the bias change can arrive a few bars after that candle; v2.6 draws the line on the real break candle (before v2.6 it ended on the later confirmation bar, up to 38 bars late on XAUUSD M15). |
+| BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. The line ends on the candle that first closed beyond the swing, the caption sits next to the break, and one candle that closes beyond several swings is drawn as one BOS (the most recent swing). A swing is confirmed late (pivot lag plus a displaced leg), so the BOS alert and the bias change can arrive a few bars after that candle; v2.6 draws the line on the real break candle (before v2.6 it ended on the later confirmation bar, up to 38 bars late on XAUUSD M15). |
 | `MAJOR HIGH` / `MAJOR LOW` | tag plus a line extending from the swing | The latest confirmed external swing. Retired (dotted, faded) once broken. |
 | `DEV HIGH` / `DEV LOW` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
 | `PROTECTED` | dashed line | The external level whose break would flip bias. |
@@ -43,7 +44,7 @@ pool or sweep is an analytical reference, not an entry signal.
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
 | `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
-| `PREMIUM` / `DISCOUNT` / `EQ` | very light rose / green bands and a dashed 50 % line | Upper half (supply side) and lower half (demand side) of the last confirmed external range, and its equilibrium. Clipped to the candle-scale window. |
+| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the last confirmed external range, and its equilibrium. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
 | `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
@@ -147,6 +148,7 @@ hide them. v2.3 adds:
   chart.
 - **Lighter zones:** default `Zone transparency` 92 (range now up to 98), fainter borders;
   POI keeps a stronger border.
+- **One label column (v2.7):** `PROTECTED`, `DEV HIGH/LOW`, `BSL/SSL`, `EQ`, `Asia H/L`, `iBSL/iSSL` and `PREMIUM/DISCOUNT` are drawn as one column at the right edge. Labels at nearly the same price merge into one (`PROTECTED · BSL · PREMIUM`); hover for every member and its price. See `docs/labels-and-bos-v2.7.md`.
 - **Larger labels:** the `Standard` text scale now uses the normal size for zone and
   liquidity labels (`Large` uses large), captions need a taller box before they appear
   inside it, and the default annotation spacing is wider (6 bars, 0.30 ATR).
