@@ -460,7 +460,7 @@ class P21(Params):
   show_internal_ob: bool = True
   max_vis_bull_ob: int = 2
   max_vis_bear_ob: int = 2
-  ob_display_distance_atr: float = 20.0
+  ob_display_distance_atr: float = 25.0
   # liquidity
   eq_min_separation: int = 8
   eq_min_pullback_atr: float = 0.5
@@ -773,6 +773,7 @@ class Pool:
   extreme: float = NAN
   extreme_bar: int = -1
   beyond: int = 0
+  uid: int = 0
 
   @property
   def edge(self):
@@ -823,7 +824,7 @@ class LiquidityModel:
           self.stats["merged"] += 1
           return "merged"
     # 2) ring partner
-    for r in list(self.ring):
+    for r in reversed(list(self.ring)):
       if r[2] != side or abs(price - r[0]) > tol:
         continue
       if bar - r[1] < p.eq_min_separation:
@@ -846,7 +847,8 @@ class LiquidityModel:
     return "ring"
 
   def new_pool(self, i, side, top, bottom, birth, tests, degree, kind, last_test):
-    self.pools.append(Pool(side, top, bottom, birth, i, last_test, tests, degree, kind))
+    self.uid_seq = getattr(self, "uid_seq", 0) + 1
+    self.pools.append(Pool(side, top, bottom, birth, i, last_test, tests, degree, kind, uid=self.uid_seq))
     self.stats["created"] += 1
     if len(self.pools) > self.p.max_liquidity:
       # evict consumed first, then lowest degree, oldest
@@ -877,7 +879,7 @@ class LiquidityModel:
           if pool.state == 0 and pool.side == side and abs(pool.edge - level) <= atr * p.equal_tolerance and pool.confirm < i:
             pool.state, pool.state_bar = 2, i
             self.stats["consumed"] += 1
-            self.events.append((i, "consumed-bos", side, pool.edge, pool.degree))
+            self.events.append((i, "consumed-bos", side, pool.edge, pool.degree, pool.uid))
     # state machine
     for pool in list(self.pools):
       age_since = i - pool.state_bar
@@ -911,11 +913,11 @@ class LiquidityModel:
       if pool.beyond >= p.liq_accept_closes:
         pool.state, pool.state_bar = 2, i
         self.stats["consumed"] += 1
-        self.events.append((i, "consumed", side, edge, pool.degree))
+        self.events.append((i, "consumed", side, edge, pool.degree, pool.uid))
       elif pool.pending >= 0 and returned and window_ok:
         pool.state, pool.state_bar = 1, i
         self.stats["swept"] += 1
-        self.events.append((i, "swept", side, edge, pool.degree))
+        self.events.append((i, "swept", side, edge, pool.degree, pool.uid))
         # rejection wick on the extreme bar
         e = pool.extreme_bar
         if side == 1:
@@ -926,3 +928,31 @@ class LiquidityModel:
           self.stats["grab_marks"] += 1
       elif pool.pending >= 0 and not window_ok:
         pool.pending = -1
+
+  # ---- display (Balanced profile) ---------------------------------------
+  def select_visible(self, close, atr, budget=None):
+    """Mirror of the Pine islast selection: nearest active BSL above / SSL below first,
+    then structural degree, active state and proximity."""
+    p = self.p
+    budget = min(p.visible_liquidity, 8) if budget is None else budget
+    shown = []
+    near_b = min((x for x in self.pools if x.state == 0 and x.side == 1 and x.edge > close), key=lambda x: x.edge - close, default=None)
+    near_s = min((x for x in self.pools if x.state == 0 and x.side == -1 and x.edge < close), key=lambda x: close - x.edge, default=None)
+    for cand in (near_b, near_s):
+      if cand is not None and abs(cand.edge - close) / atr <= p.liq_display_distance_atr * 2 and len(shown) < budget:
+        shown.append(cand)
+    while len(shown) < budget:
+      best, best_score = None, None
+      for x in self.pools:
+        if x in shown:
+          continue
+        dist = abs(close - x.edge) / atr
+        if dist > p.liq_display_distance_atr:
+          continue
+        score = x.degree * 1000 + (500 if x.state == 0 else 0) - dist * 10
+        if best is None or score > best_score:
+          best, best_score = x, score
+      if best is None:
+        break
+      shown.append(best)
+    return shown
