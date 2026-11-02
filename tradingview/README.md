@@ -4,32 +4,225 @@ This directory contains chart-side analytical tools that accompany the ApexVoid
 trading stack. They are reference and discretionary-analysis tools; they are not
 loaded by the Go analysis engine and cannot place orders through the bot.
 
+| Path | Purpose |
+| --- | --- |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, currently v2.1). |
+| `docs/ob-liquidity-v2.1.md` | v2.1 order-block and liquidity definitions, the root-cause analysis of the missing order blocks, verification status and known limitations. |
+| `docs/img/` | Before/after renders from the reference model (not TradingView screenshots). |
+| `reference/` | Python model of the order-block and liquidity logic, regression checks on real XAUUSD closed bars, and the chart renderer. |
+
 ## ApexVoid Price Action
 
-`apexvoid_price_action.pine` is the Pine Script v6 market-structure and POI
-indicator. It provides:
+A market-structure indicator that draws structure, order blocks, imbalances,
+supply/demand, liquidity pools and session levels, then summarises them in a small
+"Market Intelligence" panel. Every structural event and every zone state change
+needs a **closed** chart bar, so nothing repaints once a bar has closed. A zone,
+pool or sweep is an analytical reference, not an entry signal.
 
-- separate internal and external structure;
-- close-confirmed BOS and CHoCH, with wick sweeps kept separate;
-- order blocks (swing and internal, with Fresh / Tested / Mitigated / Invalidated
-  states), fair-value-gap, supply and demand zone lifecycles;
-- level-first BSL/SSL liquidity pools (confirmed swings, EQH/EQL bands, optional
-  previous-day levels) with separate sweep (grab) and consumed states;
-- qualified and actionable POIs with opposing-barrier context;
-- completed Asian-session levels; and
-- optional confirmed higher-timeframe context.
+### Install
 
-To install it, open TradingView's Pine Editor, paste the file, save it, and add
-it to a chart. The default dashboard density is `Compact`. Higher-timeframe
-context is disabled by default and does not alter chart-timeframe signals.
+1. Open TradingView's Pine Editor, paste `apexvoid_price_action.pine`, save, and
+   add it to a chart.
+2. Suggested start: XAUUSD on M5 or M15, default settings (`Balanced — Recommended`
+   profile, `Compact` panel). Tune per symbol afterwards.
+3. TradingView is the only authoritative compiler. After any edit, compile there and
+   check on a long history that object limits (250 boxes, 350 lines, 500 labels) are
+   not hit.
 
-Version 2.1 definitions, the root-cause analysis of the missing order blocks and the
-known limitations are in `docs/ob-liquidity-v2.1.md`. `reference/` holds a Python model of
-the order-block and liquidity logic with regression checks on real XAUUSD closed bars
-(`python tradingview/reference/test_pa_model.py`); it validates the algorithm only and
-does not compile or render the Pine file. The Debug view for order blocks is the input
-`Debug: OB candidate log and rejection reasons`.
+### What is drawn
 
-TradingView is the authoritative compiler and runtime. After changing the
-script, compile it there and visually check structure transitions, zone
-lifecycles, object limits, and alert behavior on closed bars.
+| Element | Look | Meaning |
+| --- | --- | --- |
+| BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. |
+| `MAJOR HIGH` / `MAJOR LOW` | tag plus a line extending from the swing | The latest confirmed external swing. Retired (dotted, faded) once broken. |
+| `DEV HIGH` / `DEV LOW` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
+| `PROTECTED` | dashed line | The external level whose break would flip bias. |
+| `OB` / `iOB` | box with thin border, midpoint dotted line, right-aligned label | Swing / internal order block. Dashed border and `· T` when Tested. |
+| FVG | blue (bullish) / orange (bearish) box | Three-candle fair value gap. |
+| `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
+| `POI · Bull` / `POI · Bear` | thicker border | A zone that passed a named qualification path (below). |
+| `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below. |
+| `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
+| `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
+| `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
+| Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
+| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range. |
+| `HTF H · 240` / `HTF L · 240` | dashed | Optional confirmed higher-timeframe swing levels. |
+
+Colours are inputs. Liquidity uses a neutral grey on purpose so it cannot be
+confused with BOS/CHoCH (teal/rose) or Asian levels (purple).
+
+### How it works
+
+**Structure.** Internal swings use short pivots, external swings long ones; both
+scale with the chart timeframe (internal 3 / 4 / 5 / 6 / 8 bars and external
+12 / 16 / 20 / 24 / 30 bars for charts up to 5m / 15m / 1h / 4h / above; `Manual`
+overrides them). An external swing is published only after an alternating-leg state
+machine sees the next leg move at least `Minimum external leg displacement` plus the
+confirmation threshold (1.65 ATR by default), so small wiggles never become major
+swings. Bias comes from external breaks only; internal breaks never change it. All
+distances are ATR(14)-normalised.
+
+**Order blocks (v2.1).** Built when an internal or external BOS/CHoCH closes. The
+origin is the opposite-colour candle at the extreme of the leg between the broken
+pivot and the break, and it must pass gates for base position, range, net
+displacement and an impulse candle. Fresh → Tested (price entered) → Mitigated
+(your chosen rule) / Invalidated (close beyond the far edge). A partial touch never
+invalidates. Blocks have their own display budget (default 2 bullish + 2 bearish)
+and are never deleted just because they are hidden. No volume is used. Full rules:
+`docs/ob-liquidity-v2.1.md` §3.
+
+**FVG.** A three-candle gap whose size is at least `Minimum gap size` and whose
+middle candle has a real body. Invalidation follows `Wick`, `Close` or `Midpoint`.
+
+**Supply / demand.** Created at a confirmed external swing that was followed by a
+departure of at least `Supply/demand departure`; width is capped. Invalidated by a
+close beyond the far edge.
+
+**POI.** A zone is a *qualified* POI only through a named path: `Composite`
+(two different zone kinds overlap), `Structure-origin OB` (a swing OB on the bias
+side near the last break), `Displaced swing zone` (supply/demand on the bias side)
+or `Swept imbalance` (an FVG on the side of the latest liquidity sweep). Proximity
+and display rank never qualify a zone. A POI is *actionable* only if it is fresh,
+on the correct side of price, within `Actionable POI distance` and has at least
+1 ATR of room before the nearest opposing barrier.
+
+**Liquidity pools (v2.1).** A pool is a level, not a pivot. It exists for a
+confirmed external swing, for an equal high/low band (two independent tests within
+`EQH / EQL tolerance`, spaced apart with a pullback between them) or, optionally,
+the previous-day high/low. Lone internal pivots are never drawn.
+
+| Event | Rule (defaults) |
+| --- | --- |
+| Sweep / grab | Wick beyond the edge by 0.01 ATR, then a close back inside within 2 bars (or the same bar). Pool becomes *Swept*. |
+| Consumed | 2 consecutive closes beyond the edge by 0.10 ATR, or a structural BOS/CHoCH on the swing the pool rests on. |
+| Retired | Faded for 40 bars after either event (policy is an input), or older than 1500 bars. |
+
+A pool leaves the active state once, so each pool alerts once. A grab never
+changes bias and never creates an entry.
+
+**Asian session.** Only completed sessions are drawn (default 00:00–08:00 UTC,
+configurable). On charts above 5m the session is evaluated on a 5-minute request.
+
+**Higher-timeframe context.** Off by default. Uses only the last completed HTF bar
+(shifted by one, `lookahead_on`), so an open HTF candle cannot change chart-timeframe
+decisions.
+
+### Display profiles
+
+| Profile | Zones drawn | Pools drawn | Other |
+| --- | --- | --- | --- |
+| Minimal | up to 4 | none | 3 external structure events, 1 Asian range |
+| Balanced — Recommended | up to 8 (+ OB budget) | up to 8 (nearest BSL above and SSL below first) | 6 external events |
+| Detailed | at least 12 | at least 12 | internal structure available |
+| Debug | up to 20, distance limits off | all retained | `xEH` / `xEL` raw-pivot labels, OB and pool distance limits off |
+
+### Market Intelligence panel
+
+Default `Compact`; `Standard` and `Expanded` add rows. Hover cells for tooltips.
+
+| Section | Rows |
+| --- | --- |
+| Market state | External bias (and HTF bias when enabled), market phase, directional leg |
+| Structure | Confirmed major high/low, developing extreme, protected level, last BOS/CHoCH, invalidated level (Expanded) |
+| Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
+| Session | Asian high / low |
+| Blocks & liquidity | **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** |
+
+The Order Blocks tooltip splits hidden blocks into far / overlapping / budget and
+shows lifetime counters (accepted, rejected, replaced, covered, mitigated,
+invalidated, aged, evicted).
+
+### Settings
+
+Inputs are grouped as in the indicator's settings dialog.
+
+**01 Market Structure** — `Swing sensitivity` (Auto/Manual), manual pivot bars,
+`Minimum external leg displacement` (1.50 ATR), `External confirmation threshold`
+(0.15), `BOS/CHOCH close buffer`, historical major classifications, extended
+major high/low, internal structure, draw BOS/CHoCH, external event history (6).
+
+**02 Liquidity** — show pools, highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
+`Minimum bars between independent tests` (8), `Minimum pullback between tests`
+(0.5 ATR), `Sweep penetration` (0.01 ATR), `Sweep return rule` / window,
+`Pool break buffer` (0.10 ATR), `Closes beyond a pool to consume it` (2),
+`Consumed pool policy` and fade window (40), retained (24) / visible (6) pools,
+`Maximum visible pool distance` (30 ATR), pool maximum age, previous-day pools
+(off), `Minimum rejection wick for grab highlight` (0.20 ATR), grab history (10).
+
+**03 Order Blocks & Zones** — show OBs, internal OBs, `Origin search window` (40),
+`POI: OB-to-break proximity` (12), `Minimum displacement from OB` (1.0 ATR),
+`Minimum impulse candle body` (0.6), `Maximum origin candle range` (2.5),
+`Base tolerance vs leg extreme` (0.5), wicks, `OB mitigation method`
+(Close/Wick/Midpoint), visible bullish / bearish OBs (2 / 2), `Maximum visible OB
+distance` (25 ATR), midpoint line, **`Debug: OB candidate log and rejection
+reasons`**, supply/demand switch, departure (0.8) and width (1.0).
+
+**04 Fair Value Gaps** — show FVG, minimum gap (0.10 ATR), middle-candle body
+(0.5 ATR), invalidation method.
+
+**05 Asian Session** — show, session hours, timezone, retained ranges.
+
+**06 Visuals & Performance** — display profile, colours, zone transparency,
+retained zone state (80), visible qualified zones (8), `Maximum visible zone
+distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
+structure window, label and event limits, zone maximum age (600 bars), panel
+switch / density / position, global text scale, annotation spacing.
+
+**07 Higher-Timeframe Context** — show, timeframe (240), swing bars, draw levels.
+
+### Debug view for order blocks
+
+Enable `Debug: OB candidate log and rejection reasons`. A bottom-left table lists
+every active block (direction, class, event, source time, price range, Fresh or
+Tested, VISIBLE or `hidden: far / overlaps a higher-ranked OB / per-side budget
+full`) followed by the 14 most recent candidate evaluations with the exact
+rejection reason (`base is not an opposite candle`, `origin too wide`, `weak
+displacement`, `no impulse candle`, `already invalidated/mitigated before
+detection`, `covered by an existing swing OB`). Small ✓ / ✗ markers are placed on
+the break bar; hover for the full line. Turn it off when finished; it is meant to be
+temporary.
+
+### Alerts
+
+All fire on bar close. Create them from the indicator's alert dialog.
+
+| Alert | Fires when |
+| --- | --- |
+| `ApexVoid Bullish / Bearish BOS` | External close-confirmed break in the bias direction |
+| `ApexVoid Bullish / Bearish CHOCH` | External close-confirmed break against the bias |
+| `ApexVoid Buy-Side / Sell-Side Sweep` | A liquidity pool is swept (once per pool) |
+| `ApexVoid External Buy-Side / Sell-Side Sweep` | The current external swing is swept |
+| `ApexVoid Buy-Side / Sell-Side Liquidity Consumed` | A pool is accepted through or broken by structure (once per pool) |
+| `ApexVoid Bullish / Bearish FVG` | A new FVG forms |
+| `ApexVoid Bullish / Bearish OB` | A new qualified order block is accepted |
+| `ApexVoid Asian Range Complete` | A new Asian range completes |
+
+### Tuning notes
+
+- **Too few order blocks:** raise `Visible bullish / bearish OBs`, raise `Maximum
+  visible OB distance`, lower `Minimum displacement from OB`, or lower `Minimum
+  impulse candle body`. Check the Debug table to see which gate is rejecting.
+- **Too many / noisy order blocks:** switch off internal OBs, raise displacement, or
+  use `Midpoint` or `Wick` mitigation so spent blocks leave sooner.
+- **Block disappears after a wick through it:** that is the `Wick` / `Midpoint`
+  mitigation rule; the default `Close` keeps it as Tested until a close beyond the
+  far edge.
+- **Too many liquidity lines:** lower `Visible liquidity pools` or switch to
+  `Minimal`; remember lone minor pivots are never drawn.
+- **Missing equal highs/lows:** raise `EQH / EQL tolerance` or lower `Minimum bars
+  between independent tests` / `Minimum pullback between tests`.
+- **Different symbols:** every threshold is ATR-based, but defaults were tuned on one
+  week of XAUUSD; retune sensitivity and gates per instrument.
+- Upgrading from v2.0: `Break candle minimum body` and `Sweep consolidation window`
+  were removed, and `Retained liquidity levels` became `Retained liquidity pools`.
+
+### Verification and known limits
+
+`reference/test_pa_model.py` runs the order-block and liquidity decision logic on
+real XAUUSD M5 / M15 / H1 / H4 bars and the v2.0 reproduction of the hidden-block
+defect (`python tradingview/reference/test_pa_model.py`; `render.py` regenerates the
+images). It validates the algorithm only: it does not compile or draw the Pine file.
+Compile errors, label placement, object limits and alert behaviour must still be
+checked in TradingView, and a comparison with other indicators has not been done. See
+`docs/ob-liquidity-v2.1.md` §0, §9 and §10 for the exact status and checklist.
