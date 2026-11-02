@@ -100,6 +100,7 @@ class Zone:
   cls: int = 0
   state: str = "Fresh"
   event: str = ""
+  first_touch: int = -1
 
 
 class Structure:
@@ -115,6 +116,7 @@ class Structure:
 
   def reset(self):
     self.last_swing_high = self.last_swing_low = NAN
+    self.previous_swing_high = self.previous_swing_low = NAN
     self.last_high_bar = self.last_low_bar = None
     self.high_broken = self.low_broken = False
     self.bias = 0
@@ -195,6 +197,7 @@ class Structure:
         if eh > self.cand_high:
           self.cand_high, self.cand_high_bar = eh, cb
       elif eh - self.cand_low >= self.a_at(i - el_) * (p.min_leg_atr + p.confirm_atr):
+        self.previous_swing_low = self.last_swing_low
         self.last_swing_low, self.last_low_bar = self.cand_low, self.cand_low_bar
         self.low_broken = False
         ev["new_major_low"], ev["major_low_price"], ev["major_low_bar"] = True, self.cand_low, self.cand_low_bar
@@ -209,6 +212,7 @@ class Structure:
         if el < self.cand_low:
           self.cand_low, self.cand_low_bar = el, cb
       elif self.cand_high - el >= self.a_at(i - el_) * (p.min_leg_atr + p.confirm_atr):
+        self.previous_swing_high = self.last_swing_high
         self.last_swing_high, self.last_high_bar = self.cand_high, self.cand_high_bar
         self.high_broken = False
         ev["new_major_high"], ev["major_high_price"], ev["major_high_bar"] = True, self.cand_high, self.cand_high_bar
@@ -668,6 +672,7 @@ class V21Pipeline(LegacyPipeline):
         if not z.touched and z.mitigation > 0:
           z.touched = True
           z.state = "Tested"
+          z.first_touch = i
       keep.append(z)
     self.zones = keep
 
