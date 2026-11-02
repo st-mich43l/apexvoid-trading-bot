@@ -127,6 +127,29 @@ decisions.
 | Detailed | at least 12 | at least 12 | internal structure available |
 | Debug | up to 20, distance limits off | all retained | `xEH` / `xEL` raw-pivot labels, OB and pool distance limits off |
 
+### Keeping candles readable (v2.3)
+
+Distant zones and lines stretch the price scale and squash the candles, and heavy fills
+hide them. v2.3 adds:
+
+- **Candle-scale window** (`Keep candles readable…`, default on, 15 ATR): every zone, order
+  block and liquidity pool further than this from the current close is not drawn, whatever
+  its own distance setting says (the effective distance is the smaller of the two). The panel
+  and the OB debug table report such blocks as `far … candle-scale window`; they keep their
+  state and reappear when price comes back. Debug profile still ignores the limit. Turn the
+  toggle off to get the v2.1/v2.2 distances back.
+- **Maximum drawn length** (250 bars): the left edge of zone boxes, midlines, pool lines
+  and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
+  chart.
+- **Lighter zones:** default `Zone transparency` 92 (range now up to 98), fainter borders;
+  POI keeps a stronger border.
+- **Larger labels:** the `Standard` text scale now uses the normal size for zone and
+  liquidity labels (`Large` uses large), captions need a taller box before they appear
+  inside it, and the default annotation spacing is wider (6 bars, 0.30 ATR).
+
+Not covered: Asian levels, optional HTF lines and the current major/protected lines are not
+limited by the window. If one of them squashes the candles, switch it off in its group.
+
 ### Market Intelligence panel
 
 Default `Compact`; `Standard` and `Expanded` add rows. Hover cells for tooltips.
@@ -173,7 +196,7 @@ reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 
 **05 Asian Session** — show, session hours, timezone, retained ranges.
 
-**06 Visuals & Performance** — display profile, colours, zone transparency,
+**06 Visuals & Performance** — display profile, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
