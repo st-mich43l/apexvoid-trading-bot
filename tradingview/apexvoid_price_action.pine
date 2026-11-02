@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.8", "AV PA v2.8", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.9", "AV PA v2.9", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,8 @@ indicator("ApexVoid | Price Action v2.8", "AV PA v2.8", overlay = true, scale = 
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.9: a planned long/short RR box is always drawn for the nearest qualified POI (preview), trade boxes
+// carry only the R:R number.
 // v2.8: trade plan - price-action entry at a qualified POI, stop beyond the zone, target at the
 // nearest key level, long/short position boxes for the last N trades, paper-tracked results.
 // v2.7.1: compile fix (a Pine line cannot be queried for its colour; BOS de-duplication keeps a direction array).
@@ -144,6 +146,7 @@ int htfSwingLength = input.int(12, "HTF swing confirmation bars", minval = 3, ma
 bool drawHTFLevels = input.bool(false, "Draw HTF swing levels", group = G7)
 
 bool showTradePlan = input.bool(true, "Show trade plan (long / short position boxes)", group = G8)
+bool showTradePreview = input.bool(true, "Show a planned RR box for the nearest qualified POI before it triggers", group = G8)
 string tradeZoneKinds = input.string("All qualified POIs", "Entry zones", options = ["All qualified POIs", "Order blocks and supply/demand", "Order blocks only"], group = G8)
 string tradeTrigger = input.string("Rejection or engulfing", "Entry trigger candle", options = ["Rejection or engulfing", "Rejection wick", "Engulfing"], group = G8)
 int tradeTriggerBars = input.int(2, "Trigger window after the first touch (bars)", minval = 0, maxval = 10, group = G8)
@@ -2220,7 +2223,7 @@ bool tradeStopHit = false
 
 // Technical target for a trade at `entry`: the take-profit price (a buffer before the key level)
 // or na when there is no acceptable level; the level's name goes to tradeScratch.
-f_keyTarget(bool isLong, float entry, float risk) =>
+f_keyTarget(bool isLong, float entry, float risk, bool enforceMin) =>
     float[] levels = array.new_float()
     string[] names = array.new_string()
     int poolSide = isLong ? 1 : -1
@@ -2251,7 +2254,7 @@ f_keyTarget(bool isLong, float entry, float risk) =>
     float buffer = tradeTargetBufferATR * atrNow
     float minDistance = tradeMinRR * risk
     float maxDistance = tradeMaxTargetATR * atrNow
-    bool nextOnly = tradeTargetMode == "Next key level"
+    bool nextOnly = tradeTargetMode == "Next key level" or not enforceMin
     for c = 0 to array.size(levels) - 1
         float level = array.get(levels, c)
         if not na(level)
@@ -2265,13 +2268,69 @@ f_keyTarget(bool isLong, float entry, float risk) =>
                 bestName := array.get(names, c)
     // Technical-target mode: the next level is the target; if it is too close for the minimum
     // reward : risk there is no trade (a farther level would sit behind it).
-    if nextOnly and not na(best) and bestAdjusted < minDistance
+    if enforceMin and nextOnly and not na(best) and bestAdjusted < minDistance
         best := na
     array.set(tradeScratch, 0, bestName)
     best
 
 f_tradeResultText(float r) =>
     (r >= 0 ? "+" : "−") + str.tostring(math.abs(r), "0.0") + "R"
+
+// Planned RR box: the long/short position tool for the nearest qualified POI on the bias side,
+// drawn before any trigger so the box is always visible. Entry = the zone's near edge, stop beyond
+// the far edge, take-profit at the next key level (shown even when its R:R is below the trade
+// minimum). It disappears while a real trade is open and is redrawn on the last bar only.
+var box[] tradePreviewBoxes = array.new_box()
+var line[] tradePreviewLines = array.new_line()
+
+f_renderTradePreview() =>
+    while array.size(tradePreviewBoxes) > 0
+        box.delete(array.pop(tradePreviewBoxes))
+    while array.size(tradePreviewLines) > 0
+        line.delete(array.pop(tradePreviewLines))
+    if showTradePlan and showTradePreview and tradeDir == 0 and bias != 0 and not na(atr) and array.size(zones) > 0
+        bool isLong = bias == 1
+        float eqLevel = not na(lastSwingHigh) and not na(lastSwingLow) ? (lastSwingHigh + lastSwingLow) / 2.0 : na
+        int pickZone = -1
+        float bestGap = 1.0e10
+        for z = 0 to array.size(zones) - 1
+            int zoneKind = array.get(zoneKinds, z)
+            bool kindAllowed = tradeZoneKinds == "All qualified POIs" or (tradeZoneKinds == "Order blocks and supply/demand" and zoneKind != 2) or (tradeZoneKinds == "Order blocks only" and zoneKind == 1)
+            bool zoneSpent = false
+            if array.size(tradeSpentBirth) > 0
+                for q = 0 to array.size(tradeSpentBirth) - 1
+                    if array.get(tradeSpentBirth, q) == array.get(zoneBirth, z) and array.get(tradeSpentTop, q) == array.get(zoneTops, z)
+                        zoneSpent := true
+            if kindAllowed and not zoneSpent and array.get(zoneSides, z) == bias
+                float zTop = array.get(zoneTops, z)
+                float zBottom = array.get(zoneBottoms, z)
+                float zMid = (zTop + zBottom) / 2.0
+                float edge = isLong ? zTop : zBottom
+                float gap = math.abs(close - edge)
+                bool rightSide = isLong ? zMid <= close : zMid >= close
+                bool pdOk = not tradeRequirePD or na(eqLevel) or (isLong ? zMid <= eqLevel : zMid >= eqLevel)
+                if rightSide and pdOk and gap < bestGap and gap <= zoneDisplayDistanceATR * atr and f_scaleOk(edge) and f_poiPath(z, not array.get(zoneTouched, z)) != "Candidate"
+                    pickZone := z
+                    bestGap := gap
+        if pickZone >= 0
+            float pTop = array.get(zoneTops, pickZone)
+            float pBottom = array.get(zoneBottoms, pickZone)
+            float entryPrice = isLong ? pTop : pBottom
+            float stopPrice = isLong ? pBottom - tradeStopBufferATR * atr : pTop + tradeStopBufferATR * atr
+            float riskDistance = math.abs(entryPrice - stopPrice)
+            if riskDistance >= tradeMinStopATR * atr and riskDistance <= tradeMaxStopATR * atr
+                float targetPrice = f_keyTarget(isLong, entryPrice, riskDistance, false)
+                if not na(targetPrice)
+                    float rr = math.abs(targetPrice - entryPrice) / riskDistance
+                    int leftBar = bar_index
+                    int rightBar = bar_index + 14
+                    box profitBox = box.new(left = leftBar, top = isLong ? targetPrice : entryPrice, right = rightBar, bottom = isLong ? entryPrice : targetPrice, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, 55), border_style = line.style_dashed, bgcolor = color.new(tradeProfitColor, 86), text = "plan " + str.tostring(rr, "0.0") + "R", text_color = color.new(color.white, 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
+                    box riskBox = box.new(left = leftBar, top = isLong ? entryPrice : stopPrice, right = rightBar, bottom = isLong ? stopPrice : entryPrice, xloc = xloc.bar_index, border_color = color.new(tradeRiskColor, 55), border_style = line.style_dashed, bgcolor = color.new(tradeRiskColor, 86))
+                    line entryLine = line.new(leftBar, entryPrice, rightBar, entryPrice, xloc = xloc.bar_index, color = color.new(color.white, 45), style = line.style_dashed, width = 1)
+                    array.push(tradePreviewBoxes, profitBox)
+                    array.push(tradePreviewBoxes, riskBox)
+                    array.push(tradePreviewLines, entryLine)
+    0
 
 if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
     bool closedNow = false
@@ -2363,7 +2422,7 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
                         float stopPrice = isLong ? zBottom - tradeStopBufferATR * atr : zTop + tradeStopBufferATR * atr
                         float riskDistance = math.abs(close - stopPrice)
                         if riskDistance >= tradeMinStopATR * atr and riskDistance <= tradeMaxStopATR * atr
-                            float targetPrice = f_keyTarget(isLong, close, riskDistance)
+                            float targetPrice = f_keyTarget(isLong, close, riskDistance, true)
                             if na(targetPrice)
                                 sawNoTarget := true
                             else
@@ -2397,7 +2456,7 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
                 tradeLongOpened := isLong
                 tradeShortOpened := not isLong
                 f_inc(tradeStats, 0)
-                string planText = (isLong ? "LONG " : "SHORT ") + tradeZoneName + " → " + tradeTargetName + " · " + str.tostring(bestRR, "0.0") + "R"
+                string planText = str.tostring(bestRR, "0.0") + "R"
                 box profitBox = box.new(left = bar_index, top = isLong ? tradeTarget : tradeEntry, right = bar_index + 1, bottom = isLong ? tradeEntry : tradeTarget, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, 100), bgcolor = color.new(tradeProfitColor, 80), text = planText, text_color = color.new(color.white, 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
                 box riskBox = box.new(left = bar_index, top = isLong ? tradeEntry : tradeStop, right = bar_index + 1, bottom = isLong ? tradeStop : tradeEntry, xloc = xloc.bar_index, border_color = color.new(tradeRiskColor, 100), bgcolor = color.new(tradeRiskColor, 80))
                 line entryLine = line.new(bar_index, tradeEntry, bar_index + 1, tradeEntry, xloc = xloc.bar_index, color = color.new(color.white, 35), style = line.style_solid, width = 1)
@@ -2414,6 +2473,9 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
                     label oldResult = array.shift(tradeResultLabels)
                     if not na(oldResult)
                         label.delete(oldResult)
+
+if barstate.islast
+    f_renderTradePreview()
 
 if barstate.islast and tradeDir != 0
     string tradeSide = tradeDir == 1 ? "LONG" : "SHORT"
@@ -2684,7 +2746,7 @@ f_renderPanel() =>
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
         if compactPanel
-            table.cell(dashboard, 0, 0, "APEXVOID v2.8", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.9", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 2, "Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 2, biasText + htfBiasSuffix, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Directional leg: " + legText)
@@ -2711,7 +2773,7 @@ f_renderPanel() =>
             table.cell(dashboard, 1, 27, tradeSummary, text_color = tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = tradeTip)
             table.cell(dashboard, 1, 22, zonesCompact, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
         else
-            table.cell(dashboard, 0, 0, "APEXVOID v2.8", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.9", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
             table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)

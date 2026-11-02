@@ -230,7 +230,7 @@ switch / density / position, global text scale, annotation spacing.
 
 **07 Higher-Timeframe Context** — show, timeframe (240), swing bars, draw levels.
 
-**08 Trade Plan** — show, entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, trades drawn (5), box colours.
+**08 Trade Plan** — show, planned RR box before the trigger (on), entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, trades drawn (5), box colours.
 
 ### Debug view for order blocks
 

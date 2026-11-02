@@ -9,7 +9,7 @@ rules are implemented as asked; the paper results below do not show an edge.
 
 | Item | Status |
 | --- | --- |
-| Rules reproduced bar by bar in Python (`reference/trade_model.py`) and checked on real XAUUSD bars (`reference/test_trade_model.py`, 7 checks pass) | Done |
+| Rules reproduced bar by bar in Python (`reference/trade_model.py`) and checked on real XAUUSD bars (`reference/test_trade_model.py`, 8 checks pass) | Done |
 | Pine syntax | Parsed without errors by a third-party Pine parser (v5 grammar). Syntax only. |
 | Built-in call guard (`reference/test_pine_builtins.py`) | Passes: no unvetted built-in is called, and the main script body is within the size limit (see below) |
 | First TradingView compile | Failed with `CE10295: the main body of the script is too long`; fixed in v2.8.1 by moving the dashboard, the zone drawing pass and the pool drawing pass into functions (main body 1850 → 1455 lines; v2.7.1 had 1645 and compiled). |
@@ -56,6 +56,14 @@ Your direction: *price action entries, targets on key levels, boxes for the last
    An optional round-turn cost is deducted from every result.
 
 ## 3. Chart
+
+**Planned RR box (v2.9).** A real trade only appears after a trigger, and with the default rules that is rare
+(3 trades in 2000 M15 bars on the reference data), so most views showed no box. The indicator now also draws a
+dashed **planned box** on the last bar for the nearest qualified POI on the bias side: entry at the zone's near edge,
+stop beyond the far edge, take-profit at the next key level, caption `plan 1.8R`. It is shown even when that
+R:R is below the trade minimum, disappears while a real trade is open, and is turned off with
+`Show a planned RR box…`. Real trade boxes now carry only the R:R number (`1.8R`).
+
 
 For each trade: a target box (entry→target, teal), a stop box (stop→entry, rose), a thin entry
 line and a caption `LONG Demand · DBR → Swing high · 1.8R`. The boxes extend while the trade is open
