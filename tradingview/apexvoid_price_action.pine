@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.0", "AV Price Action v2.0", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.1", "AV Price Action v2.1", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,9 @@ indicator("ApexVoid | Price Action v2.0", "AV Price Action v2.0", overlay = true
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.1: order blocks restored (swing + internal, own display budget, lifecycle) and
+// BSL/SSL rebuilt as a level-first liquidity-pool model (sweep != break). See
+// tradingview/docs/ob-liquidity-v2.1.md for definitions and known limitations.
 
 const string G1 = "01  Market Structure"
 const string G2 = "02  Liquidity"
@@ -30,18 +33,41 @@ bool showInternalSwing = input.bool(false, "Show internal structure", group = G1
 bool showBreaks = input.bool(true, "Draw BOS / CHOCH", group = G1)
 int majorEventLimit = input.int(6, "Relevant external BOS/CHoCH history", minval = 2, maxval = 12, group = G1)
 
-bool showLiquidity = input.bool(true, "Show relevant BSL / SSL levels", group = G2)
-bool showSweeps = input.bool(true, "Show significant liquidity sweeps", group = G2)
+bool showLiquidity = input.bool(true, "Show relevant BSL / SSL pools", group = G2)
+bool showSweeps = input.bool(true, "Highlight liquidity grabs (rejection wick)", group = G2)
 float equalTolerance = input.float(0.15, "EQH / EQL tolerance (ATR)", minval = 0.01, maxval = 1, step = 0.01, group = G2)
+int eqMinSeparation = input.int(8, "Minimum bars between independent tests", minval = 2, maxval = 60, group = G2)
+float eqMinPullbackATR = input.float(0.50, "Minimum pullback between tests (ATR)", minval = 0, maxval = 3, step = 0.05, group = G2)
 float sweepBuffer = input.float(0.01, "Sweep penetration (ATR)", minval = 0, maxval = 0.5, step = 0.01, group = G2)
-int maxLiquidity = input.int(10, "Retained liquidity levels", minval = 2, maxval = 40, group = G2)
-int sweepHistoryLimit = input.int(6, "Visible sweep annotation history", minval = 1, maxval = 20, group = G2)
-int sweepClusterBars = input.int(8, "Sweep consolidation window (bars)", minval = 1, maxval = 50, group = G2)
+string sweepRule = input.string("Within N bars", "Sweep return rule", options = ["Within N bars", "Same bar"], group = G2)
+int sweepReturnBars = input.int(2, "Sweep return window (bars)", minval = 1, maxval = 10, group = G2)
+float liqBreakBuffer = input.float(0.10, "Pool break buffer (ATR)", minval = 0, maxval = 1, step = 0.01, group = G2)
+int liqAcceptCloses = input.int(2, "Closes beyond a pool to consume it", minval = 1, maxval = 5, group = G2)
+string consumedPolicy = input.string("Fade, then retire", "Consumed pool policy", options = ["Fade, then retire", "Retire immediately", "Keep faded"], group = G2)
+int consumedFadeBars = input.int(40, "Consumed pool fade window (bars)", minval = 5, maxval = 400, group = G2)
+int maxLiquidity = input.int(24, "Retained liquidity pools", minval = 4, maxval = 60, group = G2)
+int visibleLiquidity = input.int(6, "Visible liquidity pools", minval = 1, maxval = 20, group = G2)
+float liqDisplayDistanceATR = input.float(30.0, "Maximum visible pool distance (ATR)", minval = 3, maxval = 100, step = 1, group = G2)
+int liqMaxAge = input.int(1500, "Pool maximum age (bars)", minval = 100, maxval = 5000, group = G2)
+bool showSessionLiquidity = input.bool(false, "Include previous-day high / low pools", group = G2)
+float grabMinWickATR = input.float(0.20, "Minimum rejection wick for grab highlight (ATR)", minval = 0, maxval = 2, step = 0.05, group = G2)
+int sweepHistoryLimit = input.int(10, "Visible grab highlight history", minval = 1, maxval = 40, group = G2)
 
-bool showOB = input.bool(true, "Show order block candidates", group = G3)
-int obLookback = input.int(12, "Find last opposite candle within", minval = 2, maxval = 50, group = G3)
-float obImpulseATR = input.float(0.50, "Break candle minimum body (ATR)", minval = 0, maxval = 3, step = 0.05, group = G3)
+bool showOB = input.bool(true, "Show order blocks", group = G3)
+bool showInternalOB = input.bool(true, "Include internal-structure order blocks", group = G3)
+int obSearchBars = input.int(40, "Origin search window (bars)", minval = 5, maxval = 120, group = G3)
+int obLookback = input.int(12, "POI: OB-to-break proximity (bars)", minval = 2, maxval = 50, group = G3)
+float obDisplacementATR = input.float(1.00, "Minimum displacement from OB (ATR)", minval = 0, maxval = 5, step = 0.05, group = G3)
+float obImpulseBodyATR = input.float(0.60, "Minimum impulse candle body (ATR)", minval = 0, maxval = 3, step = 0.05, group = G3)
+float obMaxRangeATR = input.float(2.50, "Maximum origin candle range (ATR)", minval = 0.5, maxval = 6, step = 0.1, group = G3)
+float obBaseToleranceATR = input.float(0.50, "Base tolerance vs leg extreme (ATR)", minval = 0, maxval = 3, step = 0.05, group = G3)
 bool obWicks = input.bool(true, "OB includes candle wicks", group = G3)
+string obMitigationMethod = input.string("Close", "OB mitigation method", options = ["Close", "Wick", "Midpoint"], group = G3)
+int maxVisibleBullOB = input.int(2, "Visible bullish OBs", minval = 0, maxval = 10, group = G3)
+int maxVisibleBearOB = input.int(2, "Visible bearish OBs", minval = 0, maxval = 10, group = G3)
+float obDisplayDistanceATR = input.float(25.0, "Maximum visible OB distance (ATR)", minval = 2, maxval = 100, step = 1, group = G3)
+bool showOBMidline = input.bool(true, "Show OB midpoint line", group = G3)
+bool showOBDebug = input.bool(false, "Debug: OB candidate log and rejection reasons", group = G3)
 bool showSD = input.bool(true, "Show swing supply / demand", group = G3)
 float sdDepartureATR = input.float(0.80, "Supply/demand departure (ATR)", minval = 0.1, maxval = 5, step = 0.1, group = G3)
 float sdMaxWidthATR = input.float(1.00, "Max supply/demand width (ATR)", minval = 0.1, maxval = 5, step = 0.1, group = G3)
@@ -63,6 +89,7 @@ color bearFvgColor = input.color(#FFA957, "Bearish FVG color", group = G6)
 color demandColor = input.color(#36D399, "Demand color", group = G6)
 color supplyColor = input.color(#FF7892, "Supply color", group = G6)
 color asiaColor = input.color(#B48AFF, "Asian levels color", group = G6)
+color liquidityColor = input.color(#AEB8CC, "Liquidity pool color", group = G6)
 int zoneOpacity = input.int(88, "Zone transparency", minval = 65, maxval = 96, group = G6)
 int maxZones = input.int(80, "Maximum retained zone state", minval = 10, maxval = 120, group = G6)
 int visibleZones = input.int(8, "Visible qualified zones", minval = 1, maxval = 40, group = G6)
@@ -104,6 +131,7 @@ bool showInternal = showInternalSwing and (detailedMode or debugMode)
 bool renderLiquidity = showLiquidity and not minimalMode
 bool renderSweeps = showSweeps and not minimalMode
 int effectiveVisibleZones = minimalMode ? math.min(visibleZones, 4) : balancedMode ? math.min(visibleZones, 8) : detailedMode ? math.max(visibleZones, 12) : math.min(maxZones, 20)
+int effectiveVisibleLiquidity = minimalMode ? 0 : balancedMode ? math.min(visibleLiquidity, 8) : detailedMode ? math.max(visibleLiquidity, 12) : maxLiquidity
 int effectiveExternalEvents = minimalMode ? math.min(majorEventLimit, 3) : balancedMode ? math.min(majorEventLimit, 6) : majorEventLimit
 int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
 bool compactText = textScaleInput == "Compact"
@@ -215,11 +243,63 @@ var bool[] zonePoi = array.new_bool()
 var string[] zonePoiTitles = array.new_string()
 var float[] zoneMitigation = array.new_float()
 var string[] zoneQualification = array.new_string()
+// v2.1: order-block metadata. Class 2 = swing (external structure), 1 = internal.
+var int[] zoneClasses = array.new_int()
+var string[] zoneEvents = array.new_string()
+var line[] zoneMidLines = array.new_line()
 
-f_addZone(int origin, float top, float bottom, int side, int kind, string title, color tone) =>
+// Order-block analytics survive visual suppression. Indices:
+// 0 accepted, 1 rejected, 2 replaced by a newer block, 3 covered by a swing block,
+// 4 mitigated, 5 invalidated, 6 aged out, 7 evicted from the retained store.
+var int[] obStats = array.new_int(8, 0)
+var string[] obDebugLog = array.new_string()
+var label[] obDebugLabels = array.new_label()
+
+f_obLog(string line) =>
+    array.push(obDebugLog, line)
+    if array.size(obDebugLog) > 14
+        array.shift(obDebugLog)
+    0
+
+f_removeZone(int idx) =>
+    box oldBox = array.get(zones, idx)
+    label oldCaption = array.get(zoneCaptionLabels, idx)
+    line oldMid = array.get(zoneMidLines, idx)
+    if not na(oldBox)
+        box.delete(oldBox)
+    if not na(oldCaption)
+        label.delete(oldCaption)
+    if not na(oldMid)
+        line.delete(oldMid)
+    array.remove(zones, idx)
+    array.remove(zoneCaptionLabels, idx)
+    array.remove(zoneTops, idx)
+    array.remove(zoneBottoms, idx)
+    array.remove(zoneOrigins, idx)
+    array.remove(zoneKinds, idx)
+    array.remove(zoneSides, idx)
+    array.remove(zoneBirth, idx)
+    array.remove(zoneTouched, idx)
+    array.remove(zoneColors, idx)
+    array.remove(zoneTitles, idx)
+    array.remove(zoneVisible, idx)
+    array.remove(zonePoi, idx)
+    array.remove(zonePoiTitles, idx)
+    array.remove(zoneMitigation, idx)
+    array.remove(zoneQualification, idx)
+    array.remove(zoneClasses, idx)
+    array.remove(zoneEvents, idx)
+    array.remove(zoneMidLines, idx)
+    0
+
+// zoneKind: 1 = OB; 2 = FVG; 3 = supply/demand.
+// zoneSide: +1 = bullish; -1 = bearish.
+// cls/event only carry meaning for order blocks (pass 0 / "" otherwise).
+f_addZone(int origin, float top, float bottom, int side, int kind, string title, color tone, int cls, string event) =>
     if not na(top) and not na(bottom) and top > bottom
         bool duplicate = false
-        if array.size(zones) > 0
+        // Order blocks resolve overlaps in f_obBuild (newest relevant block wins).
+        if array.size(zones) > 0 and kind != 1
             for i = 0 to array.size(zones) - 1
                 if array.get(zoneKinds, i) == kind and array.get(zoneSides, i) == side
                     float existingTop = array.get(zoneTops, i)
@@ -230,6 +310,7 @@ f_addZone(int origin, float top, float bottom, int side, int kind, string title,
         if not duplicate
             box zoneBox = na
             label zoneCaption = na
+            line zoneMid = na
             array.push(zones, zoneBox)
             array.push(zoneCaptionLabels, zoneCaption)
             array.push(zoneTops, top)
@@ -246,27 +327,23 @@ f_addZone(int origin, float top, float bottom, int side, int kind, string title,
             array.push(zonePoiTitles, "")
             array.push(zoneMitigation, 0.0)
             array.push(zoneQualification, "Candidate")
+            array.push(zoneClasses, cls)
+            array.push(zoneEvents, event)
+            array.push(zoneMidLines, zoneMid)
+            // Capacity eviction removes imbalance zones first, then supply/demand,
+            // and only then order blocks, so FVG volume cannot erase analytical OBs.
             if array.size(zones) > maxZones
-                box oldBox = array.shift(zones)
-                label oldCaption = array.shift(zoneCaptionLabels)
-                if not na(oldBox)
-                    box.delete(oldBox)
-                if not na(oldCaption)
-                    label.delete(oldCaption)
-                array.shift(zoneTops)
-                array.shift(zoneBottoms)
-                array.shift(zoneOrigins)
-                array.shift(zoneKinds)
-                array.shift(zoneSides)
-                array.shift(zoneBirth)
-                array.shift(zoneTouched)
-                array.shift(zoneColors)
-                array.shift(zoneTitles)
-                array.shift(zoneVisible)
-                array.shift(zonePoi)
-                array.shift(zonePoiTitles)
-                array.shift(zoneMitigation)
-                array.shift(zoneQualification)
+                int evictIndex = -1
+                for pass = 0 to 2
+                    int evictKind = pass == 0 ? 2 : pass == 1 ? 3 : 1
+                    for j = 0 to array.size(zones) - 1
+                        if evictIndex < 0 and array.get(zoneKinds, j) == evictKind
+                            evictIndex := j
+                if evictIndex < 0
+                    evictIndex := 0
+                if array.get(zoneKinds, evictIndex) == 1
+                    array.set(obStats, 7, array.get(obStats, 7) + 1)
+                f_removeZone(evictIndex)
     0
 
 // ------- MARKET STRUCTURE / INTERNAL + EXTERNAL CONFIRMED SWINGS -------
@@ -822,7 +899,7 @@ if showSD and newMajorLow
     if swingOffset <= 799
         float upper = math.min(math.max(open[swingOffset], close[swingOffset]), majorLowPrice + atrAtSwing * sdMaxWidthATR)
         if externalHigh - majorLowPrice >= atrAtSwing * sdDepartureATR
-            f_addZone(majorLowBar, upper, majorLowPrice, 1, 3, "Demand", demandColor)
+            f_addZone(majorLowBar, upper, majorLowPrice, 1, 3, "Demand", demandColor, 0, "")
             bullSD := true
 
 if showSD and newMajorHigh
@@ -831,7 +908,7 @@ if showSD and newMajorHigh
     if swingOffset <= 799
         float lower = math.max(math.min(open[swingOffset], close[swingOffset]), majorHighPrice - atrAtSwing * sdMaxWidthATR)
         if majorHighPrice - externalLow >= atrAtSwing * sdDepartureATR
-            f_addZone(majorHighBar, majorHighPrice, lower, -1, 3, "Supply", supplyColor)
+            f_addZone(majorHighBar, majorHighPrice, lower, -1, 3, "Supply", supplyColor, 0, "")
             bearSD := true
 
 if showSD and (newMajorLow or newMajorHigh) and not bullSD and not bearSD
@@ -844,9 +921,9 @@ bool bullFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and low > hig
 bool bearFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and high < low[2] and low[2] - high >= atr * minGapATR and math.abs(close[1] - open[1]) >= nz(atr[1], atr) * fvgImpulseATR
 var int rejectedFVGCount = 0
 if bullFVG
-    f_addZone(bar_index - 2, low, high[2], 1, 2, "Bull FVG", bullFvgColor)
+    f_addZone(bar_index - 2, low, high[2], 1, 2, "Bull FVG", bullFvgColor, 0, "")
 if bearFVG
-    f_addZone(bar_index - 2, low[2], high, -1, 2, "Bear FVG", bearFvgColor)
+    f_addZone(bar_index - 2, low[2], high, -1, 2, "Bear FVG", bearFvgColor, 0, "")
 if (rawBullFVG and not bullFVG) or (rawBearFVG and not bearFVG)
     rejectedFVGCount += 1
 
