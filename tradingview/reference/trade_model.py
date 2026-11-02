@@ -110,7 +110,7 @@ class TradePlanSim(m.V21Pipeline):
     return "Candidate"
 
   # ---- key-level target (mirror of f_keyTarget) --------------------------
-  def key_target(self, i, is_long, entry, risk):
+  def key_target(self, i, is_long, entry, risk, enforce_min=True):
     s, tp = self.s, self.tp
     atr = s.atr[i]
     pool_side = 1 if is_long else -1
@@ -129,7 +129,7 @@ class TradePlanSim(m.V21Pipeline):
         levels.append((z.bottom if is_long else z.top, z.title))
     buffer = tp.target_buffer_atr * atr
     min_d, max_d = tp.min_rr * risk, tp.max_target_atr * atr
-    next_only = tp.target_mode == "Next key level"
+    next_only = tp.target_mode == "Next key level" or not enforce_min
     best, best_raw, best_adj, best_name, best_level = None, 1e18, 0.0, "", None
     nearest_ahead = 1e18
     for level, name in levels:
@@ -142,7 +142,7 @@ class TradePlanSim(m.V21Pipeline):
       if raw > 0 and adj <= max_d and (next_only or adj >= min_d) and raw < best_raw:
         best = level - buffer if is_long else level + buffer
         best_raw, best_adj, best_name, best_level = raw, adj, name, level
-    if next_only and best is not None and best_adj < min_d:
+    if enforce_min and next_only and best is not None and best_adj < min_d:
       best = None
     return best, best_name, best_level, nearest_ahead
 
@@ -269,3 +269,40 @@ class TradePlanSim(m.V21Pipeline):
                 total_r=sum(rs), avg_r=(sum(rs) / len(rs) if rs else m.NAN), profit_factor=(sum(wins) / sum(losses) if losses else m.NAN),
                 max_dd_r=dd, tp=sum(1 for t in self.trades if t.outcome == "TP"), sl=sum(1 for t in self.trades if t.outcome == "SL"),
                 time=sum(1 for t in self.trades if t.outcome == "TIME"), skipped=dict(self.skipped))
+
+
+def preview(sim, i=None):
+  """Planned RR box at bar i (default: last bar): nearest qualified POI on the bias side, entry at its
+  near edge, stop beyond the far edge, take-profit at the next key level (R:R below the trade minimum
+  is allowed). Mirrors f_renderTradePreview. Returns a dict or None."""
+  s, tp, p = sim.s, sim.tp, sim.p
+  i = s.n - 1 if i is None else i
+  if sim.open is not None or s.bias == 0:
+    return None
+  atr = s.atr[i]
+  is_long = s.bias == 1
+  eq = (s.last_swing_high + s.last_swing_low) / 2.0 if not m.isna(s.last_swing_high) and not m.isna(s.last_swing_low) else m.NAN
+  band_hi, band_lo = max(s.h[-p.scale_lookback_bars:]), min(s.l[-p.scale_lookback_bars:])
+  pick, best_gap = None, 1e18
+  for z in sim.zones:
+    allowed = tp.zone_kinds == "All qualified POIs" or (tp.zone_kinds == "Order blocks and supply/demand" and z.kind != 2) or (tp.zone_kinds == "Order blocks only" and z.kind == 1)
+    if (z.born, z.top) in sim.spent or not allowed or z.side != s.bias:
+      continue
+    mid = (z.top + z.bottom) / 2.0
+    edge = z.top if is_long else z.bottom
+    gap = abs(s.c[i] - edge)
+    right_side = mid <= s.c[i] if is_long else mid >= s.c[i]
+    pd_ok = (not tp.require_pd) or m.isna(eq) or (mid <= eq if is_long else mid >= eq)
+    if right_side and pd_ok and gap < best_gap and gap <= p.zone_display_distance_atr * atr and p.scale_ok(edge, s.c[i], atr, band_hi, band_lo) and sim.poi_path(z, not z.touched) != "Candidate":
+      pick, best_gap = z, gap
+  if pick is None:
+    return None
+  entry = pick.top if is_long else pick.bottom
+  stop = pick.bottom - tp.stop_buffer_atr * atr if is_long else pick.top + tp.stop_buffer_atr * atr
+  risk = abs(entry - stop)
+  if not (tp.min_stop_atr * atr <= risk <= tp.max_stop_atr * atr):
+    return None
+  target, name, level, nearest = sim.key_target(i, is_long, entry, risk, enforce_min=False)
+  if target is None:
+    return None
+  return dict(dir=s.bias, entry=entry, stop=stop, target=target, rr=abs(target - entry) / risk, zone=pick.title, target_name=name, edges=(pick.bottom, pick.top), nearest_ahead=nearest, raw_level=level)

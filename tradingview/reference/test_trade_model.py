@@ -102,6 +102,25 @@ def test_a_zone_trades_only_once():
     assert len(keys) == len(set(keys)), "a zone produced two trades"
 
 
+def test_planned_rr_box_is_available_and_well_formed():
+  shown = 0
+  for path, tf, secs in CASES:
+    sim = run(path, tf, secs)
+    pv = tm.preview(sim)
+    if pv is None:
+      continue
+    shown += 1
+    atr, close = sim.s.atr[-1], sim.s.c[-1]
+    bottom, top = pv["edges"]
+    long = pv["dir"] == 1
+    assert (pv["entry"] == top) if long else (pv["entry"] == bottom), "entry must be the zone's near edge"
+    assert pv["stop"] < bottom if long else pv["stop"] > top, "stop must be beyond the far edge"
+    assert (pv["target"] > pv["entry"]) if long else (pv["target"] < pv["entry"])
+    assert abs(abs(pv["raw_level"] - pv["entry"]) - pv["nearest_ahead"]) < 1e-9, "the plan target skipped a nearer key level"
+    assert abs(pv["entry"] - close) <= sim.p.zone_display_distance_atr * atr + 1e-9
+  assert shown >= 2, "the planned box should be available on most charts"
+
+
 def test_costs_lower_every_result_by_cost_over_risk():
   path, tf, secs = FIX, "M15", 900
   base = run(path, tf, secs)
