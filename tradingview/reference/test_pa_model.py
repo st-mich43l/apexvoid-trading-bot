@@ -12,6 +12,7 @@ import pa_model as m
 
 HERE = os.path.dirname(__file__)
 LIVE = os.path.join(HERE, "fixtures", "xau-closed-bars-20261102.json")
+LIVE_0600 = os.path.join(HERE, "fixtures", "xau-m15-closed-bars-20261102-0600.json")
 REPO = os.path.join(HERE, "..", "..", "analysis-engine", "testdata", "obwindow-xau-20261029.json")
 
 
@@ -43,19 +44,28 @@ def test_legacy_hides_valid_blocks_on_live_capture():
       assert audit["active_ob"] >= 1 and audit["visible_ob"] == 0, (tf, audit)
 
 
+def _band(pipe, p):
+  s = pipe.s
+  return max(s.h[-p.scale_lookback_bars:]), min(s.l[-p.scale_lookback_bars:])
+
+
 def test_v21_shows_blocks_and_explains_hidden_ones():
   for path in (LIVE, REPO):
     for tf, (secs, bars) in load(path).items():
       pipe, _, p = run_v21(bars, secs)
       s = pipe.s
+      hi, lo = _band(pipe, p)
       obs = [z for z in pipe.zones if z.kind == 1]
       visible = [z for z in obs if z.visible]
-      window = p.eff(p.ob_display_distance_atr)
-      within = [z for z in obs if abs(s.c[-1] - (z.top + z.bottom) / 2) / s.atr[-1] <= window]
-      if within:
-        assert visible, (tf, "blocks inside the candle-scale window but none visible")
+
+      def eligible(z):
+        mid = (z.top + z.bottom) / 2
+        return abs(s.c[-1] - mid) / s.atr[-1] <= p.ob_display_distance_atr and p.scale_ok(mid, s.c[-1], s.atr[-1], hi, lo)
+
+      if any(eligible(z) for z in obs):
+        assert visible, (tf, "eligible blocks but none visible")
       for z in visible:
-        assert abs(s.c[-1] - (z.top + z.bottom) / 2) / s.atr[-1] <= window + 1e-9, "visible block beyond the candle-scale window"
+        assert eligible(z), (tf, "visible block outside its distance / candle-range limits")
       assert sum(1 for z in visible if z.side == 1) <= p.max_vis_bull_ob
       assert sum(1 for z in visible if z.side == -1) <= p.max_vis_bear_ob
       for z in obs:
@@ -63,19 +73,79 @@ def test_v21_shows_blocks_and_explains_hidden_ones():
           assert z.hidden_reason, (tf, "hidden block without a reason")
 
 
-def test_candle_scale_window_limits_every_drawn_object():
+def test_candle_scale_protection_never_stretches_the_scale():
+  """Every drawn zone / pool is near price or inside the range the candles already span."""
   for tf, (secs, bars) in load(LIVE).items():
     pipe, lm, p = run_v21(bars, secs)
     s = pipe.s
+    hi, lo = _band(pipe, p)
     for z in pipe.zones:
       if z.visible:
-        limit = p.eff(p.ob_display_distance_atr) if z.kind == 1 else p.eff(p.zone_display_distance_atr)
-        assert abs(s.c[-1] - (z.top + z.bottom) / 2) / s.atr[-1] <= limit + 1e-9, (tf, z.title)
+        assert p.scale_ok((z.top + z.bottom) / 2, s.c[-1], s.atr[-1], hi, lo), (tf, z.title)
     for x in lm.select_visible(s.c[-1], s.atr[-1]):
-      assert abs(s.c[-1] - x.edge) / s.atr[-1] <= p.eff(p.liq_display_distance_atr * 2) + 1e-9, (tf, "pool outside window")
-    # protection off restores the v2.1 behaviour (a larger distance is allowed)
-    p2 = m.P21(chart_secs=secs, protect_scale=False)
-    assert p2.eff(25.0) == 25.0 and p.eff(25.0) == p.scale_window_atr
+      assert p.scale_ok(x.edge, s.c[-1], s.atr[-1], hi, lo), (tf, "pool outside the candle range")
+    assert m.P21(chart_secs=secs, protect_scale=False).scale_ok(1e9, 1.0, 1.0, 2.0, 0.0)
+
+
+def test_nearest_bsl_and_ssl_are_drawn_when_inside_the_candle_range():
+  """Regression for 'BSL / SSL missing': a pool 15+ ATR away is still drawn when the
+  candles already span its price."""
+  d = json.load(open(LIVE_0600))["timeframes"]["M15"]
+  bars = tuple([x[k] for x in d] for k in range(5))
+  pipe, lm, p = run_v21(bars, 900)
+  s = pipe.s
+  close, atr = s.c[-1], s.atr[-1]
+  shown = lm.select_visible(close, atr)
+  act = [x for x in lm.pools if x.state == 0]
+  above = min((x for x in act if x.side == 1 and x.edge > close), key=lambda x: x.edge - close, default=None)
+  below = max((x for x in act if x.side == -1 and x.edge < close), key=lambda x: x.edge, default=None)
+  assert above is not None and above in shown, "nearest BSL missing from the drawn pools"
+  assert below is not None and below in shown, "nearest SSL missing from the drawn pools"
+  assert (above.edge - close) / atr > p.scale_window_atr * 0.9, "fixture no longer exercises the far-pool case"
+
+
+def test_nearest_internal_markers_are_unswept_and_not_duplicates():
+  for tf, (secs, bars) in load(LIVE).items():
+    pipe, lm, p = run_v21(bars, secs)
+    s = pipe.s
+    close, atr = s.c[-1], s.atr[-1]
+    hi, lo = lm.nearest_internal(close, atr)
+    if hi:
+      assert hi[0] > close and max(s.h[hi[1] + 1:]) <= hi[0]
+      assert not any(x.state == 0 and x.side == 1 and abs(x.edge - hi[0]) <= atr * 0.5 for x in lm.pools)
+    if lo:
+      assert lo[0] < close and min(s.l[lo[1] + 1:]) >= lo[0]
+      assert not any(x.state == 0 and x.side == -1 and abs(x.edge - lo[0]) <= atr * 0.5 for x in lm.pools)
+  secs, bars = load(LIVE)["M15"]
+  _, lm, _ = run_v21(bars, secs)
+  hi, lo = lm.nearest_internal(bars[4][-1], 7.2)
+  assert hi or lo, "expected at least one internal marker on the live M15 capture"
+
+
+def test_bos_choch_line_ends_on_the_candle_that_broke_the_level():
+  """Regression for late-drawn BOS lines: the line ends on the first close beyond the swing,
+  never on a later publication bar, and no earlier close lies beyond the level."""
+  d = json.load(open(LIVE_0600))["timeframes"]["M15"]
+  bars = tuple([x[k] for x in d] for k in range(5))
+  p = m.P21(chart_secs=900)
+  st = m.Structure(bars, p)
+  c = bars[4]
+  late = 0
+  for i in range(st.n):
+    ev = st.step_pivots(i)
+    for flag, up in (("up_break", True), ("down_break", False)):
+      if not ev[flag]:
+        continue
+      end = ev["break_bar"]
+      lvl = ev["broken_high"] if up else ev["broken_low"]
+      sb = ev["broken_high_bar"] if up else ev["broken_low_bar"]
+      assert sb < end <= i
+      need = p.confirm_atr + p.break_buffer
+      beyond = lambda k: c[k] > lvl + st.atr[k] * need if up else c[k] < lvl - st.atr[k] * need
+      assert beyond(end) or end == i
+      assert not any(beyond(k) for k in range(sb + 1, end)), "a close beyond the level precedes the drawn end"
+      late += end < i
+  assert late >= 5, "fixture no longer contains late-published swings"
 
 
 def test_order_block_construction_rules():
