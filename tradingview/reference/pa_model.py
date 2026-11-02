@@ -1013,3 +1013,47 @@ class LiquidityModel:
       if not swept and not dup:
         best[side] = (price, bar)
     return best[1], best[-1]
+
+
+# ---------------------------------------------------------------------------
+# v2.7: right-edge label column and BOS de-duplication (mirrors the Pine code)
+# ---------------------------------------------------------------------------
+def label_gap(atr, band_hi, band_lo, annotation_atr_spacing=0.30):
+  """Merge distance: at least the annotation spacing and about one label height
+  (1/48 of the candle range the chart already shows)."""
+  return max(annotation_atr_spacing * atr, (band_hi - band_lo) / 48.0)
+
+
+def cluster_labels(items, gap):
+  """items: [(y, text, priority)]. Sort by price descending and chain labels closer than `gap`
+  into one cluster; each cluster becomes one label at the y of its highest-priority member with
+  up to three texts joined by ' · ' (then '+n'). Returns [(y, text, member_indices)]."""
+  order = sorted(range(len(items)), key=lambda k: -items[k][0])
+  clusters, cur, prev = [], [], None
+  for k in order:
+    y = items[k][0]
+    if cur and prev - y >= gap:
+      clusters.append(cur)
+      cur = []
+    cur.append(k)
+    prev = y
+  if cur:
+    clusters.append(cur)
+  out = []
+  for members in clusters:
+    ranked = sorted(members, key=lambda k: -items[k][2])  # stable: ties keep price order
+    text = " · ".join(items[k][1] for k in ranked[:3]) + (" +%d" % (len(ranked) - 3) if len(ranked) > 3 else "")
+    out.append((items[ranked[0]][0], text, members))
+  return out
+
+
+def dedupe_breaks(events):
+  """events: [(break_bar, up, choch, swing_bar)] in publication order. One candle that closes
+  beyond several swings is one BOS: keep the most recently published (most recent swing)."""
+  kept = []
+  for ev in events:
+    bar, up, choch, swing = ev
+    if not choch and kept and kept[-1][0] == bar and kept[-1][1] == up and not kept[-1][2]:
+      kept.pop()
+    kept.append(ev)
+  return kept
