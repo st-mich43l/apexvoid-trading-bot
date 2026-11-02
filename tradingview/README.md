@@ -156,11 +156,11 @@ Default `Compact`; `Standard` and `Expanded` add rows. Hover cells for tooltips.
 
 | Section | Rows |
 | --- | --- |
-| Market state | External bias (and HTF bias when enabled), market phase, directional leg |
+| Market state | External bias (and HTF bias when enabled), market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
 | Structure | Confirmed major high/low, developing extreme, protected level, last BOS/CHoCH, invalidated level (Expanded) |
 | Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
 | Session | Asian high / low |
-| Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** |
+| Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** (a trailing `*` means that pool is active but not drawn, e.g. beyond the candle-scale window; `LQ n/m` in the barrier row is drawn / active pools) |
 
 The Order Blocks tooltip splits hidden blocks into far / overlapping / budget and
 shows lifetime counters (accepted, rejected, replaced, covered, mitigated,

@@ -1037,6 +1037,8 @@ int poolSweptCount = 0
 int poolConsumedCount = 0
 float nearestBslPrice = na
 float nearestSslPrice = na
+bool nearestBslShown = false
+bool nearestSslShown = false
 
 if barstate.islast and array.size(poolStates) > 0
     int nearBsl = -1
@@ -1091,6 +1093,8 @@ if barstate.islast and array.size(poolStates) > 0
                 else
                     break
 
+    nearestBslShown := nearBsl >= 0 and array.get(poolVisible, nearBsl)
+    nearestSslShown := nearSsl >= 0 and array.get(poolVisible, nearSsl)
     float[] placedLabelY = array.new_float()
     for i = 0 to array.size(poolStates) - 1
         line poolLine = array.get(poolLines, i)
@@ -2050,7 +2054,7 @@ if barstate.islast
     if showDashboard
         color valueColor = bias == 1 ? bullColor : bias == -1 ? bearColor : color.silver
         string biasText = bias == 1 ? "BULLISH" : bias == -1 ? "BEARISH" : "NEUTRAL"
-        string phaseText = transitionContext ? "Structural transition" : expansionContext ? (bias == 1 ? "Bull expansion" : "Bear expansion") : rangeContext ? "Range / consolidation" : bias == 0 ? "Range / discovery" : internalBias == -bias ? "Corrective pullback" : "Trend / balance"
+        string phaseText = transitionContext ? "Structural transition" : expansionContext ? (bias == 1 ? "Bull expansion" : "Bear expansion") : developingDirection == -bias and bias != 0 ? (bias == -1 ? "Counter-trend rebound" : "Counter-trend pullback") : rangeContext ? "Range / consolidation" : bias == 0 ? "Range / discovery" : internalBias == -bias ? "Corrective pullback" : "Trend / balance"
         float majorMid = not na(lastSwingHigh) and not na(lastSwingLow) ? (lastSwingHigh + lastSwingLow) / 2.0 : na
         string rangeText = na(majorMid) ? "Range pending" : close > lastSwingHigh ? "Above range" : close < lastSwingLow ? "Below range" : close >= majorMid ? "Premium" : "Discount"
         string highText = na(lastSwingHigh) ? "—" : str.tostring(lastSwingHigh, format.mintick)
@@ -2059,7 +2063,8 @@ if barstate.islast
         string legText = developingDirection == 1 ? "UP · " + rangeText : developingDirection == -1 ? "DOWN · " + rangeText : "UNDEFINED"
         string protectedText = bias == 1 ? (na(protectedLow) ? "—" : "Low · " + str.tostring(protectedLow, format.mintick)) : bias == -1 ? (na(protectedHigh) ? "—" : "High · " + str.tostring(protectedHigh, format.mintick)) : "—"
         string zoneText = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + "  FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG) + "  S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " (base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD) + ")"
-        string liquidityText = str.tostring(relevantLiquidityCount) + " shown · " + str.tostring(poolActiveCount) + " active · " + str.tostring(poolSweptCount) + " swept · " + str.tostring(poolConsumedCount) + " consumed · " + lastSweep
+        string liquidityText = (nearestBslShown and nearestSslShown) or (na(nearestBslPrice) and na(nearestSslPrice)) ? "" : "* nearest pool is active but not drawn (beyond the candle-scale window, hidden by profile, or over budget)\n"
+        liquidityText += str.tostring(relevantLiquidityCount) + " shown · " + str.tostring(poolActiveCount) + " active · " + str.tostring(poolSweptCount) + " swept · " + str.tostring(poolConsumedCount) + " consumed · " + lastSweep
         int hiddenOBTotal = hiddenOBFar + hiddenOBOverlap + hiddenOBBudget
         string obLastText = array.get(obLastOutcome, 0)
         string obShortText = str.length(obLastText) > 34 ? str.substring(obLastText, 0, 34) + "…" : obLastText
@@ -2068,7 +2073,7 @@ if barstate.islast
         string sdLastText = array.get(sdLastOutcome, 0)
         string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
         string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + str.tostring(array.get(sdStats, 0)) + " · duplicate " + str.tostring(array.get(sdStats, 5)) + " · retired by cap " + str.tostring(array.get(sdStats, 6)) + "\nRejected: weak departure " + str.tostring(array.get(sdStats, 1)) + " · no impulse " + str.tostring(array.get(sdStats, 2)) + " · closed back " + str.tostring(array.get(sdStats, 3)) + " · pattern filter " + str.tostring(array.get(sdStats, 4)) + "\n" + sdLastText
-        string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + str.tostring(nearestBslPrice, format.mintick)) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + str.tostring(nearestSslPrice, format.mintick))
+        string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + str.tostring(nearestBslPrice, format.mintick) + (nearestBslShown ? "" : "*")) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + str.tostring(nearestSslPrice, format.mintick) + (nearestSslShown ? "" : "*"))
         string asiaHighText = na(asiaHigh) ? "Waiting for close" : str.tostring(asiaHigh, format.mintick)
         string asiaLowText = na(asiaLow) ? "Waiting for close" : str.tostring(asiaLow, format.mintick)
         string auditText = "POI " + str.tostring(qualifiedPoiCount) + " · far " + str.tostring(hiddenDistanceCount) + " · ranked " + str.tostring(hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount) + " · filter O/F/S " + str.tostring(array.get(obStats, 1)) + "/" + str.tostring(rejectedFVGCount) + "/" + str.tostring(rejectedSDCount)
@@ -2082,7 +2087,7 @@ if barstate.islast
         string bearPoiDisplay = na(nearestBearPoi) ? "—" : compactPanel ? str.tostring(nearestBearPoi, format.mintick) + " · " + str.tostring(nearestBearPoiDistanceATR, "#.0") + (nearestBearIsActionable ? "A" : actionableBearPoi ? "Q" : "D") : nearestBearPoiText
         string poiStatusDisplay = compactPanel ? (na(nearestBullPoi) ? "" : actionableBullPoi ? "B:A" : "B:D") + (not na(nearestBullPoi) and not na(nearestBearPoi) ? " · " : "") + (na(nearestBearPoi) ? "" : actionableBearPoi ? "S:A" : "S:D") : poiContextText
         string compactBarrier = bias == 1 ? (na(bullPoiBarrier) ? "Open above" : "OH " + str.tostring(bullPoiBarrier, format.mintick)) : bias == -1 ? (na(bearPoiBarrier) ? "Open below" : "SUP " + str.tostring(bearPoiBarrier, format.mintick)) : "Bias pending"
-        string barrierLiquidityText = (compactPanel ? compactBarrier : opposingBarrierText) + " · LQ " + str.tostring(relevantLiquidityCount)
+        string barrierLiquidityText = (compactPanel ? compactBarrier : opposingBarrierText) + " · LQ " + str.tostring(relevantLiquidityCount) + "/" + str.tostring(poolActiveCount)
 
         table.cell(dashboard, 0, 0, "APEXVOID v2.3", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
