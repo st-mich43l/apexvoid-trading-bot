@@ -159,7 +159,7 @@ def h4(d):
 
 
 if __name__ == "__main__":
-  src = os.path.join(os.path.dirname(__file__), "data", "xau-closed-bars-20261102.json")
+  src = os.path.join(os.path.dirname(__file__), "fixtures", "xau-closed-bars-20261102.json")
   out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "docs", "img")
   os.makedirs(out_dir, exist_ok=True)
   d = json.load(open(src))["timeframes"]
