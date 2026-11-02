@@ -70,8 +70,7 @@ service, [execution](execution.md) steps 8 to 12.
 ## Market-data plane and event plane
 
 Redis owns operational market data: closed OHLC history, spot, bar-close
-wake-ups, bootstrap and recovery ([Redis contract](redis-contract.md),
-[ADR-010](adr/010-redis-market-data-kafka-events.md)). Kafka owns only durable
+wake-ups, bootstrap and recovery ([Redis contract](redis-contract.md)). Kafka owns only durable
 business events ([Kafka transport](transport/kafka.md)). There is no Kafka topic
 for bars or ticks, and the engine keeps analysing from Redis when Kafka is down.
 
@@ -94,10 +93,9 @@ retires expired plans (cancelling resting legs, keeping filled exposure) and run
 `OppositeExposureFence` before the first broker mutation of a plan. It is the
 only broker-facing service.
 
-## Decisions
+## Boundaries
 
-The ADRs in [`adr/`](adr/) record the boundaries that are not obvious from the
-code: Kafka as the business-event boundary (004, partly superseded by 010),
-centralized Go tests under `analysis-engine/test/` (006), shared contracts at the
-repo root in `contracts/` (007), the Go Kafka client (008), at-least-once delivery
-with idempotent consumers (009) and the Redis/Kafka split (010).
+- Redis is the market-data plane and Kafka the durable business-event plane; Kafka never carries bars or ticks.
+- Kafka delivery is at-least-once with idempotent consumers (see [Kafka transport](transport/kafka.md)); the Go client is `twmb/franz-go`, pinned in `analysis-engine/go.mod`.
+- Cross-service contracts live at the repo root in `contracts/`; no service keeps a private copy of a schema another service reads.
+- Go tests live under `analysis-engine/test/`, not beside the code, so cross-package architecture tests have one home.

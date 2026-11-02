@@ -2,7 +2,7 @@
 
 Run: python tradingview/reference/test_trade_model.py
 These checks validate that the implemented rules are followed; they say nothing about whether
-the rules make money (see docs/trade-plan-v2.8.md for the descriptive results).
+the rules make money.
 """
 import json
 import os

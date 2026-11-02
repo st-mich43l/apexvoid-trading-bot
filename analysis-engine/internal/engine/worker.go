@@ -121,7 +121,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		w.telemetry.Count(telemetry.CounterOutOfOrderEvents, symbolLabel, tfLabel, 1)
 		return SnapshotFrom(w.state, w.settings, event.Candle.Time), result, nil
 	case result == marketdata.AppendConflict:
-		// Correction policy (documented by ADR-010): the
+		// Correction policy: the
 		// original, already-analyzed candle is kept — structure/liquidity
 		// already computed from it must never be silently retroactively
 		// rewritten — and the conflict is counted under its own distinct

@@ -1,9 +1,8 @@
 // Package architecture_test statically enforces the dependency direction
 // frozen in docs/analysis-engine.md (Packages) — a lower layer
 // importing a higher one is a build-time-discoverable violation, not
-// something a doc can only describe. See docs/adr/006 for why this test
-// lives under the centralized test/ tree rather than beside any one
-// package it inspects (it inspects all of them).
+// something a doc can only describe. It lives under the centralized
+// test/ tree rather than beside any one package because it inspects all of them.
 package architecture_test
 
 import (

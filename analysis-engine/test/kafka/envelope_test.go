@@ -1,5 +1,5 @@
 // Package kafka_test holds analysis-engine's Kafka transport tests,
-// centralized per ADR-006 — never analysis-engine/internal/transport/kafka/*_test.go.
+// centralized under test/ — never analysis-engine/internal/transport/kafka/*_test.go.
 package kafka_test
 
 import (

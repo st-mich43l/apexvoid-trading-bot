@@ -41,7 +41,7 @@ const publishRetryBackoff = 2 * time.Second
 // OpportunityKafkaClient is the minimal Kafka surface OpportunityPublisher
 // needs — the same "a clean interface between what gets published and
 // how Kafka does it" separation ctrader-engine's own IMarketEventPublisher
-// already established for the .NET side (docs/adr's Kafka pipeline task).
+// already established for the .NET side.
 // *kafka.Producer already implements this with zero changes to that
 // package; a fake implementation lets this package's own tests exercise
 // OpportunityPublisher without a real broker.
