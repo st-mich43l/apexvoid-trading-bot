@@ -148,6 +148,41 @@ def test_bos_choch_line_ends_on_the_candle_that_broke_the_level():
   assert late >= 5, "fixture no longer contains late-published swings"
 
 
+def test_right_edge_labels_never_overlap_and_lose_nothing():
+  """Regression for overlapping labels (PROTECTED / BSL / PREMIUM, DEV HIGH / iBSL, DISCOUNT / SSL)."""
+  gap = m.label_gap(7.2, 4082.0, 3846.0)
+  items = [(4032.57, "BSL", 60), (4032.45, "PROTECTED", 80), (4031.0, "PREMIUM", 15), (3951.28, "EQ 3951.28", 35),
+           (3923.84, "iBSL", 40), (3919.19, "DEV HIGH", 70), (3897.0, "iSSL", 40), (3870.21, "SSL", 60), (3872.5, "DISCOUNT", 15),
+           (4018.64, "Asia H", 50), (3965.09, "Asia L", 50)]
+  out = m.cluster_labels(items, gap)
+  texts = [o[1] for o in out]
+  assert "PROTECTED · BSL · PREMIUM" in texts and "DEV HIGH · iBSL" in texts and "SSL · DISCOUNT" in texts
+  ys = sorted(o[0] for o in out)
+  assert all(b - a >= gap - 1e-9 for a, b in zip(ys, ys[1:])), "two output labels are closer than the gap"
+  assert sorted(k for o in out for k in o[2]) == list(range(len(items))), "a label was lost or duplicated"
+  assert [o for o in out if "PROTECTED" in o[1]][0][0] == 4032.45, "cluster must sit on its highest-priority member"
+  many = [(100.0 - 0.01 * k, "L%d" % k, k) for k in range(8)]
+  assert m.cluster_labels(many, gap)[0][1].endswith("+5")
+
+
+def test_one_bos_per_break_candle():
+  evs = [(865, True, False, 330), (865, True, False, 662), (900, False, True, 700), (900, False, True, 710), (950, True, False, 10)]
+  kept = m.dedupe_breaks(evs)
+  assert kept == [(865, True, False, 662), (900, False, True, 700), (900, False, True, 710), (950, True, False, 10)]
+  d = json.load(open(LIVE_0600))["timeframes"]["M15"]
+  bars = tuple([x[k] for x in d] for k in range(5))
+  st = m.Structure(bars, m.P21(chart_secs=900))
+  events = []
+  for i in range(st.n):
+    ev = st.step_pivots(i)
+    for flag, bar_key, up in (("up_break", "broken_high_bar", True), ("down_break", "broken_low_bar", False)):
+      if ev[flag]:
+        events.append((ev["break_bar"], up, ev["choch"], ev[bar_key]))
+  kept = m.dedupe_breaks(events)
+  keys = [(e[0], e[1]) for e in kept if not e[2]]
+  assert len(keys) == len(set(keys)), "two BOS lines still end on the same candle in the same direction"
+
+
 def test_order_block_construction_rules():
   for tf, (secs, bars) in load(LIVE).items():
     pipe, _, p = run_v21(bars, secs)
