@@ -187,7 +187,7 @@ container.
 | [Configuration](docs/configuration.md) | files, secrets, reachability, containment |
 | [Operations](docs/operations.md) | deployment, routine checks, backups, incidents |
 | [Strategies](docs/strategies/README.md) | catalog, shared confirmation spine, per-strategy specifications |
-| Reference | [Redis contract](docs/redis-contract.md), [Kafka transport](docs/transport/kafka.md), [bot commands](docs/bot-commands.md), [security](docs/security.md), [decisions](docs/adr/) |
+| Reference | [Redis contract](docs/redis-contract.md), [Kafka transport](docs/transport/kafka.md), [bot commands](docs/bot-commands.md), [security](docs/security.md) |
 
 ## License
 

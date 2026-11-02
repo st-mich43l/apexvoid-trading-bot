@@ -9,7 +9,7 @@ import (
 
 // Envelope is the shared cross-service event wrapper
 // (contracts/common/event-envelope-v1.schema.json) — kept in sync with
-// that schema by hand (ADR-007's discipline; no schema-to-struct
+// that schema by hand (no schema-to-struct
 // generator exists yet). Every field's meaning and timestamp unit is
 // documented once, on the schema file itself; this struct's job is to
 // be the exact typed mirror of it.

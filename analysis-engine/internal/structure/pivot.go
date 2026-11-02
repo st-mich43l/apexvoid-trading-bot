@@ -53,7 +53,7 @@ type Pivot struct {
 //
 // atrSeries must be the SAME canonical series (indicator.CanonicalATR)
 // index-aligned with candles — never a second, independently-computed
-// ATR (docs/adr's V1 finding, restated at the Structure V2 boundary).
+// ATR (restated at the Structure V2 boundary).
 func DetectPivots(candles []market.Candle, leftBars, rightBars int, atrSeries []float64) []Pivot {
 	if leftBars < 1 {
 		leftBars = 1

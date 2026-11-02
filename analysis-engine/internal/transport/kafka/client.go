@@ -13,7 +13,7 @@ import (
 // construction in one place prevents broker/client-ID wiring from drifting.
 //
 // Producer durability is left at franz-go's own defaults deliberately
-// (ADR-008: idempotent producer, acks=all) — source task §21's "do not
+// (idempotent producer, acks=all) — source task §21's "do not
 // lower durability for benchmark speed" is honored by never overriding
 // these downward, not by re-specifying them here.
 func newClient(cfg Config, opts ...kgo.Opt) (*kgo.Client, error) {

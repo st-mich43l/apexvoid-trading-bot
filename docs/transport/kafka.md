@@ -5,7 +5,7 @@
 Kafka is ApexVoid's durable **trading-event and command plane**. It is not a
 market-data feed. Closed bars, rolling OHLC history, latest spot, bootstrap,
 and recovery remain on Redis; see [Redis market-data contract](../redis-contract.md)
-and [ADR-010](../adr/010-redis-market-data-kafka-events.md).
+and [Architecture](../architecture.md).
 
 ```mermaid
 flowchart LR
@@ -68,7 +68,7 @@ engine queues lifecycle transitions off its bar-ingestion path and retries
 publication; see `internal/engine/publisher.go` and the documented in-memory
 queue limitation in `internal/engine/publisher.go`.
 
-ADR-009 defines at-least-once handling: the Algo Bot consumer writes the
+Delivery is at-least-once: the Algo Bot consumer writes the
 opportunity idempotently (by opportunity id) and commits the offset only after
 the ledger write. Kafka is never a source of market candles.
 

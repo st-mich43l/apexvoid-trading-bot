@@ -1,5 +1,5 @@
 // Package kafka implements analysis-engine's real Kafka transport
-// (ADR-008, ADR-009, ADR-010, docs/transport/kafka.md). It owns broker
+// (docs/transport/kafka.md). It owns broker
 // connection, producer, serialization, event metadata (the shared Envelope),
 // opportunity record-key selection, shutdown, health, and transport telemetry.
 // Analysis Engine is deliberately producer-only because Redis owns the
@@ -16,6 +16,6 @@
 // never import it (enforced by
 // analysis-engine/test/architecture/dependency_test.go).
 //
-// Client library: github.com/twmb/franz-go, pinned at v1.19.5 — see
-// ADR-008 for why this client and this exact version.
+// Client library: github.com/twmb/franz-go, pinned at v1.19.5 — the single Go
+// Kafka client (pure Go, synchronous producer path, compatible with the Go 1.23 toolchain).
 package kafka
