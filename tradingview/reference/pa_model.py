@@ -476,6 +476,12 @@ class P21(Params):
   liq_display_distance_atr: float = 30.0
   grab_min_wick_atr: float = 0.20
   ring_size: int = 24
+  protect_scale: bool = True
+  scale_window_atr: float = 15.0
+
+  def eff(self, value):
+    """Effective display distance: capped by the candle-scale window when protection is on."""
+    return min(value, self.scale_window_atr) if self.protect_scale else value
 
 
 class V21Pipeline(LegacyPipeline):
@@ -671,7 +677,7 @@ class V21Pipeline(LegacyPipeline):
         if z.visible or n_side[z.side] >= budget[z.side]:
           continue
         dist = abs(close - (z.top + z.bottom) / 2) / atr
-        if dist > p.ob_display_distance_atr:
+        if dist > p.eff(p.ob_display_distance_atr):
           continue
         if any(o.visible and o.side == z.side and min(z.top, o.top) - max(z.bottom, o.bottom) > 0 and (min(z.top, o.top) - max(z.bottom, o.bottom)) / min(z.top - z.bottom, o.top - o.bottom) >= 0.5 for o in pool):
           continue
@@ -685,7 +691,7 @@ class V21Pipeline(LegacyPipeline):
     for z in obs:
       if not z.visible:
         dist = abs(close - (z.top + z.bottom) / 2) / atr
-        z.hidden_reason = "far (%.1f ATR > %.0f)" % (dist, p.ob_display_distance_atr) if dist > p.ob_display_distance_atr else ("overlap" if any(o.visible and o.side == z.side and min(z.top, o.top) > max(z.bottom, o.bottom) for o in obs) else "side budget")
+        z.hidden_reason = "far (%.1f ATR > %.0f)" % (dist, p.eff(p.ob_display_distance_atr)) if dist > p.eff(p.ob_display_distance_atr) else ("overlap" if any(o.visible and o.side == z.side and min(z.top, o.top) > max(z.bottom, o.bottom) for o in obs) else "side budget")
     # generic zones (FVG, S/D): legacy rule, OBs excluded from the shared budget
     saved = self.zones
     self.zones = [z for z in saved if z.kind != 1]
@@ -727,7 +733,7 @@ class V21Pipeline(LegacyPipeline):
           continue
         mid = (z.top + z.bottom) / 2
         dist = abs(close - mid) / max(atr, 1e-9)
-        if dist > p.zone_display_distance_atr:
+        if dist > p.eff(p.zone_display_distance_atr):
           continue
         if any(o.visible and o.side == z.side and min(z.top, o.top) - max(z.bottom, o.bottom) > 0 and (min(z.top, o.top) - max(z.bottom, o.bottom)) / min(z.top - z.bottom, o.top - o.bottom) >= 0.60 for o in full):
           continue
@@ -944,7 +950,7 @@ class LiquidityModel:
     near_b = min((x for x in self.pools if x.state == 0 and x.side == 1 and x.edge > close), key=lambda x: x.edge - close, default=None)
     near_s = min((x for x in self.pools if x.state == 0 and x.side == -1 and x.edge < close), key=lambda x: close - x.edge, default=None)
     for cand in (near_b, near_s):
-      if cand is not None and abs(cand.edge - close) / atr <= p.liq_display_distance_atr * 2 and len(shown) < budget:
+      if cand is not None and abs(cand.edge - close) / atr <= p.eff(p.liq_display_distance_atr * 2) and len(shown) < budget:
         shown.append(cand)
     while len(shown) < budget:
       best, best_score = None, None
@@ -952,7 +958,7 @@ class LiquidityModel:
         if x in shown:
           continue
         dist = abs(close - x.edge) / atr
-        if dist > p.liq_display_distance_atr:
+        if dist > p.eff(p.liq_display_distance_atr):
           continue
         score = x.degree * 1000 + (500 if x.state == 0 else 0) - dist * 10
         if best is None or score > best_score:

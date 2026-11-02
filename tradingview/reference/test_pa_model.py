@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import pa_model as m
 
 HERE = os.path.dirname(__file__)
-LIVE = os.path.join(HERE, "data", "xau-closed-bars-20261102.json")
+LIVE = os.path.join(HERE, "fixtures", "xau-closed-bars-20261102.json")
 REPO = os.path.join(HERE, "..", "..", "analysis-engine", "testdata", "obwindow-xau-20261029.json")
 
 
@@ -47,15 +47,35 @@ def test_v21_shows_blocks_and_explains_hidden_ones():
   for path in (LIVE, REPO):
     for tf, (secs, bars) in load(path).items():
       pipe, _, p = run_v21(bars, secs)
+      s = pipe.s
       obs = [z for z in pipe.zones if z.kind == 1]
       visible = [z for z in obs if z.visible]
-      if obs:
-        assert visible, (tf, "active blocks but none visible")
+      window = p.eff(p.ob_display_distance_atr)
+      within = [z for z in obs if abs(s.c[-1] - (z.top + z.bottom) / 2) / s.atr[-1] <= window]
+      if within:
+        assert visible, (tf, "blocks inside the candle-scale window but none visible")
+      for z in visible:
+        assert abs(s.c[-1] - (z.top + z.bottom) / 2) / s.atr[-1] <= window + 1e-9, "visible block beyond the candle-scale window"
       assert sum(1 for z in visible if z.side == 1) <= p.max_vis_bull_ob
       assert sum(1 for z in visible if z.side == -1) <= p.max_vis_bear_ob
       for z in obs:
         if not z.visible:
           assert z.hidden_reason, (tf, "hidden block without a reason")
+
+
+def test_candle_scale_window_limits_every_drawn_object():
+  for tf, (secs, bars) in load(LIVE).items():
+    pipe, lm, p = run_v21(bars, secs)
+    s = pipe.s
+    for z in pipe.zones:
+      if z.visible:
+        limit = p.eff(p.ob_display_distance_atr) if z.kind == 1 else p.eff(p.zone_display_distance_atr)
+        assert abs(s.c[-1] - (z.top + z.bottom) / 2) / s.atr[-1] <= limit + 1e-9, (tf, z.title)
+    for x in lm.select_visible(s.c[-1], s.atr[-1]):
+      assert abs(s.c[-1] - x.edge) / s.atr[-1] <= p.eff(p.liq_display_distance_atr * 2) + 1e-9, (tf, "pool outside window")
+    # protection off restores the v2.1 behaviour (a larger distance is allowed)
+    p2 = m.P21(chart_secs=secs, protect_scale=False)
+    assert p2.eff(25.0) == 25.0 and p.eff(25.0) == p.scale_window_atr
 
 
 def test_order_block_construction_rules():

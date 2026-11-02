@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.2", "AV Price Action v2.2", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.3", "AV Price Action v2.3", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -8,6 +8,8 @@ indicator("ApexVoid | Price Action v2.2", "AV Price Action v2.2", overlay = true
 // A zone/sweep is an analytical reference, not an automatic entry signal.
 // TradingView: Pine Editor -> paste this file -> Save -> Add to chart.
 // Suggested starting point: XAUUSD M5/M15; tune sensitivity and filters per symbol.
+// v2.3: candle-scale protection (objects limited to a window around price), lighter zone
+// fills, shorter drawn lengths, larger and better-spaced labels.
 // v2.2: base-and-impulse supply/demand zones (DBR / RBR / RBD / DBD) beside the swing zones.
 // v2.1: order blocks restored (swing + internal, own display budget, lifecycle) and
 // BSL/SSL rebuilt as a level-first liquidity-pool model (sweep != break). See
@@ -103,7 +105,10 @@ color demandColor = input.color(#36D399, "Demand color", group = G6)
 color supplyColor = input.color(#FF7892, "Supply color", group = G6)
 color asiaColor = input.color(#B48AFF, "Asian levels color", group = G6)
 color liquidityColor = input.color(#AEB8CC, "Liquidity pool color", group = G6)
-int zoneOpacity = input.int(88, "Zone transparency", minval = 65, maxval = 96, group = G6)
+bool protectCandleScale = input.bool(true, "Keep candles readable: limit objects to a window around price", group = G6)
+float scaleWindowATR = input.float(15.0, "Candle-scale window (ATR)", minval = 3, maxval = 60, step = 0.5, group = G6)
+int maxDrawBars = input.int(250, "Maximum drawn length of zones and pool lines (bars)", minval = 30, maxval = 2000, group = G6)
+int zoneOpacity = input.int(92, "Zone transparency", minval = 65, maxval = 98, group = G6)
 int maxZones = input.int(80, "Maximum retained zone state", minval = 10, maxval = 120, group = G6)
 int visibleZones = input.int(8, "Visible qualified zones", minval = 1, maxval = 40, group = G6)
 float zoneDisplayDistanceATR = input.float(10.0, "Maximum visible zone distance (ATR)", minval = 2, maxval = 50, step = 0.5, group = G6)
@@ -116,8 +121,8 @@ bool showDashboard = input.bool(true, "Show Market Intelligence panel", group = 
 string textScaleInput = input.string("Standard", "Global text scale", options = ["Compact", "Standard", "Large"], group = G6)
 string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard", "Expanded"], group = G6)
 string dashboardPositionInput = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right"], group = G6)
-int annotationBarSpacing = input.int(5, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
-float annotationATRSpacing = input.float(0.24, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
+int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
+float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
 
 bool showHTFContext = input.bool(false, "Show confirmed HTF context", group = G7)
 string htfTimeframe = input.timeframe("240", "Higher timeframe", group = G7)
@@ -144,6 +149,10 @@ bool showInternal = showInternalSwing and (detailedMode or debugMode)
 bool renderLiquidity = showLiquidity and not minimalMode
 bool renderSweeps = showSweeps and not minimalMode
 int effectiveVisibleZones = minimalMode ? math.min(visibleZones, 4) : balancedMode ? math.min(visibleZones, 8) : detailedMode ? math.max(visibleZones, 12) : math.min(maxZones, 20)
+float effZoneDistanceATR = protectCandleScale ? math.min(zoneDisplayDistanceATR, scaleWindowATR) : zoneDisplayDistanceATR
+float effObDistanceATR = protectCandleScale ? math.min(obDisplayDistanceATR, scaleWindowATR) : obDisplayDistanceATR
+float effLiqDistanceATR = protectCandleScale ? math.min(liqDisplayDistanceATR, scaleWindowATR) : liqDisplayDistanceATR
+float effLiqNearestATR = protectCandleScale ? math.min(liqDisplayDistanceATR * 2.0, scaleWindowATR) : liqDisplayDistanceATR * 2.0
 int effectiveVisibleLiquidity = minimalMode ? 0 : balancedMode ? math.min(visibleLiquidity, 8) : detailedMode ? math.max(visibleLiquidity, 12) : maxLiquidity
 int effectiveExternalEvents = minimalMode ? math.min(majorEventLimit, 3) : balancedMode ? math.min(majorEventLimit, 6) : majorEventLimit
 int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
@@ -151,8 +160,8 @@ bool compactText = textScaleInput == "Compact"
 bool largeText = textScaleInput == "Large"
 string majorTextSize = compactText ? size.small : largeText ? size.large : size.normal
 string structureTextSize = compactText ? size.small : largeText ? size.large : size.normal
-string zoneTextSize = compactText ? size.small : largeText ? size.normal : size.small
-string contextTextSize = compactText ? size.small : largeText ? size.normal : size.small
+string zoneTextSize = compactText ? size.small : largeText ? size.large : size.normal
+string contextTextSize = compactText ? size.small : largeText ? size.large : size.normal
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.
 string dashboardTitleSize = dashboardDensity == "Expanded" ? size.large : dashboardDensity == "Compact" ? size.small : size.normal
@@ -1057,10 +1066,10 @@ if barstate.islast and array.size(poolStates) > 0
     // considered; remaining slots go to structural degree first, then proximity.
     int shown = 0
     if renderLiquidity and effectiveVisibleLiquidity > 0
-        if nearBsl >= 0 and nearBslGap / atrSafe <= liqDisplayDistanceATR * 2.0
+        if nearBsl >= 0 and nearBslGap / atrSafe <= effLiqNearestATR
             array.set(poolVisible, nearBsl, true)
             shown += 1
-        if nearSsl >= 0 and nearSslGap / atrSafe <= liqDisplayDistanceATR * 2.0 and shown < effectiveVisibleLiquidity
+        if nearSsl >= 0 and nearSslGap / atrSafe <= effLiqNearestATR and shown < effectiveVisibleLiquidity
             array.set(poolVisible, nearSsl, true)
             shown += 1
         if shown < effectiveVisibleLiquidity
@@ -1072,7 +1081,7 @@ if barstate.islast and array.size(poolStates) > 0
                         int candSide = array.get(poolSides, i)
                         float candEdge = candSide == 1 ? array.get(poolTops, i) : array.get(poolBottoms, i)
                         float candDistance = math.abs(close - candEdge) / atrSafe
-                        if debugMode or candDistance <= liqDisplayDistanceATR
+                        if debugMode or candDistance <= effLiqDistanceATR
                             float candScore = array.get(poolDegrees, i) * 1000.0 + (array.get(poolStates, i) == 0 ? 500.0 : 0.0) - candDistance * 10.0
                             if candScore > bestPoolScore
                                 bestPool := i
@@ -1100,7 +1109,7 @@ if barstate.islast and array.size(poolStates) > 0
             string pKind = array.get(poolKinds, i)
             bool pActive = pState == 0
             relevantLiquidityCount += pActive ? 1 : 0
-            int leftX = math.max(pBirth, bar_index - 9999)
+            int leftX = math.max(pBirth, bar_index - maxDrawBars)
             int rightX = pActive ? bar_index + 5 : math.max(pStateBar, leftX + 1)
             color lineTone = color.new(liquidityColor, pActive ? 25 : 78)
             string baseName = pKind == "EQ" ? (pSide == 1 ? "EQH · BSL" : "EQL · SSL") : pKind == "PDH" ? "PDH · BSL" : pKind == "PDL" ? "PDL · SSL" : (pSide == 1 ? "BSL" : "SSL")
@@ -1647,7 +1656,7 @@ if array.size(zones) > 0
                         float obBottom = array.get(zoneBottoms, i)
                         float obDistance = math.abs(close - (obTop + obBottom) / 2.0) / math.max(atr, syminfo.mintick)
                         bool budgetOpen = obSide == 1 ? obBullShown < maxVisibleBullOB : obBearShown < maxVisibleBearOB
-                        bool obEligible = budgetOpen and (debugMode or obDistance <= obDisplayDistanceATR)
+                        bool obEligible = budgetOpen and (debugMode or obDistance <= effObDistanceATR)
                         bool obOverlaps = false
                         if obEligible
                             for j = 0 to array.size(zones) - 1
@@ -1695,7 +1704,7 @@ if array.size(zones) > 0
                     float bottom = array.get(zoneBottoms, i)
                     float zoneMid = (top + bottom) / 2.0
                     float distanceATR = math.abs(close - zoneMid) / math.max(atr, syminfo.mintick)
-                    bool eligible = array.get(zoneKinds, i) != 1 and (debugMode or distanceATR <= zoneDisplayDistanceATR)
+                    bool eligible = array.get(zoneKinds, i) != 1 and (debugMode or distanceATR <= effZoneDistanceATR)
                     bool redundant = false
                     if eligible and not debugMode
                         for j = 0 to array.size(zones) - 1
@@ -1754,7 +1763,7 @@ if array.size(zones) > 0
                 string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
                 string zoneTooltip = title + "\n" + obTipLine + zoneState + "\nMitigated " + str.tostring(mitigation * 100.0, "#.0") + "%\n" + str.tostring(bottom, format.mintick) + " — " + str.tostring(top, format.mintick)
                 float zoneMid = (top + bottom) / 2.0
-                bool tallZone = top - bottom >= atr * (largeText ? 0.34 : compactText ? 0.18 : 0.24)
+                bool tallZone = top - bottom >= atr * (largeText ? 0.45 : compactText ? 0.20 : 0.32)
                 bool suppressCaption = false
                 if not poi and array.size(zones) > 1
                     for j = 0 to array.size(zones) - 1
@@ -1763,14 +1772,16 @@ if array.size(zones) > 0
                             float poiBottom = array.get(zoneBottoms, j)
                             suppressCaption := suppressCaption or math.min(top, poiTop) - math.max(bottom, poiBottom) > 0
                 string insideText = tallZone and not suppressCaption ? shortTitle : ""
-                color zoneBorder = isOB ? color.new(tone, touched ? 60 : 25) : poi ? tone : color.new(tone, touched ? 65 : 35)
+                color zoneBorder = isOB ? color.new(tone, touched ? 72 : 42) : poi ? color.new(tone, 10) : color.new(tone, touched ? 75 : 50)
                 int zoneBorderWidth = isOB ? 1 : poi ? 2 : 1
                 string zoneBorderStyle = isOB and touched ? line.style_dashed : line.style_solid
-                color zoneFill = isOB ? color.new(tone, touched ? 93 : math.min(95, zoneOpacity + 2)) : color.new(tone, touched ? 95 : poi ? math.max(78, zoneOpacity - 3) : zoneOpacity)
+                color zoneFill = isOB ? color.new(tone, touched ? 95 : math.min(97, zoneOpacity + 2)) : color.new(tone, touched ? 96 : poi ? math.max(82, zoneOpacity - 3) : zoneOpacity)
+                int drawLeft = math.max(origin, bar_index - maxDrawBars)
                 if na(zoneBox)
-                    zoneBox := box.new(left = origin, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
+                    zoneBox := box.new(left = drawLeft, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
                     array.set(zones, i, zoneBox)
                 else
+                    box.set_left(zoneBox, drawLeft)
                     box.set_right(zoneBox, bar_index + 5)
                     box.set_border_color(zoneBox, zoneBorder)
                     box.set_border_width(zoneBox, zoneBorderWidth)
@@ -1783,9 +1794,10 @@ if array.size(zones) > 0
                 line zoneMidLine = array.get(zoneMidLines, i)
                 if isOB and showOBMidline
                     if na(zoneMidLine)
-                        zoneMidLine := line.new(origin, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
+                        zoneMidLine := line.new(drawLeft, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
                         array.set(zoneMidLines, i, zoneMidLine)
                     else
+                        line.set_x1(zoneMidLine, drawLeft)
                         line.set_x2(zoneMidLine, bar_index + 5)
                 else if not na(zoneMidLine)
                     line.delete(zoneMidLine)
@@ -1859,7 +1871,7 @@ if array.size(zones) > 0
             qualifiedPoiCount += array.get(zonePoi, i) ? 1 : 0
             float auditMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
             float auditDistance = math.abs(close - auditMid) / math.max(atr, syminfo.mintick)
-            bool withinDistance = debugMode or auditDistance <= (auditKind == 1 ? obDisplayDistanceATR : zoneDisplayDistanceATR)
+            bool withinDistance = debugMode or auditDistance <= (auditKind == 1 ? effObDistanceATR : effZoneDistanceATR)
             if not array.get(zoneVisible, i)
                 hiddenDistanceCount += withinDistance ? 0 : 1
                 hiddenRankingCount += withinDistance ? 1 : 0
@@ -1883,7 +1895,7 @@ if array.size(zones) > 0
                                 overlapsShown := true
                     if not withinDistance
                         hiddenOBFar += 1
-                        hiddenReason := "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(obDisplayDistanceATR, "0") + ")"
+                        hiddenReason := "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(effObDistanceATR, "0") + (protectCandleScale and effObDistanceATR < obDisplayDistanceATR ? ", candle-scale window" : "") + ")"
                     else if overlapsShown
                         hiddenOBOverlap += 1
                         hiddenReason := "overlaps a higher-ranked OB"
@@ -2072,7 +2084,7 @@ if barstate.islast
         string compactBarrier = bias == 1 ? (na(bullPoiBarrier) ? "Open above" : "OH " + str.tostring(bullPoiBarrier, format.mintick)) : bias == -1 ? (na(bearPoiBarrier) ? "Open below" : "SUP " + str.tostring(bearPoiBarrier, format.mintick)) : "Bias pending"
         string barrierLiquidityText = (compactPanel ? compactBarrier : opposingBarrierText) + " · LQ " + str.tostring(relevantLiquidityCount)
 
-        table.cell(dashboard, 0, 0, "APEXVOID v2.2", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.3", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
         table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
