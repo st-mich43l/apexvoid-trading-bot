@@ -132,7 +132,7 @@ string dashboardPositionInput = input.string("Top Right", "Dashboard position", 
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
 
-bool showTradePlan = input.bool(true, "Show trade plan (long / short position boxes)", group = G8)
+bool showTradePlan = input.bool(true, "Track the trade plan (paper results in the panel; nothing is drawn on the chart)", group = G8)
 string tradeZoneKinds = input.string("All qualified POIs", "Entry zones", options = ["All qualified POIs", "Order blocks and supply/demand", "Order blocks only"], group = G8)
 string tradeTrigger = input.string("Rejection or engulfing", "Entry trigger candle", options = ["Rejection or engulfing", "Rejection wick", "Engulfing"], group = G8)
 int tradeTriggerBars = input.int(2, "Trigger window after the first touch (bars)", minval = 0, maxval = 10, group = G8)
@@ -150,9 +150,6 @@ int tradeTimeoutBars = input.int(96, "Close a trade at market after (bars)", min
 float tradeCost = input.float(0.0, "Round-turn cost (price units, deducted from every result)", minval = 0, step = 0.01, group = G8)
 float tradeMaxStopPips = input.float(70.0, "Maximum stop (pips, 0 = off): a stop over the cap refuses, it is never tightened", minval = 0, step = 5, group = G8)
 float tradePipSizeInput = input.float(0.0, "Pip size in price units (0 = auto: 0.1 for XAU, 10 x mintick otherwise)", minval = 0, step = 0.0001, group = G8)
-int tradeHistory = input.int(5, "Trades drawn on the chart (most recent)", minval = 1, maxval = 20, group = G8)
-color tradeProfitColor = input.color(#00C7AE, "Target box color", group = G8)
-color tradeRiskColor = input.color(#F26B85, "Stop box color", group = G8)
 
 int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
@@ -2475,10 +2472,6 @@ var float tradeTarget = na
 var int tradeEntryBar = na
 var string tradeZoneName = ""
 var string tradeTargetName = ""
-var box[] tradeProfitBoxes = array.new_box()
-var box[] tradeRiskBoxes = array.new_box()
-var line[] tradeEntryLines = array.new_line()
-var label[] tradeResultLabels = array.new_label()
 var float[] tradeResults = array.new_float()
 var string[] tradeLog = array.new_string()
 // Trigger bars that opened nothing, by the first failing check: 0 not a POI, 1 wrong premium/discount side, 2 entry too far from the zone, 3 stop outside the ATR
@@ -2600,12 +2593,7 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
         else if timedOut
             outcome := "TIME"
             exitPrice := close
-        int lastBox = array.size(tradeProfitBoxes) - 1
-        if outcome == ""
-            box.set_right(array.get(tradeProfitBoxes, lastBox), bar_index)
-            box.set_right(array.get(tradeRiskBoxes, lastBox), bar_index)
-            line.set_x2(array.get(tradeEntryLines, lastBox), bar_index)
-        else
+        if outcome != ""
             float resultR = (isLongOpen ? exitPrice - tradeEntry : tradeEntry - exitPrice) / riskOpen - tradeCost / riskOpen
             closedNow := true
             tradeTargetHit := outcome == "TP"
@@ -2620,17 +2608,6 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
             array.push(tradeLog, f_time(bar_index - tradeEntryBar <= 790 ? time[bar_index - tradeEntryBar] : time) + " " + (isLongOpen ? "LONG " : "SHORT ") + f_px(tradeEntry) + " → " + outcome + " " + f_tradeResultText(resultR) + " · " + tradeZoneName + " → " + tradeTargetName)
             if array.size(tradeLog) > 12
                 array.shift(tradeLog)
-            box finishedProfit = array.get(tradeProfitBoxes, lastBox)
-            box finishedRisk = array.get(tradeRiskBoxes, lastBox)
-            box.set_right(finishedProfit, bar_index)
-            box.set_right(finishedRisk, bar_index)
-            box.set_bgcolor(finishedProfit, color.new(tradeProfitColor, 90))
-            box.set_bgcolor(finishedRisk, color.new(tradeRiskColor, 90))
-            line.set_x2(array.get(tradeEntryLines, lastBox), bar_index)
-            float labelPrice = outcome == "TIME" ? exitPrice : outcome == "TP" ? tradeTarget : tradeStop
-            bool labelAbove = (outcome == "TP" and isLongOpen) or (outcome == "SL" and not isLongOpen)
-            label resultLabel = label.new(bar_index, labelPrice, f_tradeResultText(resultR) + (outcome == "TIME" ? " time" : ""), xloc = xloc.bar_index, yloc = yloc.price, style = outcome == "TIME" ? label.style_label_center : labelAbove ? label.style_label_down : label.style_label_up, color = color.new(#090D18, 15), textcolor = resultR > 0 ? tradeProfitColor : tradeRiskColor, size = contextTextSize)
-            array.set(tradeResultLabels, lastBox, resultLabel)
             tradeDir := 0
     // 2) Look for a new setup.
     if tradeDir == 0 and not closedNow and bias != 0 and array.size(zones) > 0
@@ -2713,30 +2690,6 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
                 tradeLongOpened := isLong
                 tradeShortOpened := not isLong
                 f_inc(tradeStats, 0)
-                string planText = str.tostring(bestRR, "0.0") + "R"
-                box profitBox = box.new(left = bar_index, top = isLong ? tradeTarget : tradeEntry, right = bar_index + 1, bottom = isLong ? tradeEntry : tradeTarget, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, 100), bgcolor = color.new(tradeProfitColor, 80), text = planText, text_color = color.new(color.white, 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
-                box riskBox = box.new(left = bar_index, top = isLong ? tradeEntry : tradeStop, right = bar_index + 1, bottom = isLong ? tradeStop : tradeEntry, xloc = xloc.bar_index, border_color = color.new(tradeRiskColor, 100), bgcolor = color.new(tradeRiskColor, 80))
-                line entryLine = line.new(bar_index, tradeEntry, bar_index + 1, tradeEntry, xloc = xloc.bar_index, color = color.new(color.white, 35), style = line.style_solid, width = 1)
-                label emptyResult = na
-                array.push(tradeProfitBoxes, profitBox)
-                array.push(tradeRiskBoxes, riskBox)
-                array.push(tradeEntryLines, entryLine)
-                array.push(tradeResultLabels, emptyResult)
-                // Only the most recent trades stay on the chart; statistics keep counting all of them.
-                while array.size(tradeProfitBoxes) > tradeHistory
-                    box.delete(array.shift(tradeProfitBoxes))
-                    box.delete(array.shift(tradeRiskBoxes))
-                    line.delete(array.shift(tradeEntryLines))
-                    label oldResult = array.shift(tradeResultLabels)
-                    if not na(oldResult)
-                        label.delete(oldResult)
-
-if barstate.islast and tradeDir != 0
-    string tradeSide = tradeDir == 1 ? "LONG" : "SHORT"
-    f_regLabel(tradeTarget, "TP", tradeProfitColor, 95, tradeSide + " target " + f_px(tradeTarget) + " · " + tradeTargetName)
-    f_regLabel(tradeEntry, "ENTRY", color.new(color.white, 10), 90, tradeSide + " entry " + f_px(tradeEntry) + " · " + tradeZoneName)
-    f_regLabel(tradeStop, "SL", tradeRiskColor, 95, tradeSide + " stop " + f_px(tradeStop))
-
 // ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------
 // A confirmed pool needs an external swing or two independent tests, so in a clean trend
 // the obvious recent highs/lows are not pools. These two lines mark only the nearest
