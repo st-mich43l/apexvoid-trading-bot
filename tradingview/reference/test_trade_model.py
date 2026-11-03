@@ -175,8 +175,26 @@ def test_stricter_filters_never_add_trades_at_the_same_bars():
   assert len(strict.trades) <= len(base.trades) + 3  # a skipped trade can free the slot for a later one
 
 
+def test_session_boxes_span_each_session_high_low_in_local_time():
+  import datetime
+  day = datetime.datetime(2026, 11, 2, tzinfo=datetime.UTC)
+  t = [int((day + datetime.timedelta(minutes=15 * k)).timestamp()) for k in range(96 * 2)]
+  h = [100 + (k % 7) for k in range(len(t))]
+  l = [90 - (k % 5) for k in range(len(t))]
+  asia = tm.session_boxes(t, h, l, 0, 8)
+  assert len(asia) == 2 and asia[0][0] == t[0] and asia[0][3] == t[31]
+  assert asia[0][1] == max(h[0:32]) and asia[0][2] == min(l[0:32])
+  # London 08:00-16:30 London time equals UTC in November (GMT); New York 08:00-17:00 is 13:00-22:00 UTC (EST).
+  ldn = tm.session_boxes(t, h, l, 8, 16.5, "Europe/London")
+  assert ldn[0][0] == t[32] and ldn[0][3] == t[65]
+  ny = tm.session_boxes(t, h, l, 8, 17, "America/New_York")
+  assert ny[0][0] == t[52] and ny[0][3] == t[87]
+  assert ny[0][0] < ldn[0][3], "London and New York overlap by design"
+
+
 if __name__ == "__main__":
   for name, fn in list(globals().items()):
     if name.startswith("test_"):
       fn()
       print("ok", name)
+

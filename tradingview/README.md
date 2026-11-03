@@ -50,6 +50,7 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
 | `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms (00:00-08:00 UTC by default). When the session ends it becomes the completed range below. |
+| `Asia` / `London` / `New York` boxes | translucent box per session (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
 | `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`Prev Asia H/L` while a session is live). |
 | `HTF H · 240` / `HTF L · 240` | dashed | Optional confirmed higher-timeframe swing levels. |
 
@@ -209,7 +210,7 @@ reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 **04 Fair Value Gaps** — show FVG, minimum gap (0.10 ATR), middle-candle body
 (0.5 ATR), invalidation method.
 
-**05 Asian Session** — show, session hours, timezone, retained ranges.
+**05 Sessions** — Asian show/hours/timezone/retained ranges, `Draw a range box for each session`, London and New York hours and timezones (defined in local time, so daylight saving is handled), retained boxes per session (3), box transparency (90).
 
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
@@ -283,10 +284,11 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
+| 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
+| 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
 | 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
 | 2.9 | Planned RR box for the nearest qualified POI; trade boxes show only R:R |
 | 2.8 | Trade plan: price-action trigger at a qualified POI, next-key-level take-profit, last 5 trades drawn, paper stats |
-| 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
 | 2.10 | Premium/discount and EQ use the dealing range (confirmed swing to the live extreme of the leg), not a stale confirmed swing; trade plan uses the same EQ |
 | 2.7 | One right-edge label column; one BOS per candle; slim premium/discount gauge |
 | 2.6 | BOS/CHoCH lines end on the candle that closed beyond the swing |

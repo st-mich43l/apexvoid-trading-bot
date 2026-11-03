@@ -76,6 +76,29 @@ def asia_ranges(t, h, l):
   return hi, lo, live_hi, live_lo
 
 
+def session_boxes(t, h, l, start_hour, end_hour, tz="UTC"):
+  """Session range boxes as the indicator draws them: (first_bar_time, high, low, last_bar_time)."""
+  import datetime
+  import zoneinfo
+  zone = zoneinfo.ZoneInfo(tz)
+  boxes = []
+  current = None
+  for i in range(len(t)):
+    local = datetime.datetime.fromtimestamp(t[i], datetime.UTC).astimezone(zone)
+    minutes = local.hour * 60 + local.minute
+    inside = start_hour * 60 <= minutes < end_hour * 60
+    if inside and current is None:
+      current = [t[i], h[i], l[i], t[i]]
+    elif inside:
+      current[1], current[2], current[3] = max(current[1], h[i]), min(current[2], l[i]), t[i]
+    elif current is not None:
+      boxes.append(tuple(current))
+      current = None
+  if current is not None:
+    boxes.append(tuple(current))
+  return boxes
+
+
 class TradePlanSim(m.V21Pipeline):
   def __init__(self, bars, p, tp=None, sdp=None):
     super().__init__(bars, p)
