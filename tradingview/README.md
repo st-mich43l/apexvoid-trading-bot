@@ -49,7 +49,8 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
-| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range. |
+| `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms (00:00-08:00 UTC by default). When the session ends it becomes the completed range below. |
+| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`Prev Asia H/L` while a session is live). |
 | `HTF H · 240` / `HTF L · 240` | dashed | Optional confirmed higher-timeframe swing levels. |
 
 Colours are inputs. Liquidity uses a neutral grey on purpose so it cannot be
@@ -110,8 +111,9 @@ the previous-day high/low. Lone internal pivots are never drawn.
 A pool leaves the active state once, so each pool alerts once. A grab never
 changes bias and never creates an entry.
 
-**Asian session.** Only completed sessions are drawn (default 00:00–08:00 UTC,
-configurable). On charts above 5m the session is evaluated on a 5-minute request.
+**Asian session.** The range is drawn on the chart only, live while the session runs and then as
+the completed range (default 00:00–08:00 UTC, configurable); the panel does not show it. The live
+and completed Asian high/low are also key levels for the trade-plan take-profit. On charts above 5m the session is evaluated on a 5-minute request.
 
 **Higher-timeframe context.** Off by default. Uses only the last completed HTF bar
 (shifted by one, `lookahead_on`), so an open HTF candle cannot change chart-timeframe
@@ -163,7 +165,6 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 | Last break | Last external BOS/CHoCH with its age (tooltip: last internal break) |
 | Bull POI / Bear POI | Nearest qualified POI, distance in ATR, `A` actionable / `Q` qualified / `D` distant or tested |
 | BSL / SSL | Nearest active pools (`*` = active but not drawn) |
-| Asia | Live range while the session runs, otherwise the last completed range |
 | Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
 | Trades | Open plan (`LONG open · 1.8R → Swing high`) or paper stats (`11 · 27% · −1.6R`); tooltip has profit factor, drawdown and the last 8 trades |
 
@@ -174,7 +175,6 @@ Full panel (`Standard` / `Expanded`):
 | Market state | External bias (and HTF bias when enabled), market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
 | Structure | Confirmed major high/low (tooltip: when each was confirmed), developing extreme, protected level, last external BOS/CHoCH with its age, **last internal break** with its age, invalidated level (Expanded) |
 | Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
-| Session | Asian high / low of the last **completed** session (label shows its date), **Asian live H / L** while the session is running |
 | Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** (a trailing `*` means that pool is active but not drawn, e.g. beyond the candle-scale window; `LQ n/m` in the barrier row is drawn / active pools) |
 
 The Order Blocks tooltip splits hidden blocks into far / overlapping / budget and
@@ -286,6 +286,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
 | 2.9 | Planned RR box for the nearest qualified POI; trade boxes show only R:R |
 | 2.8 | Trade plan: price-action trigger at a qualified POI, next-key-level take-profit, last 5 trades drawn, paper stats |
+| 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
 | 2.10 | Premium/discount and EQ use the dealing range (confirmed swing to the live extreme of the leg), not a stale confirmed swing; trade plan uses the same EQ |
 | 2.7 | One right-edge label column; one BOS per candle; slim premium/discount gauge |
 | 2.6 | BOS/CHoCH lines end on the candle that closed beyond the swing |
