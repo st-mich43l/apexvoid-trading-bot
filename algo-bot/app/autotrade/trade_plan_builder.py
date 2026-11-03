@@ -32,6 +32,7 @@ from app.autotrade.execution_policy import evaluate_execution_policy
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.card_prices import snap_measured_to_card_prices
 from app.autotrade.risk_leg import plan_risk_leg
+from app.autotrade.strategy_catalog import exposure_lane
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.strategy_taxonomy import is_scalp_strategy
 from app.autotrade.trade_plan import (
@@ -853,6 +854,7 @@ def build_trade_plan_from_strategy_match(
       zone_episode_id=zone_episode_id,
     ),
     sizing=sizing,
+    exposure_lane=exposure_lane(str(match.strategy or "")),
   )
   # Convert contract validation failures into TradePlanBuildRejected so the
   # V8 publish path always releases thesis/zone claims (TradePlanError used

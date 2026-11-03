@@ -1038,6 +1038,9 @@ class TradePlan:
   provenance: TradePlanProvenance
   version: int = TRADE_PLAN_VERSION
   sizing: TradePlanSizing | None = None
+  # "scalp" | "standard"; None = absent = "standard" (plans published before the
+  # field existed). Read by the cTrader opposite-exposure fence only.
+  exposure_lane: str | None = None
 
   def to_dict(self) -> dict:
     payload = {
@@ -1060,6 +1063,8 @@ class TradePlan:
     }
     if self.sizing is not None:
       payload["sizing"] = self.sizing.to_dict()
+    if self.exposure_lane is not None:
+      payload["exposure_lane"] = self.exposure_lane
     return payload
 
   @classmethod
@@ -1096,6 +1101,9 @@ class TradePlan:
       provenance=TradePlanProvenance.from_dict(data.get("provenance") or {}),
       sizing=(
         None if sizing_data is None else TradePlanSizing.from_dict(sizing_data)
+      ),
+      exposure_lane=(
+        None if data.get("exposure_lane") is None else str(data["exposure_lane"])
       ),
     )
     plan.validate()
