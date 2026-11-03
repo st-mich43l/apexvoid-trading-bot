@@ -6,15 +6,17 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
-// The retracement band of the shock leg the first pullback is traded in, and the depth beyond which the pullback is a reversal. They are the
-// definition of the thesis (the 50 to 61.8 percent retracement), not tunable coefficients.
+// The retracement band of the shock leg the first pullback is traded in, the depth beyond which the pullback is a reversal, and the extension of the leg
+// used as the second choice of target. They are the definition of the thesis (the 50 to 61.8 percent retracement), not tunable coefficients.
 const (
 	RetracementNear = 0.5
 	RetracementFar  = 0.618
 	RetracementDead = 0.786
+	// ExtensionTarget is the 1.272 extension of the leg: the second choice of target when the shock extreme leaves too little room.
+	ExtensionTarget = 1.272
 )
 
-// Config is the Shock Retest v1 technical contract. Every coefficient is read from the strategy's parameters (config/analysis.yml); none has a code
+// Config is the Shock Retest v2 technical contract. Every coefficient is read from the strategy's parameters (config/analysis.yml); none has a code
 // default. pip_size and the stop-budget keys are per-instrument facts the engine injects.
 type Config struct {
 	ATRLength, ATRWindowBars int

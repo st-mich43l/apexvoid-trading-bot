@@ -22,7 +22,7 @@ import (
 const ID strategy.StrategyID = "shock_retest"
 
 // Version is the Shock Retest technical contract version.
-const Version = "v1"
+const Version = "v2"
 
 type Strategy struct {
 	strategyutil.RefusalCounter
@@ -151,8 +151,8 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		SetupKey: fmt.Sprintf("shock_retest:%s:%d:%d:%d", side, setup.OriginTime, setup.ShockTime, setup.ConfirmedAt),
 		Symbol:   ctx.Symbol, Direction: setup.Direction,
 		EntryLow: setup.EntryLow, EntryHigh: setup.EntryHigh,
-		Invalidation: setup.Stop, InvalidationLabel: "shock_origin_lost",
-		Target: setup.Target, TargetLabel: TargetShockExtreme,
+		Invalidation: setup.Stop, InvalidationLabel: "retest_extreme_lost",
+		Target: setup.Target, TargetLabel: setup.TargetKind,
 		Evidence: evidence,
 		Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 		FormedAt: setup.ShockTime, ConfirmedAt: setup.ConfirmedAt,
