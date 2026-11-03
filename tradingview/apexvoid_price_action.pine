@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.10", "AV PA v2.10", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.11", "AV PA v2.11", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -88,7 +88,7 @@ float minGapATR = input.float(0.10, "Minimum gap size (ATR)", minval = 0.01, max
 float fvgImpulseATR = input.float(0.50, "Middle candle minimum body (ATR)", minval = 0, maxval = 3, step = 0.05, group = G4)
 string fvgMitigationMethod = input.string("Wick", "FVG invalidation method", options = ["Wick", "Close", "Midpoint"], group = G4)
 
-bool showAsia = input.bool(true, "Draw last completed Asian ranges", group = G5)
+bool showAsia = input.bool(true, "Draw Asian ranges (live while the session runs, then the completed range)", group = G5)
 string asiaSession = input.session("0000-0800", "Asian session hours", group = G5)
 string asiaTZ = input.string("Etc/UTC", "Asian session timezone", options = ["Etc/UTC", "Asia/Tokyo", "Asia/Singapore", "Asia/Ho_Chi_Minh", "Asia/Hong_Kong", "America/New_York"], group = G5)
 int asiaHistory = input.int(3, "Retained Asian ranges", minval = 1, maxval = 12, group = G5)
@@ -2124,16 +2124,17 @@ f_asiaSnapshot() =>
         completedHigh := workingHigh
         completedLow := workingLow
         completedStart := workingStart
-    [completedHigh, completedLow, completedStart, inside ? workingHigh : na, inside ? workingLow : na]
+    [completedHigh, completedLow, completedStart, inside ? workingHigh : na, inside ? workingLow : na, inside ? workingStart : na]
 
-[nativeAsiaHigh, nativeAsiaLow, nativeAsiaStart, nativeAsiaLiveHigh, nativeAsiaLiveLow] = f_asiaSnapshot()
-[fiveAsiaHigh, fiveAsiaLow, fiveAsiaStart, fiveAsiaLiveHigh, fiveAsiaLiveLow] = request.security(syminfo.tickerid, "5", f_asiaSnapshot(), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[nativeAsiaHigh, nativeAsiaLow, nativeAsiaStart, nativeAsiaLiveHigh, nativeAsiaLiveLow, nativeAsiaLiveStart] = f_asiaSnapshot()
+[fiveAsiaHigh, fiveAsiaLow, fiveAsiaStart, fiveAsiaLiveHigh, fiveAsiaLiveLow, fiveAsiaLiveStart] = request.security(syminfo.tickerid, "5", f_asiaSnapshot(), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
 bool nativeSession = chartSecs <= 300
 float asiaHigh = nativeSession ? nativeAsiaHigh : fiveAsiaHigh
 float asiaLow = nativeSession ? nativeAsiaLow : fiveAsiaLow
 int asiaStart = nativeSession ? nativeAsiaStart : fiveAsiaStart
 float asiaLiveHigh = nativeSession ? nativeAsiaLiveHigh : fiveAsiaLiveHigh
 float asiaLiveLow = nativeSession ? nativeAsiaLiveLow : fiveAsiaLiveLow
+int asiaLiveStart = nativeSession ? nativeAsiaLiveStart : fiveAsiaLiveStart
 bool newAsianRange = barstate.isconfirmed and not na(asiaStart) and (na(asiaStart[1]) or asiaStart != asiaStart[1])
 
 var line[] asiaHighLines = array.new_line()
@@ -2149,13 +2150,37 @@ if showAsia and newAsianRange
         line.delete(array.shift(asiaHighLines))
         line.delete(array.shift(asiaLowLines))
 
+// Live Asian range: drawn while the session runs and updated on every bar, so the chart shows the
+// range as it forms; when the session ends it is replaced by the completed range above.
+bool liveAsiaOn = showAsia and not na(asiaLiveHigh) and not na(asiaLiveLow) and not na(asiaLiveStart)
+var line asiaLiveHighLine = na
+var line asiaLiveLowLine = na
+if liveAsiaOn
+    int liveEnd = na(time_close) ? time : time_close
+    if na(asiaLiveHighLine)
+        asiaLiveHighLine := line.new(asiaLiveStart, asiaLiveHigh, liveEnd, asiaLiveHigh, xloc = xloc.bar_time, color = asiaColor, style = line.style_solid, width = 1)
+        asiaLiveLowLine := line.new(asiaLiveStart, asiaLiveLow, liveEnd, asiaLiveLow, xloc = xloc.bar_time, color = asiaColor, style = line.style_solid, width = 1)
+    else
+        line.set_xy1(asiaLiveHighLine, asiaLiveStart, asiaLiveHigh)
+        line.set_xy2(asiaLiveHighLine, liveEnd, asiaLiveHigh)
+        line.set_xy1(asiaLiveLowLine, asiaLiveStart, asiaLiveLow)
+        line.set_xy2(asiaLiveLowLine, liveEnd, asiaLiveLow)
+else if not na(asiaLiveHighLine)
+    line.delete(asiaLiveHighLine)
+    line.delete(asiaLiveLowLine)
+    asiaLiveHighLine := na
+    asiaLiveLowLine := na
+
 if showAsia and array.size(asiaHighLines) > 0
     int currentEnd = na(time_close) ? time : time_close
     line.set_x2(array.get(asiaHighLines, array.size(asiaHighLines) - 1), currentEnd)
     line.set_x2(array.get(asiaLowLines, array.size(asiaLowLines) - 1), currentEnd)
     if barstate.islast
-        f_regLabel(asiaHigh, "Asia H", asiaColor, 50, "Asian high " + str.tostring(asiaHigh, format.mintick) + " (last completed session)")
-        f_regLabel(asiaLow, "Asia L", asiaColor, 50, "Asian low " + str.tostring(asiaLow, format.mintick) + " (last completed session)")
+        f_regLabel(asiaHigh, liveAsiaOn ? "Prev Asia H" : "Asia H", asiaColor, 50, "Asian high " + str.tostring(asiaHigh, format.mintick) + " (last completed session)")
+        f_regLabel(asiaLow, liveAsiaOn ? "Prev Asia L" : "Asia L", asiaColor, 50, "Asian low " + str.tostring(asiaLow, format.mintick) + " (last completed session)")
+if barstate.islast and liveAsiaOn
+    f_regLabel(asiaLiveHigh, "Asia H · live", asiaColor, 52, "Asian high so far " + str.tostring(asiaLiveHigh, format.mintick) + " (session in progress)")
+    f_regLabel(asiaLiveLow, "Asia L · live", asiaColor, 52, "Asian low so far " + str.tostring(asiaLiveLow, format.mintick) + " (session in progress)")
 
 // ------- TRADE PLAN (PRICE-ACTION ENTRY AT A QUALIFIED POI, TARGET AT A KEY LEVEL) -------
 // Rules, evaluated only on closed bars:
@@ -2219,6 +2244,8 @@ f_keyTarget(bool isLong, float entry, float risk, bool enforceMin) =>
     array.push(names, isLong ? "Prev swing high" : "Prev swing low")
     array.push(levels, isLong ? asiaHigh : asiaLow)
     array.push(names, isLong ? "Asia H" : "Asia L")
+    array.push(levels, isLong ? asiaLiveHigh : asiaLiveLow)
+    array.push(names, isLong ? "Asia H live" : "Asia L live")
     array.push(levels, dealingMid)
     array.push(names, "EQ")
     if array.size(zones) > 0
@@ -2655,7 +2682,6 @@ if barstate.isfirst
     table.merge_cells(dashboard, 0, 1, 1, 1)
     table.merge_cells(dashboard, 0, 5, 1, 5)
     table.merge_cells(dashboard, 0, 12, 1, 12)
-    table.merge_cells(dashboard, 0, 17, 1, 17)
     table.merge_cells(dashboard, 0, 21, 1, 21)
 
 // Panel drawing is a function so the main script body stays within TradingView's size limit.
@@ -2685,8 +2711,6 @@ f_renderPanel() =>
         string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
         string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + str.tostring(array.get(sdStats, 0)) + " · duplicate " + str.tostring(array.get(sdStats, 5)) + " · retired by cap " + str.tostring(array.get(sdStats, 6)) + "\nRejected: weak departure " + str.tostring(array.get(sdStats, 1)) + " · no impulse " + str.tostring(array.get(sdStats, 2)) + " · closed back " + str.tostring(array.get(sdStats, 3)) + " · pattern filter " + str.tostring(array.get(sdStats, 4)) + "\n" + sdLastText
         string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + str.tostring(nearestBslPrice, format.mintick) + (nearestBslShown ? "" : "*")) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + str.tostring(nearestSslPrice, format.mintick) + (nearestSslShown ? "" : "*"))
-        string asiaHighText = na(asiaHigh) ? "Waiting for close" : str.tostring(asiaHigh, format.mintick)
-        string asiaLowText = na(asiaLow) ? "Waiting for close" : str.tostring(asiaLow, format.mintick)
         string auditText = "POI " + str.tostring(qualifiedPoiCount) + " · far " + str.tostring(hiddenDistanceCount) + " · ranked " + str.tostring(hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount) + " · filter O/F/S " + str.tostring(array.get(obStats, 1)) + "/" + str.tostring(rejectedFVGCount) + "/" + str.tostring(rejectedSDCount)
         string auditShort = "POI " + str.tostring(qualifiedPoiCount) + " · hidden " + str.tostring(hiddenDistanceCount + hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount)
         bool compactPanel = dashboardDensity == "Compact"
@@ -2709,8 +2733,6 @@ f_renderPanel() =>
         color rangeTone = rangeText == "Premium" or rangeText == "Above range" ? supplyColor : rangeText == "Discount" or rangeText == "Below range" ? demandColor : color.silver
         string breakAge = na(lastBreakTime) ? "" : " · " + f_age(lastBreakTime)
         string internalCompact = na(lastInternalBreakTime) ? "none" : lastInternalBreak + " · " + f_age(lastInternalBreakTime)
-        bool liveAsia = not na(asiaLiveHigh) and not na(asiaLiveLow)
-        string asiaCompact = liveAsia ? "Live " + str.tostring(asiaLiveHigh, format.mintick) + " / " + str.tostring(asiaLiveLow, format.mintick) : asiaHighText + " / " + asiaLowText
         string zonesCompact = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + " · S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " · FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG)
         string dealingHighText = na(dealingHigh) ? "—" : str.tostring(dealingHigh, format.mintick)
         string dealingLowText = na(dealingLow) ? "—" : str.tostring(dealingLow, format.mintick)
@@ -2728,7 +2750,7 @@ f_renderPanel() =>
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
         if compactPanel
-            table.cell(dashboard, 0, 0, "APEXVOID v2.10", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.11", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 2, "Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 2, biasText + htfBiasSuffix, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Directional leg: " + legText)
@@ -2748,14 +2770,12 @@ f_renderPanel() =>
             table.cell(dashboard, 1, 14, bearPoiDisplay, text_color = bearColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = nearestBearPoiText + "\nA actionable · Q qualified · D distant or tested")
             table.cell(dashboard, 0, 16, "BSL / SSL", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 16, liqRowText, text_color = liquidityColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = liquidityText + "\n" + barrierLiquidityText)
-            table.cell(dashboard, 0, 18, "Asia", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 18, asiaCompact, text_color = asiaColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = (liveAsia ? "Session in progress. " : "Last completed session. ") + "Completed: " + asiaHighText + " / " + asiaLowText)
             table.cell(dashboard, 0, 22, "Zones", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 0, 27, "Trades", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 27, tradeSummary, text_color = tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = tradeTip)
             table.cell(dashboard, 1, 22, zonesCompact, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
         else
-            table.cell(dashboard, 0, 0, "APEXVOID v2.10", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.11", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
             table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
@@ -2795,17 +2815,6 @@ f_renderPanel() =>
             table.cell(dashboard, 1, 15, poiStatusDisplay == "" ? "No qualified POI" : poiStatusDisplay, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = poiContextText + "\n" + zoneText + "\nA = actionable; D = distant, tested, or wrong side of price")
             table.cell(dashboard, 0, 16, "Barrier / Liquidity", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 16, barrierLiquidityText, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = liquidityText)
-            table.cell(dashboard, 0, 17, "SESSION", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
-            string asiaDate = na(asiaStart) ? "" : " " + str.format_time(asiaStart, "MM-dd", asiaTZ)
-            string asiaNote = na(asiaStart) ? "No completed Asian session yet" : "Last COMPLETED session started " + str.format_time(asiaStart, "MM-dd HH:mm", asiaTZ) + " (" + asiaTZ + "). The session in progress is on the live row."
-            bool asiaLiveActive = not na(asiaLiveHigh) and not na(asiaLiveLow)
-            table.cell(dashboard, 0, 18, compactPanel ? "Asian H / L" + asiaDate : "Asian High" + asiaDate, height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 18, compactPanel ? asiaHighText + " / " + asiaLowText : asiaHighText, text_color = asiaColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = asiaNote)
-            table.cell(dashboard, 0, 20, "Asian Live H / L", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 20, asiaLiveActive ? str.tostring(asiaLiveHigh, format.mintick) + " / " + str.tostring(asiaLiveLow, format.mintick) : "Session closed", text_color = asiaLiveActive ? asiaColor : color.new(color.silver, 30), text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Range of the Asian session in progress so far; it becomes the completed range above when the session ends.")
-            if not compactPanel
-                table.cell(dashboard, 0, 19, "Asian Low", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-                table.cell(dashboard, 1, 19, asiaLowText, text_color = asiaColor, text_size = dashboardValueSize, text_halign = text.align_right)
             table.cell(dashboard, 0, 21, "BLOCKS & LIQUIDITY", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
             table.cell(dashboard, 0, 22, "Order Blocks", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 22, obSummary, text_color = activeOB == 0 ? color.new(color.silver, 18) : color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = obTooltip)
