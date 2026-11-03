@@ -399,3 +399,9 @@ def v213_trade(**overrides):
   kw = dict(ring_obstacles=True, max_stop_pips=70.0, asia_mode="engine")
   kw.update(overrides)
   return TradeParams(**kw)
+
+
+def plan_off(tp, atr):
+  """v2.14: the pip cap is smaller than the smallest possible stop on this frame (minimum stop plus buffer, in ATR): nothing can open and the panel says so.
+  Mirrors the Pine `Plan off` text of the trades row (the cap is in pips, the stop in ATR of the chart frame)."""
+  return tp.max_stop_pips > 0 and tp.max_stop_pips * tp.pip_size < (tp.min_stop_atr + tp.stop_buffer_atr) * atr

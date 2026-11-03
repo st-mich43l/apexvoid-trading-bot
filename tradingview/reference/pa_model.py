@@ -93,6 +93,9 @@ class Params:
   fvg_engine_body_ratio: float = 0.5
   composite_independent: bool = False  # Composite needs components whose origin differs by more than 3 bars
   swept_before_impulse: bool = False   # Swept imbalance = a sweep within 6 bars before the gap's first candle
+  # v2.14 switches (trailing protected level only; every default reproduces v2.13 exactly, `v214()` turns them on)
+  protected_hl: bool = False           # promote the higher low that made a confirmed higher high; a protected-level CHoCH takes the last internal pivot, not the leg start
+  dev_follows_protected: bool = False  # a protected level that ratchets in the bias direction puts the developing leg (DEV, phase) on the bias side
 
 
 @dataclass
@@ -153,6 +156,8 @@ class Structure:
     self.sweeps = []              # (bar, side) of every pool / external sweep; side = the reversal it supports
     self.trk = {}                 # displacement-mode zigzag trackers
     self.pub_lags = []            # (publication bar - swing bar) of every external swing
+    self.i_low_ring, self.i_high_ring = [], []   # v2.14: the last 8 internal pivot lows / highs as (bar, price), in detection order
+    self.ratchet = 0              # v2.14: +1 / -1 when the protected level ratcheted toward price on this bar in the bias direction
 
   def first_close_beyond(self, i, swing_bar, level, up):
     """Bar of the first close beyond the swing (the candle a BOS/CHoCH line must end on).
@@ -290,8 +295,28 @@ class Structure:
     else:
       self.cand_low, self.cand_low_bar = nxt["val"], nxt["bar"]
 
+  @staticmethod
+  def ring_pick(ring, after_bar, upto_bar):
+    """The most recent internal pivot (bar, price) with after_bar < bar <= upto_bar, or None."""
+    for bar, price in reversed(ring):
+      if after_bar < bar <= upto_bar:
+        return bar, price
+    return None
+
   def _protect_on_swing(self, side):
     """A newly published swing while the bias agrees refreshes the protected level: legacy overwrites it, trailing only moves it toward price."""
+    if self.p.protected_mode == "trailing" and self.p.protected_hl:
+      # v2.14: a confirmed higher high in a bull bias (lower low in a bear bias) promotes the higher low (lower high) that produced it
+      if side == -1 and self.bias == 1 and self.protected_low_bar is not None and self.last_high_bar is not None:
+        hit = self.ring_pick(self.i_low_ring, self.protected_low_bar, self.last_high_bar - 1)
+        if hit and (isna(self.protected_low) or hit[1] > self.protected_low):
+          self.protected_low, self.protected_low_bar = hit[1], hit[0]
+          self.ratchet = 1
+      if side == 1 and self.bias == -1 and self.protected_high_bar is not None and self.last_low_bar is not None:
+        hit = self.ring_pick(self.i_high_ring, self.protected_high_bar, self.last_low_bar - 1)
+        if hit and (isna(self.protected_high) or hit[1] < self.protected_high):
+          self.protected_high, self.protected_high_bar = hit[1], hit[0]
+          self.ratchet = -1
     if side == 1 and self.bias == 1:
       if self.p.protected_mode != "trailing" or isna(self.protected_low) or self.last_swing_low > self.protected_low:
         self.protected_low, self.protected_low_bar = self.last_swing_low, self.last_low_bar
@@ -304,6 +329,7 @@ class Structure:
     p = self.p
     atr = self.atr[i]
     self.cur = i
+    self.ratchet = 0
     ev = dict(new_ih=False, new_il=False, ih=NAN, il=NAN, new_major_high=False, new_major_low=False,
               major_high_price=NAN, major_low_price=NAN, major_high_bar=None, major_low_bar=None,
               up_break=False, down_break=False, choch=False, i_up_break=False, i_down_break=False,
@@ -320,9 +346,11 @@ class Structure:
     if not isna(ih):
       ev["new_ih"], ev["ih"] = True, ih
       self.li_high, self.li_high_bar, self.i_high_broken = ih, i - il_, False
+      self.i_high_ring = (self.i_high_ring + [(i - il_, ih)])[-8:]
     if not isna(il):
       ev["new_il"], ev["il"] = True, il
       self.li_low, self.li_low_bar, self.i_low_broken = il, i - il_, False
+      self.i_low_ring = (self.i_low_ring + [(i - il_, il)])[-8:]
     if isna(atr):
       return ev
     c = self.c[i]
@@ -338,6 +366,7 @@ class Structure:
           lo = min(seg)
           if isna(self.protected_low) or lo > self.protected_low:
             self.protected_low, self.protected_low_bar = lo, self.li_high_bar + 1 + seg.index(lo)
+            self.ratchet = 1
       self.i_high_broken = True
       self.i_bias = 1
     if not isna(self.li_low) and not self.i_low_broken and c < self.li_low - atr * p.break_buffer:
@@ -350,6 +379,7 @@ class Structure:
           hi = max(seg)
           if isna(self.protected_high) or hi < self.protected_high:
             self.protected_high, self.protected_high_bar = hi, self.li_low_bar + 1 + seg.index(hi)
+            self.ratchet = -1
       self.i_low_broken = True
       self.i_bias = -1
     # external candidate state machine
@@ -395,6 +425,16 @@ class Structure:
       self.dev_high, self.dev_high_bar = self.h[i], i
     if self.dev_dir == -1 and (isna(self.dev_low) or self.l[i] < self.dev_low):
       self.dev_low, self.dev_low_bar = self.l[i], i
+    if self.ratchet and p.dev_follows_protected:
+      # v2.14: the developing leg is the protected leg: the extreme since the protected bar, the same value the dealing range uses
+      if self.ratchet == 1 and not isna(self.protected_low) and self.protected_low_bar is not None:
+        seg = self.h[self.protected_low_bar:i + 1]
+        self.dev_dir, self.dev_high, self.dev_high_bar = 1, max(seg), self.protected_low_bar + seg.index(max(seg))
+        self.dev_low, self.dev_low_bar = NAN, None
+      if self.ratchet == -1 and not isna(self.protected_high) and self.protected_high_bar is not None:
+        seg = self.l[self.protected_high_bar:i + 1]
+        self.dev_dir, self.dev_low, self.dev_low_bar = -1, min(seg), self.protected_high_bar + seg.index(min(seg))
+        self.dev_high, self.dev_high_bar = NAN, None
     thr = atr * (p.break_buffer + p.confirm_atr)
     if p.swept_before_impulse:
       # external sweeps (events only): a wick beyond the unbroken swing that closes back inside, once per swing
@@ -427,8 +467,12 @@ class Structure:
       self.dev_dir, self.dev_high, self.dev_high_bar, self.dev_low, self.dev_low_bar = 1, self.h[i], i, NAN, None
       self.last_break_bar, self.last_break_choch = i, choch
       if prot_up:
-        seg = self.l[lbar:i + 1]
-        self.protected_low, self.protected_low_bar = min(seg), lbar + seg.index(min(seg))
+        hit = self.ring_pick(self.i_low_ring, lbar, ev["break_bar"]) if p.protected_hl else None
+        if hit:
+          self.protected_low, self.protected_low_bar = hit[1], hit[0]
+        else:
+          seg = self.l[lbar:i + 1]
+          self.protected_low, self.protected_low_bar = min(seg), lbar + seg.index(min(seg))
       elif p.protected_mode != "trailing" or prev_bias != 1 or isna(self.protected_low) or self.last_swing_low > self.protected_low:
         self.protected_low, self.protected_low_bar = self.last_swing_low, self.last_low_bar
     elif prot_down or down:
@@ -444,8 +488,12 @@ class Structure:
       self.dev_dir, self.dev_low, self.dev_low_bar, self.dev_high, self.dev_high_bar = -1, self.l[i], i, NAN, None
       self.last_break_bar, self.last_break_choch = i, choch
       if prot_down:
-        seg = self.h[lbar:i + 1]
-        self.protected_high, self.protected_high_bar = max(seg), lbar + seg.index(max(seg))
+        hit = self.ring_pick(self.i_high_ring, lbar, ev["break_bar"]) if p.protected_hl else None
+        if hit:
+          self.protected_high, self.protected_high_bar = hit[1], hit[0]
+        else:
+          seg = self.h[lbar:i + 1]
+          self.protected_high, self.protected_high_bar = max(seg), lbar + seg.index(max(seg))
       elif p.protected_mode != "trailing" or prev_bias != -1 or isna(self.protected_high) or self.last_swing_high < self.protected_high:
         self.protected_high, self.protected_high_bar = self.last_swing_high, self.last_high_bar
     return ev
@@ -1365,3 +1413,30 @@ def v213(chart_secs=300, **overrides):
             fvg_def="engine", composite_independent=True, swept_before_impulse=True)
   kw.update(overrides)
   return P21(chart_secs=chart_secs, **kw)
+
+
+def v214(chart_secs=300, **overrides):
+  """Params of the v2.14 indicator: v2.13 plus the higher-low promotion, the internal-pivot CHoCH reset and the developing leg that follows the protected level."""
+  kw = dict(protected_hl=True, dev_follows_protected=True)
+  kw.update(overrides)
+  return v213(chart_secs, **kw)
+
+
+def phase_text(s):
+  """The panel's Market Phase after the last stepped bar (mirrors phaseText in the Pine file)."""
+  i, bias, close = s.cur, s.bias, s.c[s.cur]
+  hi, lo = s.last_swing_high, s.last_swing_low
+  transition = s.last_break_choch and s.last_break_bar is not None and i - s.last_break_bar <= s.external_len * 2
+  expansion = (bias == 1 and not isna(hi) and close > hi) or (bias == -1 and not isna(lo) and close < lo)
+  in_range = (not transition) and (not expansion) and not isna(hi) and not isna(lo) and lo <= close <= hi
+  if transition:
+    return "Structural transition"
+  if expansion:
+    return "Bull expansion" if bias == 1 else "Bear expansion"
+  if bias != 0 and s.dev_dir == -bias:
+    return "Counter-trend rebound" if bias == -1 else "Counter-trend pullback"
+  if in_range:
+    return "Range / consolidation"
+  if bias == 0:
+    return "Range / discovery"
+  return "Corrective pullback" if s.i_bias == -bias else "Trend / balance"

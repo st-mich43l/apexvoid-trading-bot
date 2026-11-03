@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.13", "AV PA v2.13", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.14", "AV PA v2.14", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -16,7 +16,7 @@ const string G3 = "03  Order Blocks & Zones"
 const string G4 = "04  Fair Value Gaps"
 const string G5 = "05  Sessions"
 const string G6 = "06  Visuals & Performance"
-const string G7 = "07  Higher-Timeframe Context"
+const string G7 = "07  Multi-Timeframe Structure"
 const string G8 = "08  Trade Plan"
 
 string displayProfile = input.string("Balanced — Recommended", "Display profile", options = ["Balanced — Recommended", "Minimal", "Detailed", "Debug"], group = G6)
@@ -133,10 +133,8 @@ string dashboardPositionInput = input.string("Top Right", "Dashboard position", 
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
 
-bool showHTFContext = input.bool(false, "Show confirmed HTF context", group = G7)
-string htfTimeframe = input.timeframe("240", "Higher timeframe", group = G7)
-int htfSwingLength = input.int(12, "HTF swing confirmation bars", minval = 3, maxval = 50, group = G7)
-bool drawHTFLevels = input.bool(false, "Draw HTF swing levels", group = G7)
+string mtfFrame1 = input.timeframe("15", "MTF frame 1", group = G7)
+string mtfFrame2 = input.timeframe("60", "MTF frame 2", group = G7)
 
 bool showTradePlan = input.bool(true, "Show trade plan (long / short position boxes)", group = G8)
 bool showTradePreview = input.bool(true, "Show a planned RR box for the nearest qualified POI before it triggers", group = G8)
@@ -483,6 +481,7 @@ var int internalBias = 0
 
 bool newMajorHigh = false
 bool newMajorLow = false
+int protectedRatchet = 0   // v2.14: +1 / -1 on a bar where the trailing protected level moved toward price in the bias direction
 float majorHighPrice = na
 float majorLowPrice = na
 int majorHighBar = na
@@ -498,6 +497,8 @@ var float[] dispHighTr = array.new_float(4, na)
 var float[] dispPubTr = array.new_float(4, na)
 var float[] dispOut = array.new_float(5, 0.0)   // [kind (-1 low published, +1 high published, 0 none), swing bar, swing price, counter price, counter bar]
 var float[] extOut = array.new_float(2, na)     // [value, bar] of f_extremeSince
+var float[] ilRing = array.new_float(0)         // v2.14: the last 8 internal pivot lows as [bar, price] pairs; ihRing the highs
+var float[] ihRing = array.new_float(0)
 
 f_trkUpdate(float[] tr, bool isLow) =>
     float price = isLow ? low : high
@@ -588,6 +589,28 @@ f_extremeSince(int fromBar, bool wantHigh, bool inclusive) =>
                 array.set(extOut, 1, (bar_index - k) * 1.0)
     0
 
+f_ringPush(float[] ring, int bar, float price) =>
+    array.push(ring, bar * 1.0)
+    array.push(ring, price)
+    if array.size(ring) > 16
+        array.shift(ring)
+        array.shift(ring)
+    0
+
+// The most recent ring pivot with afterBar < bar <= uptoBar, in extOut (empty when none).
+f_ringPick(float[] ring, int afterBar, int uptoBar) =>
+    array.set(extOut, 0, float(na))
+    array.set(extOut, 1, float(na))
+    int k = array.size(ring) - 2
+    while k >= 0
+        float b = array.get(ring, k)
+        if b > afterBar and b <= uptoBar
+            array.set(extOut, 0, array.get(ring, k + 1))
+            array.set(extOut, 1, b)
+            break
+        k -= 2
+    0
+
 f_swingText(float price, float prev, float tol, string first, string eq, string up, string down) =>
     na(prev) ? first : math.abs(price - prev) <= tol ? eq : price > prev ? up : down
 
@@ -610,6 +633,7 @@ if newInternalHigh
     previousInternalHigh := lastInternalHigh
     lastInternalHigh := internalHigh
     lastInternalHighBar := bar_index - internalLength
+    f_ringPush(ihRing, lastInternalHighBar, internalHigh)
     internalHighBroken := false
     if showInternal
         float tolerance = nz(atr[internalLength], atr) * equalTolerance
@@ -620,6 +644,7 @@ if newInternalLow
     previousInternalLow := lastInternalLow
     lastInternalLow := internalLow
     lastInternalLowBar := bar_index - internalLength
+    f_ringPush(ilRing, lastInternalLowBar, internalLow)
     internalLowBroken := false
     if showInternal
         float tolerance = nz(atr[internalLength], atr) * equalTolerance
@@ -646,6 +671,7 @@ if internalUpBreak
         if not na(trailLow) and (na(protectedLow) or trailLow > protectedLow)
             protectedLow := trailLow
             protectedLowBar := int(array.get(extOut, 1))
+            protectedRatchet := 1
     internalHighBroken := true
     internalBias := 1
 if internalDownBreak
@@ -661,6 +687,7 @@ if internalDownBreak
         if not na(trailHigh) and (na(protectedHigh) or trailHigh < protectedHigh)
             protectedHigh := trailHigh
             protectedHighBar := int(array.get(extOut, 1))
+            protectedRatchet := -1
     internalLowBroken := true
     internalBias := -1
 
@@ -801,6 +828,34 @@ if newMajorHigh and bias == -1 and (not trailingProtected or na(protectedHigh) o
 if newMajorLow and bias == 1 and (not trailingProtected or na(protectedLow) or lastSwingLow > protectedLow)
     protectedLow := lastSwingLow
     protectedLowBar := lastLowBar
+// v2.14: a confirmed higher high (lower low) promotes the internal higher low (lower high) that produced it, between the protected bar and the swing.
+if trailingProtected and newMajorHigh and bias == 1 and not na(protectedLowBar)
+    f_ringPick(ilRing, protectedLowBar, lastHighBar - 1)
+    if not na(array.get(extOut, 0)) and (na(protectedLow) or array.get(extOut, 0) > protectedLow)
+        protectedLow := array.get(extOut, 0)
+        protectedLowBar := int(array.get(extOut, 1))
+        protectedRatchet := 1
+if trailingProtected and newMajorLow and bias == -1 and not na(protectedHighBar)
+    f_ringPick(ihRing, protectedHighBar, lastLowBar - 1)
+    if not na(array.get(extOut, 0)) and (na(protectedHigh) or array.get(extOut, 0) < protectedHigh)
+        protectedHigh := array.get(extOut, 0)
+        protectedHighBar := int(array.get(extOut, 1))
+        protectedRatchet := -1
+// v2.14: a protected level that moved toward price puts the developing leg on the bias side: the extreme since the protected bar (the dealing range's own value).
+if protectedRatchet == 1 and not na(protectedLowBar)
+    f_extremeSince(protectedLowBar, true, true)
+    developingDirection := 1
+    developingHigh := array.get(extOut, 0)
+    developingHighBar := int(array.get(extOut, 1))
+    developingLow := na
+    developingLowBar := na
+if protectedRatchet == -1 and not na(protectedHighBar)
+    f_extremeSince(protectedHighBar, false, true)
+    developingDirection := -1
+    developingLow := array.get(extOut, 0)
+    developingLowBar := int(array.get(extOut, 1))
+    developingHigh := na
+    developingHighBar := na
 
 float breakThreshold = atr * (breakBuffer + confirmATR)
 bool swingUpBreak = barstate.isconfirmed and not na(lastSwingHigh) and not highBroken and close > lastSwingHigh + breakThreshold
@@ -864,8 +919,10 @@ if upBreak
     lastBreakBar := bar_index
     lastBreakTime := time[bar_index - upBreakBar]
     if protectedUpBreak
-        // the protected low of the new bull leg is the lowest low since the protected high that was just taken
-        f_extremeSince(protectedHighBar, false, true)
+        // v2.14: the protected low of the new bull leg is the last internal pivot low between the protected high and the break; without one, the lowest low since it
+        f_ringPick(ilRing, protectedHighBar, upBreakBar)
+        if na(array.get(extOut, 0))
+            f_extremeSince(protectedHighBar, false, true)
         protectedLow := array.get(extOut, 0)
         protectedLowBar := int(array.get(extOut, 1))
     else if not trailingProtected or previousBias != 1 or na(protectedLow) or lastSwingLow > protectedLow
@@ -894,7 +951,9 @@ else if downBreak
     lastBreakBar := bar_index
     lastBreakTime := time[bar_index - downBreakBar]
     if protectedDownBreak
-        f_extremeSince(protectedLowBar, true, true)
+        f_ringPick(ihRing, protectedLowBar, downBreakBar)
+        if na(array.get(extOut, 0))
+            f_extremeSince(protectedLowBar, true, true)
         protectedHigh := array.get(extOut, 0)
         protectedHighBar := int(array.get(extOut, 1))
     else if not trailingProtected or previousBias != -1 or na(protectedHigh) or lastSwingHigh < protectedHigh
@@ -2257,71 +2316,20 @@ if array.size(zones) > 0
                     else
                         hiddenOBBudget += 1
 
-// ------- OPTIONAL CONFIRMED HIGHER-TIMEFRAME CONTEXT -------
-// The returned values are shifted by one HTF bar and requested with
-// lookahead_on. This exposes only the last completed HTF bar on every chart bar
-// and prevents an open HTF candle from changing chart-timeframe decisions.
-f_confirmedHtfStructure() =>
-    float pivotHigh = ta.pivothigh(high, htfSwingLength, htfSwingLength)
-    float pivotLow = ta.pivotlow(low, htfSwingLength, htfSwingLength)
-    var float confirmedHigh = na
-    var float confirmedLow = na
-    var int confirmedBias = 0
-    if barstate.isconfirmed and not na(pivotHigh)
-        confirmedHigh := pivotHigh
-    if barstate.isconfirmed and not na(pivotLow)
-        confirmedLow := pivotLow
-    if barstate.isconfirmed and not na(confirmedHigh) and close > confirmedHigh
-        confirmedBias := 1
-    else if barstate.isconfirmed and not na(confirmedLow) and close < confirmedLow
-        confirmedBias := -1
-    [confirmedHigh[1], confirmedLow[1], confirmedBias[1]]
+// ------- MULTI-TIMEFRAME STRUCTURE -------
+// v2.14: the chart's OWN bias and protected level evaluated on the other frames, so a frame shown here is what that frame's own chart shows (same algorithm, same
+// Auto lengths). [1] + lookahead_on: only the last completed bar of that frame is read, so nothing repaints. A frame at or below the chart's is not shown.
+[mtfBias1, mtfProt1] = request.security(syminfo.tickerid, mtfFrame1, [bias[1], activeProtected[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+[mtfBias2, mtfProt2] = request.security(syminfo.tickerid, mtfFrame2, [bias[1], activeProtected[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
+bool mtfOn1 = timeframe.in_seconds(mtfFrame1) > chartSecs
+bool mtfOn2 = timeframe.in_seconds(mtfFrame2) > chartSecs
 
-int selectedHtfSecs = timeframe.in_seconds(htfTimeframe)
-bool validHtfSelection = selectedHtfSecs > chartSecs
-[confirmedHtfHigh, confirmedHtfLow, confirmedHtfBias] = request.security(syminfo.tickerid, htfTimeframe, f_confirmedHtfStructure(), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
-string confirmedHtfText = not showHTFContext ? "Off" : not validHtfSelection ? "Select higher TF" : confirmedHtfBias == 1 ? "Bull" : confirmedHtfBias == -1 ? "Bear" : "Neutral"
+f_tfName(string tf) =>
+    int secs = timeframe.in_seconds(tf)
+    secs < 3600 ? "M" + str.tostring(int(secs / 60)) : secs < 86400 ? "H" + str.tostring(int(secs / 3600)) : "D"
 
-var line htfHighLine = na
-var line htfLowLine = na
-var label htfHighTag = na
-var label htfLowTag = na
-if barstate.islast
-    bool renderHtfLevels = showHTFContext and drawHTFLevels and validHtfSelection
-    if renderHtfLevels and not na(confirmedHtfHigh)
-        int htfLeft = math.max(0, bar_index - htfSwingLength * 2)
-        if na(htfHighLine)
-            htfHighLine := line.new(htfLeft, confirmedHtfHigh, bar_index + 5, confirmedHtfHigh, xloc = xloc.bar_index, color = color.new(bearColor, 64), style = line.style_dashed, width = 1)
-            htfHighTag := label.new(bar_index + 5, confirmedHtfHigh, "HTF H · " + htfTimeframe, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 45), textcolor = color.new(bearColor, 15), size = contextTextSize)
-        else
-            line.set_xy1(htfHighLine, htfLeft, confirmedHtfHigh)
-            line.set_xy2(htfHighLine, bar_index + 5, confirmedHtfHigh)
-            label.set_xy(htfHighTag, bar_index + 5, confirmedHtfHigh)
-            label.set_text(htfHighTag, "HTF H · " + htfTimeframe)
-    else
-        if not na(htfHighLine)
-            line.delete(htfHighLine)
-            htfHighLine := na
-        if not na(htfHighTag)
-            label.delete(htfHighTag)
-            htfHighTag := na
-    if renderHtfLevels and not na(confirmedHtfLow)
-        int htfLeft = math.max(0, bar_index - htfSwingLength * 2)
-        if na(htfLowLine)
-            htfLowLine := line.new(htfLeft, confirmedHtfLow, bar_index + 5, confirmedHtfLow, xloc = xloc.bar_index, color = color.new(bullColor, 64), style = line.style_dashed, width = 1)
-            htfLowTag := label.new(bar_index + 5, confirmedHtfLow, "HTF L · " + htfTimeframe, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 45), textcolor = color.new(bullColor, 15), size = contextTextSize)
-        else
-            line.set_xy1(htfLowLine, htfLeft, confirmedHtfLow)
-            line.set_xy2(htfLowLine, bar_index + 5, confirmedHtfLow)
-            label.set_xy(htfLowTag, bar_index + 5, confirmedHtfLow)
-            label.set_text(htfLowTag, "HTF L · " + htfTimeframe)
-    else
-        if not na(htfLowLine)
-            line.delete(htfLowLine)
-            htfLowLine := na
-        if not na(htfLowTag)
-            label.delete(htfLowTag)
-            htfLowTag := na
+f_mtfText(string tf, int b, float prot) =>
+    f_tfName(tf) + (b == 1 ? " Bull" : b == -1 ? " Bear" : " —") + (na(prot) ? "" : " " + f_px(prot))
 
 // ------- ASIAN HIGH/LOW -------
 // Session state is evaluated natively on <=5m, and inside a 5m security context
@@ -3042,7 +3050,8 @@ f_renderPanel() =>
         string auditShort = "POI " + str.tostring(qualifiedPoiCount) + " · hidden " + str.tostring(hiddenDistanceCount + hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount)
         bool compactPanel = dashboardDensity == "Compact"
         bool expandedPanel = dashboardDensity == "Expanded"
-        string htfBiasSuffix = showHTFContext ? " · HTF " + confirmedHtfText : ""
+        string htfBiasSuffix = mtfOn1 and mtfOn2 and bias != 0 and mtfBias1 == mtfBias2 and mtfBias1 == -bias ? " · chart against " + f_tfName(mtfFrame1) + "+" + f_tfName(mtfFrame2) : ""
+        int mtfRow = compactPanel ? 7 : 17
         bool nearestBullIsActionable = actionableBullPoi and math.abs(nearestBullPoi - nearestActionableBullPoi) <= syminfo.mintick
         bool nearestBearIsActionable = actionableBearPoi and math.abs(nearestBearPoi - nearestActionableBearPoi) <= syminfo.mintick
         string bullPoiDisplay = na(nearestBullPoi) ? "—" : compactPanel ? f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D") : nearestBullPoiText
@@ -3071,14 +3080,14 @@ f_renderPanel() =>
                 tradeWins += array.get(tradeResults, t) > 0 ? 1 : 0
         float tradeProfitFactor = tradeGrossLossR > 0 ? tradeGrossWinR / tradeGrossLossR : na
         float openRR = tradeDir != 0 ? math.abs(tradeTarget - tradeEntry) / math.max(math.abs(tradeEntry - tradeStop), syminfo.mintick) : na
-        string tradeSummary = tradeDir != 0 ? (tradeDir == 1 ? "LONG" : "SHORT") + " open · " + str.tostring(openRR, "0.0") + "R → " + tradeTargetName : not showTradePlan ? "Off" : closedTrades == 0 ? "No trades yet" : str.tostring(closedTrades) + " · " + str.tostring(tradeWins * 100.0 / closedTrades, "0") + "% · " + f_tradeResultText(tradeEquityR)
+        string tradeSummary = tradeDir != 0 ? (tradeDir == 1 ? "LONG" : "SHORT") + " open · " + str.tostring(openRR, "0.0") + "R → " + tradeTargetName : not showTradePlan ? "Off" : tradeMaxStopPips > 0 and tradeMaxStopPips * tradePipPrice < (tradeMinStopATR + tradeStopBufferATR) * atr ? "Plan off: " + str.tostring(tradeMaxStopPips, "0") + "-pip cap < min stop on this frame (use M5/M15)" : closedTrades == 0 ? "No trades yet" : str.tostring(closedTrades) + " · " + str.tostring(tradeWins * 100.0 / closedTrades, "0") + "% · " + f_tradeResultText(tradeEquityR)
         string tradeTip = "Paper results of the trade plan on closed bars of the loaded history. No orders are sent; this is not a performance claim.\n" + "Closed " + str.tostring(closedTrades) + " · target " + f_cnt(tradeStats, 1) + " · stop " + f_cnt(tradeStats, 2) + " · timeout " + f_cnt(tradeStats, 3) + "\n" + "Total " + f_tradeResultText(tradeEquityR) + " · profit factor " + (na(tradeProfitFactor) ? "n/a" : str.tostring(tradeProfitFactor, "0.00")) + " · max drawdown " + str.tostring(tradeMaxDrawdownR, "0.0") + "R\n" + "Skipped: no key-level target " + f_cnt(tradeStats, 4) + " · stop outside limits " + f_cnt(tradeStats, 5)
         // Refusal histogram: every trigger bar that opened nothing, counted once under the first check that failed.
         tradeTip += "\nTrigger bars that opened nothing: not a POI " + f_cnt(tradeRefusals, 0) + " · wrong premium/discount side " + f_cnt(tradeRefusals, 1) + " · entry too far " + f_cnt(tradeRefusals, 2) + " · stop outside limits " + f_cnt(tradeRefusals, 3) + " · stop over pip cap " + f_cnt(tradeRefusals, 4) + " · no target room " + f_cnt(tradeRefusals, 5) + " · no zone touched " + f_cnt(tradeRefusals, 6)
         if array.size(tradeLog) > 0
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.13", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.14", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         if compactPanel
             f_key(2, "Bias")
@@ -3154,6 +3163,12 @@ f_renderPanel() =>
             if expandedPanel
                 f_key(26, "Zone Audit")
                 f_val(26, auditShort, color.new(color.white, 12), auditText)
+        if mtfOn1
+            f_key(mtfRow, "MTF")
+            f_val(mtfRow, f_mtfText(mtfFrame1, mtfBias1, mtfProt1), mtfBias1 == 1 ? bullColor : mtfBias1 == -1 ? bearColor : color.silver, "Bias and protected level of the " + f_tfName(mtfFrame1) + " chart at its last closed bar")
+        if mtfOn2
+            f_key(mtfRow + (mtfOn1 ? 1 : 0), mtfOn1 ? "" : "MTF")
+            f_val(mtfRow + (mtfOn1 ? 1 : 0), f_mtfText(mtfFrame2, mtfBias2, mtfProt2), mtfBias2 == 1 ? bullColor : mtfBias2 == -1 ? bearColor : color.silver, "Bias and protected level of the " + f_tfName(mtfFrame2) + " chart at its last closed bar")
     0
 
 if barstate.islast
