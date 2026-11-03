@@ -99,6 +99,11 @@ type Config struct {
 	StopBudget strategyutil.StopBudget
 }
 
+// LevelSource replaces the levels Key Level reads (the frame's SwingLevels under the profit_week contract) for this strategy's evaluation only: the frame itself, and
+// every other strategy that reads its levels, is untouched. seed is the latest closed bar's open time, so a source that draws random levels is deterministic.
+// It is a measurement hook (replaycapture.Options.KeyLevelSource, docs/strategies/keylevel-edge-source.md) with no production caller; an architecture test enforces that.
+type LevelSource func(frame *context.LegacyFrame, seed int64) []techniquezone.Level
+
 // Strategy is KeyLevelStrategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
@@ -106,7 +111,11 @@ type Strategy struct {
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
+	levelSource LevelSource
 }
+
+// UseLevelSource installs a LevelSource. Test-only: nothing in production calls it.
+func (s *Strategy) UseLevelSource(source LevelSource) { s.levelSource = source }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if cfg.ID != ID {
@@ -464,6 +473,9 @@ func (s *Strategy) structure(d *strategyutil.LegacyDetector) ([]techniquezone.Le
 	levels, zones := d.Frame.Levels, d.Frame.Zones
 	if s.cfg.Contract == contractProfitWeek {
 		levels, zones = d.Frame.SwingLevels, d.Frame.ContractZones
+	}
+	if s.levelSource != nil && len(d.Frame.Bars) > 0 {
+		levels = s.levelSource(d.Frame, d.Frame.Bars[len(d.Frame.Bars)-1].Time)
 	}
 	ordered := append([]techniquezone.Level(nil), levels...)
 	sort.SliceStable(ordered, func(i, j int) bool {
