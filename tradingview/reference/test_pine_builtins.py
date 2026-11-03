@@ -78,6 +78,8 @@ VETTED = {
     "line.set_xy1",
     "line.set_xy2",
     "math.abs",
+    "math.ceil",
+    "math.floor",
     "math.max",
     "math.min",
     "math.round",
@@ -90,6 +92,7 @@ VETTED = {
     "str.substring",
     "str.tostring",
     "ta.atr",
+    "ta.sma",
     "ta.highest",
     "ta.lowest",
     "ta.pivothigh",
@@ -238,6 +241,15 @@ def test_text_formatting_is_only_ever_a_constant():
   assert "set_text_formatting" not in code
 
 
+def test_key_level_loops_are_guarded_against_empty_arrays():
+  # a Pine `for i = 0 to n - 1` with n = 0 runs twice (0, -1): every loop over an array that can be empty needs its guard
+  code = _code()
+  body = code[code.index("f_keyLevels() =>"):code.index("f_keyLevels()", code.index("f_keyLevels() =>") + 20)]
+  for guard in ("array.size(keyRing) > 0", "n > 0", "array.size(pr) > 0", "array.size(gap) > 0", "array.size(zones) > 0", "array.size(rlY) > 0"):
+    assert guard in body, guard
+  assert "|80|35|60|62|45|" in body, "the stronger-object priorities (PROT, EQ, pools, zones) the layer yields to"
+
+
 def test_script_stays_under_the_compiled_token_budget():
   n = source_tokens(open(PINE, encoding="utf-8").read())
   assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
@@ -248,6 +260,7 @@ if __name__ == "__main__":
   test_no_request_security_of_the_charts_own_structure_series()
   test_the_indicator_call_does_not_declare_no_scale()
   test_annotations_use_the_gutter_and_three_tiers()
+  test_key_level_loops_are_guarded_against_empty_arrays()
   test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range()
   test_prices_print_two_decimals_for_gold_like_symbols_only()
   test_every_right_column_label_carries_a_category_and_a_tier()
