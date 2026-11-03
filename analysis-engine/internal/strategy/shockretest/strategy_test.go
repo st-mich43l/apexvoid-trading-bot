@@ -11,7 +11,7 @@ import (
 
 func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 	bars, idx := bullishShockRetest()
-	got := newStrategy(t, workable).Evaluate(marketContext(bars, "up"))
+	got := newStrategy(t, nil).Evaluate(marketContext(bars, "up"))
 	if len(got) != 1 {
 		t.Fatalf("candidates = %d", len(got))
 	}
@@ -33,7 +33,7 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 			t.Errorf("evidence %q missing: %v", code, c.Evidence)
 		}
 	}
-	if c.Targets[0].Price.Label != TargetShockExtreme {
+	if c.Targets[0].Price.Label != TargetShockExtreme || c.Invalidation.Label != "retest_extreme_lost" {
 		t.Fatalf("targets = %+v", c.Targets)
 	}
 	f := c.DetectorConfluence.Factors
@@ -52,7 +52,7 @@ func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
 
 func TestAgainstTheBiasTheSetupIsBelowTheConfluenceFloor(t *testing.T) {
 	bars, _ := bullishShockRetest()
-	analysis, candidates := newStrategy(t, workable).(*Strategy).Analyze(marketContext(bars, "down"))
+	analysis, candidates := newStrategy(t, nil).(*Strategy).Analyze(marketContext(bars, "down"))
 	if len(candidates) != 0 || !hasReason(analysis, ReasonConfluenceBelowFloor) {
 		t.Fatalf("%d candidates, %+v", len(candidates), analysis.Rejections)
 	}
@@ -60,7 +60,7 @@ func TestAgainstTheBiasTheSetupIsBelowTheConfluenceFloor(t *testing.T) {
 
 // No measured fact, no factor.
 func TestEveryConfluenceFactorIsMeasuredNeverDefaulted(t *testing.T) {
-	s := newStrategy(t, workable).(*Strategy)
+	s := newStrategy(t, nil).(*Strategy)
 	if got := s.factors(&analysiscontext.MarketContext{Symbol: "XAU"}, Setup{Direction: market.Buy}); got != (confluence.Factors{}) {
 		t.Fatalf("a setup with no measured fact scored %+v", got)
 	}
@@ -75,7 +75,7 @@ func TestCandidateIdentityIsStableAcrossFreshEvaluations(t *testing.T) {
 			last := series[len(series)-1]
 			series = append(series, market.Candle{Time: last.Time + 300, Open: 4106.4, High: 4106.8, Low: 4106.1, Close: 4106.4})
 		}
-		got := newStrategy(t, workable).Evaluate(marketContext(series, "up"))
+		got := newStrategy(t, nil).Evaluate(marketContext(series, "up"))
 		if len(got) != 1 {
 			t.Fatalf("%d extra candles: %d candidates", extra, len(got))
 		}
@@ -84,5 +84,15 @@ func TestCandidateIdentityIsStableAcrossFreshEvaluations(t *testing.T) {
 		} else if got[0].ID != first {
 			t.Fatalf("the same technical event changed identity: %s vs %s", first, got[0].ID)
 		}
+	}
+}
+
+func TestTheExtensionTargetLabelReachesTheCandidate(t *testing.T) {
+	got := newStrategy(t, map[string]any{"execution_stop_min_pips": 10.0, "execution_stop_max_pips": 70.0}).Evaluate(marketContext(deepWickRetest(), "up"))
+	if len(got) != 1 || got[0].Targets[0].Price.Label != TargetShockExtension1272 {
+		t.Fatalf("candidates %+v", got)
+	}
+	if err := got[0].Validate(); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 )
 
 func TestCandidateCarriesTheTechnicalContractAndPassesValidation(t *testing.T) {
@@ -106,4 +107,31 @@ func TestCandidateIdentityIsStableAcrossFreshEvaluations(t *testing.T) {
 			t.Fatalf("the same technical event changed identity: %s vs %s", first, got[0].ID)
 		}
 	}
+}
+
+// strategy_refused{strategy="asia_range", reason}: every refused episode is counted once, by its reason, however many closes re-read it.
+func TestEveryRefusalIsCountedOnceByItsReason(t *testing.T) {
+	m5, m15, _ := bullishRaid()
+	s := newStrategy(t, map[string]any{"minimum_range_atr": 4.0, "maximum_range_atr": 8.0}).(*Strategy) // 3.75 ATR: too narrow
+	ctx := marketContext(m5, m15, "up")
+	for i := 0; i < 3; i++ {
+		s.Evaluate(ctx)
+	}
+	got := s.TakeRefusals()
+	if got[strategy.Refusal{Reason: ReasonRangeTooNarrow, Timeframe: market.M5}] != 1 || len(got) != 1 {
+		t.Fatalf("refusals = %v, want one range_too_narrow", got)
+	}
+	if again := s.TakeRefusals(); len(again) != 0 {
+		t.Fatalf("the counts must reset: %v", again)
+	}
+	// a stop above the cap is a refusal too (the stop budget count stays as well)
+	capped := newStrategy(t, map[string]any{"execution_stop_max_pips": 10.0, "execution_stop_min_pips": 5.0}).(*Strategy)
+	capped.Evaluate(ctx)
+	if n := capped.TakeRefusals()[strategy.Refusal{Reason: ReasonRiskExceedsEnvelope, Timeframe: market.M5}]; n != 1 {
+		t.Fatalf("risk_exceeds_execution_envelope counted %d times", n)
+	}
+}
+
+func TestTheStrategyReportsItsRefusalsToTheRegistry(t *testing.T) {
+	var _ strategy.RefusalReporter = (*Strategy)(nil)
 }

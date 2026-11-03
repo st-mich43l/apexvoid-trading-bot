@@ -27,7 +27,7 @@ func TestStrategyConfigsFromConfigEnablesTheCompleteCatalogForShadow(t *testing.
 	versions := map[string]string{
 		"key_level": "v6", "supply": "v9", "demand": "v7", "order_block": "v9", "fvg": "v9", "flip_zone": "v5", "trendline": "v6",
 		"crt": "v3", "impulse_pullback": "v3", "break_retest": "v3", "ifvg": "v3", "confluence_zone": "v3",
-		"round_number": "v1", "asia_range": "v1", "shock_retest": "v1",
+		"round_number": "v1", "asia_range": "v1", "shock_retest": "v2",
 	}
 	for _, cfg := range configs {
 		want := versions[string(cfg.ID)]

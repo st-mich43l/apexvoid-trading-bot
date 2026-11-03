@@ -722,9 +722,10 @@ analysis:
       expiry_hours: 4
       session_momentum_minimum_atr: 1.0
     shock_retest:
-      # v1 (docs/strategies/shock_retest.md): the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the
-      # shock direction (Awartani, Hussain and Virk 2024; Cai, Cheung and Wong 2001). Scoped to XAU.
-      version: v1
+      # v2 (docs/strategies/shock_retest.md): the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the
+      # shock direction (Awartani, Hussain and Virk 2024; Cai, Cheung and Wong 2001). The stop sits behind the retest's own rejection extreme (v1 put it behind the
+      # leg origin, which made the reward:risk below 1 by construction); the target is the shock extreme, else the 1.272 extension of the leg. Scoped to XAU.
+      version: v2
       enabled: true
       symbols: [XAU]
       atr_length: 14

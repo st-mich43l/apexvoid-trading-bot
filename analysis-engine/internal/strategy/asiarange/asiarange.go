@@ -9,6 +9,7 @@ package asiarange
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -30,7 +31,16 @@ type Strategy struct {
 	detector    strategyutil.LegacyDetectorSettings
 	budget      strategyutil.StopBudget
 	fingerprint string
+
+	// Every refusal of a real episode is counted once, by its reason, for the engine's strategy_refused counter (strategy.RefusalReporter). The same refused
+	// episode is read again on every following M5 close until it ages out of the window, so it is deduplicated by its identity.
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
+	counted  map[string]struct{}
 }
+
+// maxCountedRefusals bounds the dedupe memory: a refusal is only re-read for a few hours, so older identities are never seen again.
+const maxCountedRefusals = 4096
 
 func New(c strategy.Config) (strategy.Strategy, error) {
 	if c.ID != ID {
@@ -59,8 +69,42 @@ func (s *Strategy) ID() strategy.StrategyID { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
-	_, candidates := s.Analyze(ctx)
+	analysis, candidates := s.Analyze(ctx)
+	s.countRefusals(analysis.Rejections)
 	return candidates
+}
+
+// countRefusals records each distinct refused episode once under its reason, so strategy_refused{strategy="asia_range", reason} says why real Asia range
+// days did not become opportunities (range too narrow or wide, no sweep, no structure shift, stale, stop over the cap, no target room, edge locked, ...).
+func (s *Strategy) countRefusals(rejections []Rejection) {
+	if len(rejections) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	if s.counted == nil || len(s.counted) > maxCountedRefusals {
+		s.counted = map[string]struct{}{}
+	}
+	for _, r := range rejections {
+		id := fmt.Sprintf("%s|%s|%s|%s|%d", r.Reason, r.Kind, r.Edge, r.Direction, r.At)
+		if _, seen := s.counted[id]; seen {
+			continue
+		}
+		s.counted[id] = struct{}{}
+		s.refusals[strategy.Refusal{Reason: r.Reason, Timeframe: market.M5}]++
+	}
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
 }
 
 // anchor is the most recent finalized ASIA_H / ASIA_L pair of the session read, usable from its AvailableAt (London open).

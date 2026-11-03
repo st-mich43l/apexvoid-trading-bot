@@ -29,7 +29,7 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `confluence_zone` | v3 | M5 | two or more genuinely independent structures on one price region, measured rejection | contract tests, `test/czreplay` | [confluence_zone](confluence_zone.md), [spec](confluence-zone-v3-technical-spec.md) |
 | `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | contract tests, real-capture smoke | [round_number](round_number.md) |
 | `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | contract tests, real-capture smoke | [asia_range](asia_range.md) |
-| `shock_retest` | v1 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction (see the open issue in the spec) | contract tests, real-capture smoke | [shock_retest](shock_retest.md) |
+| `shock_retest` | v2 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction; stop behind the retest extreme, target the shock extreme or its 1.272 extension | contract tests, real-capture smoke | [shock_retest](shock_retest.md) |
 | `impulse_pullback` | v3 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | `test/scalpparity` (synthetic M1 only) | [impulse_pullback](impulse_pullback.md) |
 
 "Golden" means the decisions and entry reproduce the frozen Python publisher on
