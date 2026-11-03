@@ -156,11 +156,16 @@ instrument_packs:
     policy: xau_fixed_4r_v1
     # Autonomous opposite-direction exposure is allowed only when the incoming
     # entry is at least minimum_separation_pips (inclusive) from EVERY
-    # existing opposite group. pip_size comes from contract.pip_size.
+    # existing opposite group; an incoming SCALP-lane trade (the Algo Bot
+    # catalog's m1_scalp trait, TradePlan exposure_lane) needs only
+    # scalp_minimum_separation_pips (<= minimum_separation_pips). Owner decision
+    # 2026-11-03: scalps are not held to the normal trades' opposite rule.
+    # pip_size comes from contract.pip_size.
     exposure:
       opposite_position:
         allowed: true
         minimum_separation_pips: 150
+        scalp_minimum_separation_pips: 80
       # Same-direction exposure is bounded exactly as for FX: one group at a time per
       # direction (pending, submitted, partially or fully open; a group stays counted after
       # TP1/breakeven), whatever the strategy or scalp status. A scale-in ladder is ONE group,

@@ -698,6 +698,23 @@ def lookup_profile(strategy: str) -> StrategyProfile | None:
   return STRATEGY_BY_NAME.get(resolved.canonical if resolved else key)
 
 
+SCALP_LANE = "scalp"
+STANDARD_LANE = "standard"
+
+
+def exposure_lane(strategy: str) -> str:
+  """Exposure lane of a strategy: ``"scalp"`` when its catalog profile carries the
+  ``m1_scalp`` trait, else ``"standard"`` (also for a name outside the catalog).
+
+  The single definition of "scalp" for the opposite-position separation and the
+  opposing-structure bypass; no other list of scalp names exists. The match is on
+  the canonical catalog name only (like ``names_with``): an alias or a retired
+  spelling is not trusted to relax a rule, it falls to the stricter standard lane.
+  """
+  profile = STRATEGY_BY_NAME.get(str(strategy or "").strip())
+  return SCALP_LANE if profile is not None and profile.m1_scalp else STANDARD_LANE
+
+
 def names_with(trait: str) -> frozenset[str]:
   """Strategy names whose profile sets the boolean flag trait."""
   return frozenset(p.name for p in STRATEGY_PROFILES if getattr(p, trait))

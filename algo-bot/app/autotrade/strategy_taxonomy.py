@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.autotrade.strategy_catalog import names_with
+from app.autotrade.strategy_catalog import SCALP_LANE, exposure_lane, names_with
 
 REACTION_STRATEGIES = names_with("reaction")
 ZONE_STRATEGIES = names_with("zone")
@@ -90,8 +90,12 @@ def bypasses_opposing_structure_gates(
   full_take_profit_pips: int | float | None = None,
   strategy_mode: str | None = None,
 ) -> bool:
-  """Scalp may ignore HTF map opposing when native room owns the trade."""
-  if is_m1_scalp_strategy(name):
+  """Scalp may ignore HTF map opposing when native room owns the trade.
+
+  The M1 scalp lane is the catalog's (``exposure_lane``); ``strategy_mode`` scalp
+  modes and range scalps with a full take-profit stay for retained events.
+  """
+  if exposure_lane(name) == SCALP_LANE:
     return True
   if str(strategy_mode or "").casefold() in _M1_SCALP_MODES:
     return True

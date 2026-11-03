@@ -4,8 +4,10 @@ When an order is already active **on the same instrument**:
 - opposite direction is decided by ``evaluate_opposite_exposure`` from the
   instrument-owned ``exposure.opposite_position`` policy (config/
   instruments.yml): FX never allows it, XAU allows it only at >= 150 pips
-  from every existing opposite group. Strategy, family and scalp status are
-  never consulted.
+  from every existing opposite group, or >= 80 pips when the incoming trade is
+  in the scalp lane (the catalog's ``m1_scalp`` trait, see
+  ``strategy_catalog.exposure_lane``). Strategy name and family are never
+  consulted; the lane is the only strategy-derived input.
 - same-direction non-scalp adds are allowed only after every open same-dir
   plan has **booked** TP2 (``HighestBookedTargetIndex >= 1``) **and** the new
   candidate is Tier A; size stays ``same_direction_size_fraction`` (default 60%)
@@ -405,6 +407,7 @@ def _exposures_for_candidate(
 
 FX_OPPOSITE_NOT_ALLOWED = "fx_opposite_position_not_allowed"
 XAU_OPPOSITE_TOO_CLOSE = "xau_opposite_position_too_close"
+XAU_SCALP_OPPOSITE_TOO_CLOSE = "xau_scalp_opposite_too_close"
 XAU_OPPOSITE_SEPARATION_SATISFIED = "xau_opposite_position_separation_satisfied"
 
 
@@ -431,13 +434,17 @@ def evaluate_opposite_exposure(
   incoming_entry_reference: float,
   active_exposures: list[ActiveExposure],
   instrument_policy: OppositePositionPolicy,
+  lane: str = "standard",
 ) -> OppositeExposureDecision:
   """Decide whether an autonomous opposite-direction group may be opened.
 
   ``instrument_policy`` is the only classifier: ``allowed=False`` (FX) blocks
-  any opposite exposure at any distance; ``allowed=True`` (XAU) requires the
-  incoming entry to be at least ``minimum_separation_pips`` (inclusive) from
-  EVERY opposite group. The incoming reference is the executable quote; each
+  any opposite exposure at any distance, whatever the lane; ``allowed=True``
+  (XAU) requires the incoming entry to be at least ``minimum_separation_pips``
+  (inclusive) from EVERY opposite group, or ``scalp_minimum_separation_pips``
+  when the INCOMING trade is in the scalp lane (the catalog's ``m1_scalp``
+  trait; the lane of the existing groups does not matter). The incoming
+  reference is the executable quote; each
   existing exposure contributes its recorded/broker fill price once filled,
   or its planned entry reference while pending (see ``_payload_entry_price``).
   """
@@ -446,6 +453,7 @@ def evaluate_opposite_exposure(
   canonical = normalize_symbol(symbol)
   if wanted is None or entry is None or entry <= 0 or canonical is None:
     return OppositeExposureDecision(allowed=True)
+  scalp_lane = str(lane or "standard").casefold() == "scalp"
   opposite = "SELL" if wanted == "BUY" else "BUY"
   opposing = [
     item
@@ -454,6 +462,14 @@ def evaluate_opposite_exposure(
   ]
   if not opposing:
     return OppositeExposureDecision(allowed=True)
+
+  standard_minimum = float(instrument_policy.minimum_separation_pips or 0.0)
+  scalp_minimum = instrument_policy.scalp_minimum_separation_pips
+  applied_minimum = (
+    min(float(scalp_minimum), standard_minimum)
+    if scalp_lane and scalp_minimum is not None and standard_minimum > 0
+    else standard_minimum
+  )
 
   def _measured(active: ActiveExposure) -> dict[str, Any]:
     price, pips = _pips_between(entry, active.entry_price, instrument_policy.pip_size)
@@ -466,6 +482,9 @@ def evaluate_opposite_exposure(
       "distance_price": price,
       "distance_pips": pips,
       "minimum_separation_pips": instrument_policy.minimum_separation_pips,
+      "scalp_minimum_separation_pips": instrument_policy.scalp_minimum_separation_pips,
+      "lane": "scalp" if scalp_lane else "standard",
+      "separation_applied_pips": applied_minimum,
       "existing_plan_id": active.plan_id,
       "existing_group_id": active.group_id,
       "existing_position_id": active.position_id,
@@ -490,7 +509,7 @@ def evaluate_opposite_exposure(
       measured=measured,
     )
 
-  minimum = float(instrument_policy.minimum_separation_pips or 0.0)
+  minimum = applied_minimum
   nearest = min(
     opposing,
     key=lambda item: abs(Decimal(str(entry)) - Decimal(str(item.entry_price))),
@@ -499,9 +518,9 @@ def evaluate_opposite_exposure(
   if Decimal(str(measured["distance_pips"])) < Decimal(str(minimum)):
     return OppositeExposureDecision(
       allowed=False,
-      reason_code=XAU_OPPOSITE_TOO_CLOSE,
+      reason_code=XAU_SCALP_OPPOSITE_TOO_CLOSE if scalp_lane else XAU_OPPOSITE_TOO_CLOSE,
       message=(
-        f"{canonical} {wanted} entry {entry:.2f} is "
+        f"{canonical} {wanted} {'scalp ' if scalp_lane else ''}entry {entry:.2f} is "
         f"{measured['distance_pips']:.1f} pips from active {nearest.direction} "
         f"@ {nearest.entry_price:.2f}; require >= {minimum:.0f} pips"
       ),
@@ -512,7 +531,7 @@ def evaluate_opposite_exposure(
     reason_code=XAU_OPPOSITE_SEPARATION_SATISFIED,
     message=(
       f"{canonical} {wanted} entry is {measured['distance_pips']:.1f} pips from "
-      f"every opposite group (min {minimum:.0f})"
+      f"every opposite group (min {minimum:.0f}, {'scalp' if scalp_lane else 'standard'} lane)"
     ),
     measured=measured,
   )
