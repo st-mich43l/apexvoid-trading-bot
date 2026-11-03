@@ -82,6 +82,17 @@ class Params:
   actionable_poi_distance_atr: float = 3.0
   poi_structure_window: int = 96
   zone_max_age: int = 600
+  # v2.13 switches. Every default reproduces v2.12 exactly; `v213()` below turns them all on.
+  structure_mode: str = "legacy"       # "legacy" | "displacement": publish a swing on displacement, not on the next opposite pivot
+  protected_mode: str = "legacy"       # "legacy" | "trailing": protected level ratchets with internal BOS, CHoCH on it
+  range_mode: str = "v212"             # "v212" | "protected": dealing range follows the protected leg
+  fresh_sd: bool = False               # swing supply/demand: scan the bars since the swing before drawing it
+  ob_break_anchor: bool = False        # order block built from the real (back-dated) break bar
+  fvg_def: str = "v212"                # "v212" | "loose" (v2.12 keys + body direction) | "engine" (fvg v9 contract)
+  fvg_engine_atr: float = 0.5          # engine fvg v9 contract: gap and middle body in ATR, body/range ratio (same for every instrument)
+  fvg_engine_body_ratio: float = 0.5
+  composite_independent: bool = False  # Composite needs components whose origin differs by more than 3 bars
+  swept_before_impulse: bool = False   # Swept imbalance = a sweep within 6 bars before the gap's first candle
 
 
 @dataclass
@@ -135,6 +146,13 @@ class Structure:
     self.i_bias = 0
     self.last_sweep_side = 0
     self.last_sweep_bar = None
+    # v2.13
+    self.cur = -1
+    self.protected_high_bar = self.protected_low_bar = None
+    self.ext_high_swept = self.ext_low_swept = False
+    self.sweeps = []              # (bar, side) of every pool / external sweep; side = the reversal it supports
+    self.trk = {}                 # displacement-mode zigzag trackers
+    self.pub_lags = []            # (publication bar - swing bar) of every external swing
 
   def first_close_beyond(self, i, swing_bar, level, up):
     """Bar of the first close beyond the swing (the candle a BOS/CHoCH line must end on).
@@ -152,6 +170,16 @@ class Structure:
   def dealing_range(self):
     """Premium/discount range (mirrors dealingHigh/dealingLow in the Pine file): the confirmed swing
     range extended to the live extreme of the current leg. Returns (high, low, mid) or (nan, nan, nan)."""
+    if self.p.range_mode == "protected" and self.cur >= 0:
+      # v2.13: the range of the protected leg. Bear: protected high down to the lowest low since it; bull: mirror. Price is always inside.
+      if self.bias == -1 and not isna(self.protected_high) and self.protected_high_bar is not None:
+        lo = min(self.l[self.protected_high_bar:self.cur + 1])
+        if self.protected_high > lo:
+          return self.protected_high, lo, (self.protected_high + lo) / 2.0
+      if self.bias == 1 and not isna(self.protected_low) and self.protected_low_bar is not None:
+        hi = max(self.h[self.protected_low_bar:self.cur + 1])
+        if hi > self.protected_low:
+          return hi, self.protected_low, (hi + self.protected_low) / 2.0
     hi, lo = self.last_swing_high, self.last_swing_low
     if self.dev_dir == -1 and not isna(self.dev_low) and (isna(lo) or self.dev_low < lo):
       lo = self.dev_low
@@ -164,16 +192,124 @@ class Structure:
   def a_at(self, i):
     return self.atr[i] if i >= 0 else NAN
 
+  # ---- v2.13: external swings published on displacement ---------------------------------------
+  def _tracker(self, kind):
+    return dict(kind=kind, val=NAN, bar=None, opp=NAN, opp_bar=None)
+
+  def _trk_update(self, tr, i):
+    """Advance one zigzag tracker with bar i: `kind` "low" follows the running lowest low (strictly lower replaces it, so the earliest
+    of equal lows is kept like a pivot) and the highest high strictly after it; "high" is the mirror."""
+    low = tr["kind"] == "low"
+    price, opp_price = (self.l[i], self.h[i]) if low else (self.h[i], self.l[i])
+    if tr["bar"] is None or (price < tr["val"] if low else price > tr["val"]):
+      tr["val"], tr["bar"], tr["opp"], tr["opp_bar"] = price, i, NAN, None
+    elif isna(tr["opp"]) or (opp_price > tr["opp"] if low else opp_price < tr["opp"]):
+      tr["opp"], tr["opp_bar"] = opp_price, i
+
+  def _trk_ready(self, tr, i):
+    """Both publication conditions: the right-side pivot condition (external_len closed bars after the candidate, none went further, which
+    is what the tracker holding it means) and a counter-leg of at least minLegATR + confirmATR of the ATR at the candidate bar."""
+    if tr["bar"] is None or isna(tr["opp"]) or i - tr["bar"] < self.external_len:
+      return False
+    a = self.a_at(tr["bar"])
+    if isna(a):
+      a = self.atr[i]
+    leg = (tr["opp"] - tr["val"]) if tr["kind"] == "low" else (tr["val"] - tr["opp"])
+    return leg >= a * (self.p.min_leg_atr + self.p.confirm_atr)
+
+  def _retrack_after(self, kind, bar, i):
+    """New tracker of `kind` whose candidate is the opposite extreme (`bar`) and whose counter-extreme is read from the bars after it."""
+    tr = self._tracker(kind)
+    price = self.h[bar] if kind == "high" else self.l[bar]
+    tr["val"], tr["bar"] = price, bar
+    for k in range(bar + 1, i + 1):
+      opp = self.l[k] if kind == "high" else self.h[k]
+      if isna(tr["opp"]) or (opp < tr["opp"] if kind == "high" else opp > tr["opp"]):
+        tr["opp"], tr["opp_bar"] = opp, k
+    return tr
+
+  def _step_displacement(self, i, ev):
+    """Publish an external swing the first time its pivot is confirmed AND the counter-leg has reached the threshold."""
+    if self.cand_type == 0:
+      for kind in ("low", "high"):
+        if kind not in self.trk:
+          self.trk[kind] = self._tracker(kind)
+        self._trk_update(self.trk[kind], i)
+      ready = [k for k in ("low", "high") if self._trk_ready(self.trk[k], i)]
+      if not ready:
+        return
+      kind = min(ready, key=lambda k: self.trk[k]["bar"])
+      tr = self.trk[kind]
+      self.cand_type = -1 if kind == "low" else 1
+      self.trk = {}
+    else:
+      kind = "low" if self.cand_type == -1 else "high"
+      # the tracker of the side being published is the one NOT held: a candidate LOW is published (and then a HIGH is tracked)
+      tr = self.trk.get("pub")
+      if tr is None:
+        tr = self.trk["pub"] = self._tracker("low" if self.cand_type == -1 else "high")
+        # first bar after a publication: the candidate was set by _retrack_after
+      self._trk_update(tr, i)
+      if not self._trk_ready(tr, i):
+        return
+      kind = tr["kind"]
+    sweep_ext = tr["opp"]
+    cb, cp = tr["bar"], tr["val"]
+    self.pub_lags.append(i - cb)
+    if kind == "low":
+      self.previous_swing_low = self.last_swing_low
+      self.last_swing_low, self.last_low_bar = cp, cb
+      self.low_broken = False
+      self.ext_low_swept = False
+      ev["new_major_low"], ev["major_low_price"], ev["major_low_bar"] = True, cp, cb
+      ev["ext_high"] = sweep_ext
+      self.dev_dir = 1
+      self.dev_high, self.dev_high_bar = tr["opp"], tr["opp_bar"]
+      self.dev_low, self.dev_low_bar = NAN, None
+      self._protect_on_swing(1)
+      nxt = self._retrack_after("high", tr["opp_bar"], i)
+      self.cand_type = 1
+    else:
+      self.previous_swing_high = self.last_swing_high
+      self.last_swing_high, self.last_high_bar = cp, cb
+      self.high_broken = False
+      self.ext_high_swept = False
+      ev["new_major_high"], ev["major_high_price"], ev["major_high_bar"] = True, cp, cb
+      ev["ext_low"] = sweep_ext
+      self.dev_dir = -1
+      self.dev_low, self.dev_low_bar = tr["opp"], tr["opp_bar"]
+      self.dev_high, self.dev_high_bar = NAN, None
+      self._protect_on_swing(-1)
+      nxt = self._retrack_after("low", tr["opp_bar"], i)
+      self.cand_type = -1
+    # the tracker for the NEXT candidate: its extreme is the counter-extreme just found
+    self.trk = {"pub": nxt}
+    # the candidate that was just published is no longer tracked; the new one carries the running extreme since it
+    if self.cand_type == 1:
+      self.cand_high, self.cand_high_bar = nxt["val"], nxt["bar"]
+    else:
+      self.cand_low, self.cand_low_bar = nxt["val"], nxt["bar"]
+
+  def _protect_on_swing(self, side):
+    """A newly published swing while the bias agrees refreshes the protected level: legacy overwrites it, trailing only moves it toward price."""
+    if side == 1 and self.bias == 1:
+      if self.p.protected_mode != "trailing" or isna(self.protected_low) or self.last_swing_low > self.protected_low:
+        self.protected_low, self.protected_low_bar = self.last_swing_low, self.last_low_bar
+    if side == -1 and self.bias == -1:
+      if self.p.protected_mode != "trailing" or isna(self.protected_high) or self.last_swing_high < self.protected_high:
+        self.protected_high, self.protected_high_bar = self.last_swing_high, self.last_high_bar
+
   def step_pivots(self, i):
     """Returns dict of per-bar events; mutates swing state."""
     p = self.p
     atr = self.atr[i]
+    self.cur = i
     ev = dict(new_ih=False, new_il=False, ih=NAN, il=NAN, new_major_high=False, new_major_low=False,
               major_high_price=NAN, major_low_price=NAN, major_high_bar=None, major_low_bar=None,
               up_break=False, down_break=False, choch=False, i_up_break=False, i_down_break=False,
               i_choch=False, ext_high=NAN, ext_low=NAN, broken_high=NAN, broken_low=NAN,
               broken_high_bar=None, broken_low_bar=None, i_broken_high=NAN, i_broken_low=NAN,
-              i_broken_high_bar=None, i_broken_low_bar=None)
+              i_broken_high_bar=None, i_broken_low_bar=None, protected_choch=False)
     il_ = self.internal_len
     el_ = self.external_len
     ih = pivot_high(self.h, i, il_)
@@ -195,16 +331,31 @@ class Structure:
       ev["i_up_break"] = True
       ev["i_choch"] = self.i_bias == -1
       ev["i_broken_high"], ev["i_broken_high_bar"] = self.li_high, self.li_high_bar
+      if p.protected_mode == "trailing" and self.bias == 1 and self.li_high_bar is not None:
+        # the pullback low the bullish break came from: the lowest low of (internal high bar, break bar]; it only ratchets toward price
+        seg = self.l[self.li_high_bar + 1:i + 1]
+        if seg:
+          lo = min(seg)
+          if isna(self.protected_low) or lo > self.protected_low:
+            self.protected_low, self.protected_low_bar = lo, self.li_high_bar + 1 + seg.index(lo)
       self.i_high_broken = True
       self.i_bias = 1
     if not isna(self.li_low) and not self.i_low_broken and c < self.li_low - atr * p.break_buffer:
       ev["i_down_break"] = True
       ev["i_choch"] = self.i_bias == 1
       ev["i_broken_low"], ev["i_broken_low_bar"] = self.li_low, self.li_low_bar
+      if p.protected_mode == "trailing" and self.bias == -1 and self.li_low_bar is not None:
+        seg = self.h[self.li_low_bar + 1:i + 1]
+        if seg:
+          hi = max(seg)
+          if isna(self.protected_high) or hi < self.protected_high:
+            self.protected_high, self.protected_high_bar = hi, self.li_low_bar + 1 + seg.index(hi)
       self.i_low_broken = True
       self.i_bias = -1
     # external candidate state machine
-    if not isna(eh):
+    if p.structure_mode == "displacement":
+      self._step_displacement(i, ev)
+    elif not isna(eh):
       cb = i - el_
       if self.cand_type == 0:
         self.cand_high, self.cand_high_bar, self.cand_type = eh, cb, 1
@@ -215,14 +366,14 @@ class Structure:
         self.previous_swing_low = self.last_swing_low
         self.last_swing_low, self.last_low_bar = self.cand_low, self.cand_low_bar
         self.low_broken = False
+        self.ext_low_swept = False
         ev["new_major_low"], ev["major_low_price"], ev["major_low_bar"] = True, self.cand_low, self.cand_low_bar
         self.dev_dir = 1
         self.dev_high, self.dev_high_bar = max(eh, self.h[i]), (cb if eh >= self.h[i] else i)
         self.dev_low, self.dev_low_bar = NAN, None
-        if self.bias == 1:
-          self.protected_low = self.last_swing_low
+        self._protect_on_swing(1)
         self.cand_high, self.cand_high_bar, self.cand_type = eh, cb, 1
-    if not isna(el):
+    if p.structure_mode != "displacement" and not isna(el):
       cb = i - el_
       if self.cand_type == 0:
         self.cand_low, self.cand_low_bar, self.cand_type = el, cb, -1
@@ -233,39 +384,70 @@ class Structure:
         self.previous_swing_high = self.last_swing_high
         self.last_swing_high, self.last_high_bar = self.cand_high, self.cand_high_bar
         self.high_broken = False
+        self.ext_high_swept = False
         ev["new_major_high"], ev["major_high_price"], ev["major_high_bar"] = True, self.cand_high, self.cand_high_bar
         self.dev_dir = -1
         self.dev_low, self.dev_low_bar = min(el, self.l[i]), (cb if el <= self.l[i] else i)
         self.dev_high, self.dev_high_bar = NAN, None
-        if self.bias == -1:
-          self.protected_high = self.last_swing_high
+        self._protect_on_swing(-1)
         self.cand_low, self.cand_low_bar, self.cand_type = el, cb, -1
     if self.dev_dir == 1 and (isna(self.dev_high) or self.h[i] > self.dev_high):
       self.dev_high, self.dev_high_bar = self.h[i], i
     if self.dev_dir == -1 and (isna(self.dev_low) or self.l[i] < self.dev_low):
       self.dev_low, self.dev_low_bar = self.l[i], i
-    up = not isna(self.last_swing_high) and not self.high_broken and c > self.last_swing_high + atr * (p.break_buffer + p.confirm_atr)
-    down = not isna(self.last_swing_low) and not self.low_broken and c < self.last_swing_low - atr * (p.break_buffer + p.confirm_atr)
-    if up:
-      choch = self.bias == -1 and not isna(self.protected_high)
-      ev["up_break"], ev["choch"] = True, choch
-      ev["broken_high"], ev["broken_high_bar"] = self.last_swing_high, self.last_high_bar
-      ev["break_bar"] = self.first_close_beyond(i, self.last_high_bar, self.last_swing_high, True)
-      self.high_broken = True
+    thr = atr * (p.break_buffer + p.confirm_atr)
+    if p.swept_before_impulse:
+      # external sweeps (events only): a wick beyond the unbroken swing that closes back inside, once per swing
+      lsh, lsl = self.last_swing_high, self.last_swing_low
+      if not isna(lsh) and not self.high_broken and not self.ext_high_swept and self.h[i] > lsh + atr * p.sweep_buffer and c < lsh:
+        self.ext_high_swept = True
+        self.sweeps.append((i, -1))
+      if not isna(lsl) and not self.low_broken and not self.ext_low_swept and self.l[i] < lsl - atr * p.sweep_buffer and c > lsl:
+        self.ext_low_swept = True
+        self.sweeps.append((i, 1))
+    up = not isna(self.last_swing_high) and not self.high_broken and c > self.last_swing_high + thr
+    down = not isna(self.last_swing_low) and not self.low_broken and c < self.last_swing_low - thr
+    # v2.13: a close beyond the TRAILING protected level is the CHoCH, even when the last confirmed swing is further away
+    prot_up = prot_down = False
+    if p.protected_mode == "trailing":
+      if self.bias == -1 and not isna(self.protected_high) and self.protected_high_bar is not None and c > self.protected_high + thr:
+        prot_up = True
+      elif self.bias == 1 and not isna(self.protected_low) and self.protected_low_bar is not None and c < self.protected_low - thr:
+        prot_down = True
+    if prot_up or up:
+      level, lbar = (self.protected_high, self.protected_high_bar) if prot_up else (self.last_swing_high, self.last_high_bar)
+      choch = prot_up or (self.bias == -1 and not isna(self.protected_high))
+      ev["up_break"], ev["choch"], ev["protected_choch"] = True, choch, prot_up
+      ev["broken_high"], ev["broken_high_bar"] = level, lbar
+      ev["break_bar"] = self.first_close_beyond(i, lbar, level, True)
+      if up:
+        self.high_broken = True
+      prev_bias = self.bias
       self.bias = 1
       self.dev_dir, self.dev_high, self.dev_high_bar, self.dev_low, self.dev_low_bar = 1, self.h[i], i, NAN, None
       self.last_break_bar, self.last_break_choch = i, choch
-      self.protected_low = self.last_swing_low
-    elif down:
-      choch = self.bias == 1 and not isna(self.protected_low)
-      ev["down_break"], ev["choch"] = True, choch
-      ev["broken_low"], ev["broken_low_bar"] = self.last_swing_low, self.last_low_bar
-      ev["break_bar"] = self.first_close_beyond(i, self.last_low_bar, self.last_swing_low, False)
-      self.low_broken = True
+      if prot_up:
+        seg = self.l[lbar:i + 1]
+        self.protected_low, self.protected_low_bar = min(seg), lbar + seg.index(min(seg))
+      elif p.protected_mode != "trailing" or prev_bias != 1 or isna(self.protected_low) or self.last_swing_low > self.protected_low:
+        self.protected_low, self.protected_low_bar = self.last_swing_low, self.last_low_bar
+    elif prot_down or down:
+      level, lbar = (self.protected_low, self.protected_low_bar) if prot_down else (self.last_swing_low, self.last_low_bar)
+      choch = prot_down or (self.bias == 1 and not isna(self.protected_low))
+      ev["down_break"], ev["choch"], ev["protected_choch"] = True, choch, prot_down
+      ev["broken_low"], ev["broken_low_bar"] = level, lbar
+      ev["break_bar"] = self.first_close_beyond(i, lbar, level, False)
+      if down:
+        self.low_broken = True
+      prev_bias = self.bias
       self.bias = -1
       self.dev_dir, self.dev_low, self.dev_low_bar, self.dev_high, self.dev_high_bar = -1, self.l[i], i, NAN, None
       self.last_break_bar, self.last_break_choch = i, choch
-      self.protected_high = self.last_swing_high
+      if prot_down:
+        seg = self.h[lbar:i + 1]
+        self.protected_high, self.protected_high_bar = max(seg), lbar + seg.index(max(seg))
+      elif p.protected_mode != "trailing" or prev_bias != -1 or isna(self.protected_high) or self.last_swing_high < self.protected_high:
+        self.protected_high, self.protected_high_bar = self.last_swing_high, self.last_high_bar
     return ev
 
 
@@ -281,7 +463,7 @@ class LegacyPipeline:
     self.ob_life = []  # (bars alive, end reason, touched) for retired OBs
     self.max_store = 0
     self.counts = dict(ob_added=0, ob_rejected=0, evicted_ob=0, evicted_other=0, invalidated_ob=0, aged_ob=0,
-                       fvg_added=0, sd_added=0)
+                       fvg_added=0, sd_added=0, sd_rejected=0, sd_rejected_invalid=0, sd_drawn_tested=0)
 
   # ---- zone store -------------------------------------------------------
   def add_zone(self, origin, top, bottom, side, kind, title, born):
@@ -355,24 +537,62 @@ class LegacyPipeline:
       else:
         self.counts["ob_rejected"] += 1
 
+  def fresh_scan(self, side, top, bottom, j, i):
+    """Bars j + external_len + 1 .. i against a swing zone: (closed beyond the far edge, first touching bar or -1, deepest penetration 0..1)."""
+    s = self.s
+    height = top - bottom
+    first, depth = -1, 0.0
+    for k in range(j + s.external_len + 1, i + 1):
+      if (s.c[k] < bottom) if side == 1 else (s.c[k] > top):
+        return True, first, depth
+      pen = ((top - s.l[k]) / height) if side == 1 else ((s.h[k] - bottom) / height)
+      if pen > 0:
+        if first < 0:
+          first = k
+        depth = max(depth, min(1.0, pen))
+    return False, first, depth
+
+  def _add_swing_sd(self, i, j, top, bottom, side, title):
+    p = self.p
+    first, depth = -1, 0.0
+    invalid, first, depth = self.fresh_scan(side, top, bottom, j, i)
+    # diagnostic (every mode): how many swing zones had already been closed through / retested when they were published
+    self.counts["sd_scan_invalid"] = self.counts.get("sd_scan_invalid", 0) + (1 if invalid else 0)
+    self.counts["sd_scan_touched"] = self.counts.get("sd_scan_touched", 0) + (1 if (not invalid and first >= 0) else 0)
+    if not p.fresh_sd:
+      first, depth = -1, 0.0
+    elif invalid:
+      self.counts["sd_rejected"] += 1
+      self.counts["sd_rejected_invalid"] += 1
+      return
+    z = self.add_zone(j, top, bottom, side, 3, title, i)
+    if z is not None:
+      self.counts["sd_added"] += 1
+      if first >= 0:
+        # drawn as it is: already tested, never Fresh, never actionable, never a trade trigger
+        z.touched, z.state, z.first_touch, z.mitigation = True, "Tested", first, depth
+        self.counts["sd_drawn_tested"] += 1
+
   def supply_demand(self, i, ev):
     s, p = self.s, self.p
     if ev["new_major_low"]:
-      a_sw = s.atr[i - s.external_len] if not isna(s.atr[i - s.external_len]) else s.atr[i]
-      off = i - ev["major_low_bar"]
+      j = ev["major_low_bar"]
+      a_sw = s.atr[j] if p.structure_mode == "displacement" else s.atr[i - s.external_len]
+      if isna(a_sw):
+        a_sw = s.atr[i]
+      off = i - j
       if off <= 799:
-        j = ev["major_low_bar"]
         upper = min(max(s.o[j], s.c[j]), ev["major_low_price"] + a_sw * p.sd_max_width_atr)
         if ev["ext_high"] - ev["major_low_price"] >= a_sw * p.sd_departure_atr:
-          if self.add_zone(j, upper, ev["major_low_price"], 1, 3, "Demand", i):
-            self.counts["sd_added"] += 1
+          self._add_swing_sd(i, j, upper, ev["major_low_price"], 1, "Demand")
     if ev["new_major_high"]:
-      a_sw = s.atr[i - s.external_len] if not isna(s.atr[i - s.external_len]) else s.atr[i]
       j = ev["major_high_bar"]
+      a_sw = s.atr[j] if p.structure_mode == "displacement" else s.atr[i - s.external_len]
+      if isna(a_sw):
+        a_sw = s.atr[i]
       lower = max(min(s.o[j], s.c[j]), ev["major_high_price"] - a_sw * p.sd_max_width_atr)
       if ev["major_high_price"] - ev["ext_low"] >= a_sw * p.sd_departure_atr:
-        if self.add_zone(j, ev["major_high_price"], lower, -1, 3, "Supply", i):
-          self.counts["sd_added"] += 1
+        self._add_swing_sd(i, j, ev["major_high_price"], lower, -1, "Supply")
 
   def fvg(self, i):
     s, p = self.s, self.p
@@ -381,12 +601,22 @@ class LegacyPipeline:
     atr = s.atr[i]
     a1 = s.atr[i - 1] if not isna(s.atr[i - 1]) else atr
     body = abs(s.c[i - 1] - s.o[i - 1])
-    if s.l[i] > s.h[i - 2] and s.l[i] - s.h[i - 2] >= atr * p.min_gap_atr and body >= a1 * p.fvg_impulse_atr:
-      if self.add_zone(i - 2, s.l[i], s.h[i - 2], 1, 2, "Bull FVG", i):
-        self.counts["fvg_added"] += 1
-    if s.h[i] < s.l[i - 2] and s.l[i - 2] - s.h[i] >= atr * p.min_gap_atr and body >= a1 * p.fvg_impulse_atr:
-      if self.add_zone(i - 2, s.l[i - 2], s.h[i], -1, 2, "Bear FVG", i):
-        self.counts["fvg_added"] += 1
+    rng = s.h[i - 1] - s.l[i - 1]
+    bull_mid, bear_mid = s.c[i - 1] > s.o[i - 1], s.c[i - 1] < s.o[i - 1]
+    for bull in (True, False):
+      gap = (s.l[i] - s.h[i - 2]) if bull else (s.l[i - 2] - s.h[i])
+      if not gap > 0:
+        continue
+      if p.fvg_def == "engine":
+        ok = gap >= p.fvg_engine_atr * atr and body >= p.fvg_engine_atr * atr and rng > 0 and body / rng >= p.fvg_engine_body_ratio and (bull_mid if bull else bear_mid)
+      else:
+        ok = gap >= atr * p.min_gap_atr and body >= a1 * p.fvg_impulse_atr
+        if p.fvg_def == "loose":
+          ok = ok and (bull_mid if bull else bear_mid)
+      if ok:
+        z = self.add_zone(i - 2, s.l[i] if bull else s.l[i - 2], s.h[i - 2] if bull else s.h[i], 1 if bull else -1, 2, "Bull FVG" if bull else "Bear FVG", i)
+        if z:
+          self.counts["fvg_added"] += 1
 
   def lifecycle(self, i):
     s, p = self.s, self.p
@@ -581,31 +811,33 @@ class V21Pipeline(LegacyPipeline):
   def v21_ob(self, i, ev):
     srcs = []
     if ev["up_break"]:
-      srcs.append((True, 2, "External " + ("CHoCH" if ev["choch"] else "BOS"), ev["broken_high_bar"]))
+      srcs.append((True, 2, "External " + ("CHoCH" if ev["choch"] else "BOS"), ev["broken_high_bar"], ev.get("break_bar", i)))
     if ev["down_break"]:
-      srcs.append((False, 2, "External " + ("CHoCH" if ev["choch"] else "BOS"), ev["broken_low_bar"]))
+      srcs.append((False, 2, "External " + ("CHoCH" if ev["choch"] else "BOS"), ev["broken_low_bar"], ev.get("break_bar", i)))
     if self.p.show_internal_ob:
       if ev["i_up_break"]:
-        srcs.append((True, 1, "Internal " + ("CHoCH" if ev["i_choch"] else "BOS"), ev["i_broken_high_bar"]))
+        srcs.append((True, 1, "Internal " + ("CHoCH" if ev["i_choch"] else "BOS"), ev["i_broken_high_bar"], i))
       if ev["i_down_break"]:
-        srcs.append((False, 1, "Internal " + ("CHoCH" if ev["i_choch"] else "BOS"), ev["i_broken_low_bar"]))
-    for bull, cls, event, anchor in srcs:
-      self.build_ob(i, bull, cls, event, anchor)
+        srcs.append((False, 1, "Internal " + ("CHoCH" if ev["i_choch"] else "BOS"), ev["i_broken_low_bar"], i))
+    for bull, cls, event, anchor, break_bar in srcs:
+      self.build_ob(i, bull, cls, event, anchor, break_bar)
 
-  def build_ob(self, i, bull, cls, event, anchor):
+  def build_ob(self, i, bull, cls, event, anchor, break_bar=None):
     s, p = self.s, self.p
     atr = s.atr[i]
-    max_back = min(p.ob_search_bars, i - 1)
-    window = max_back if anchor is None else min(max_back, i - anchor - 1)
+    # v2.13: an external break is published late (after its swing was confirmed), so the block is searched from the bar that really broke
+    off = (i - break_bar) if (p.ob_break_anchor and break_bar is not None) else 0
+    max_back = min(p.ob_search_bars, i - off - 1)
+    window = max_back if anchor is None else min(max_back, (i - off) - anchor - 1)
     d = dict(bar=i, t=s.t[i], bull=bull, cls=cls, event=event, ok=False, reason="", src=None, top=NAN, bottom=NAN)
     self.ob_dbg.append(d)
     if window < 2:
       d["reason"] = "window <2 bars"
       self.ob_stats["rejected"] += 1
       return
-    extreme = min(s.l[i - k] for k in range(1, window + 1)) if bull else max(s.h[i - k] for k in range(1, window + 1))
+    extreme = min(s.l[i - k] for k in range(off + 1, off + window + 1)) if bull else max(s.h[i - k] for k in range(off + 1, off + window + 1))
     best_k, best_val = -1, NAN
-    for k in range(1, window + 1):
+    for k in range(off + 1, off + window + 1):
       opp = s.c[i - k] < s.o[i - k] if bull else s.c[i - k] > s.o[i - k]
       if opp:
         v = s.l[i - k] if bull else s.h[i - k]
@@ -626,12 +858,12 @@ class V21Pipeline(LegacyPipeline):
       d["reason"] = "origin too wide (%.2f ATR)" % ((hi - lo) / atr)
       self.ob_stats["rejected"] += 1
       return
-    net = (s.c[i] - hi) if bull else (lo - s.c[i])
+    net = (s.c[i - off] - hi) if bull else (lo - s.c[i - off])
     if net < p.ob_displacement_atr * atr:
       d["reason"] = "weak displacement (%.2f ATR < %.2f)" % (net / atr, p.ob_displacement_atr)
       self.ob_stats["rejected"] += 1
       return
-    body = max(((s.c[i - k] - s.o[i - k]) if bull else (s.o[i - k] - s.c[i - k])) for k in range(0, best_k))
+    body = max(((s.c[i - k] - s.o[i - k]) if bull else (s.o[i - k] - s.c[i - k])) for k in range(off, best_k))
     if body < p.ob_impulse_body_atr * atr:
       d["reason"] = "no impulse candle (max body %.2f ATR < %.2f)" % (body / atr, p.ob_impulse_body_atr)
       self.ob_stats["rejected"] += 1
@@ -666,6 +898,31 @@ class V21Pipeline(LegacyPipeline):
     z = self.add_zone(i - best_k, top, bottom, side, 1, ("Bull " if bull else "Bear ") + ("OB" if cls == 2 else "iOB"), i, cls, event)
     d.update(ok=True, top=top, bottom=bottom, reason="accepted")
     self.ob_stats["added"] += 1
+
+  # ---- POI components (shared by the display pass and the trade plan) -----------------------------
+  def components(self, z):
+    """Kinds (1 OB, 2 FVG, 3 S/D) present in `z` and in the same-side zones overlapping it by at least a quarter. With composite_independent
+    an overlapping zone counts only when its origin differs by more than 3 bars: an OB and the FVG its own impulse printed are one event."""
+    has = {1: z.kind == 1, 2: z.kind == 2, 3: z.kind == 3}
+    for o in self.zones:
+      if o is z or o.side != z.side:
+        continue
+      ov = min(z.top, o.top) - max(z.bottom, o.bottom)
+      sm = min(z.top - z.bottom, o.top - o.bottom)
+      if ov > 0 and sm > 0 and ov / sm >= 0.25:
+        if self.p.composite_independent and abs(o.origin - z.origin) <= 3:
+          continue
+        has[o.kind] = True
+    return has
+
+  def swept_imbalance(self, z):
+    """An FVG on the bias side whose impulse followed a sweep in its favour."""
+    s, p = self.s, self.p
+    if not (z.kind == 2 and z.side == s.bias):
+      return False
+    if p.swept_before_impulse:
+      return any(side == z.side and z.origin - 6 <= bar <= z.origin for bar, side in s.sweeps)
+    return s.last_sweep_side == z.side and s.last_sweep_bar is not None and abs(z.born - s.last_sweep_bar) <= p.poi_structure_window
 
   def lifecycle(self, i):
     s, p = self.s, self.p
@@ -764,17 +1021,10 @@ class V21Pipeline(LegacyPipeline):
     band_hi = max(s.h[-p.scale_lookback_bars:])
     band_lo = min(s.l[-p.scale_lookback_bars:])
     for z in full:
-      has = {1: z.kind == 1, 2: z.kind == 2, 3: z.kind == 3}
-      for o in full:
-        if o is not z and o.side == z.side:
-          ov = min(z.top, o.top) - max(z.bottom, o.bottom)
-          sm = min(z.top - z.bottom, o.top - o.bottom)
-          if ov > 0 and sm > 0 and ov / sm >= 0.25:
-            has[o.kind] = True
+      has = self.components(z)
       comp = (has[1] and has[2]) or (has[1] and has[3]) or (has[2] and has[3])
       related = s.last_break_bar is not None and z.born >= s.last_break_bar - p.ob_lookback and z.born - s.last_break_bar <= p.poi_structure_window
-      z.poi = comp or (z.kind == 1 and z.side == bias and related) or (z.kind == 3 and z.side == bias) or \
-        (z.kind == 2 and z.side == bias and s.last_sweep_side == z.side and s.last_sweep_bar is not None and abs(z.born - s.last_sweep_bar) <= p.poi_structure_window)
+      z.poi = comp or (z.kind == 1 and z.side == bias and related) or (z.kind == 3 and z.side == bias) or self.swept_imbalance(z)
     trans = s.last_break_choch and s.last_break_bar is not None and i - s.last_break_bar <= s.external_len * 2
     expansion = (bias == 1 and not isna(s.last_swing_high) and close > s.last_swing_high) or (bias == -1 and not isna(s.last_swing_low) and close < s.last_swing_low)
     rng = (not trans) and (not expansion) and not isna(s.last_swing_high) and not isna(s.last_swing_low) and s.last_swing_low <= close <= s.last_swing_high
@@ -979,6 +1229,7 @@ class LiquidityModel:
         pool.state, pool.state_bar = 1, i
         self.stats["swept"] += 1
         self.events.append((i, "swept", side, edge, pool.degree, pool.uid))
+        s.sweeps.append((pool.pending, -side))  # the bar that traded through the pool, and the reversal the sweep supports
         # rejection wick on the extreme bar
         e = pool.extreme_bar
         if side == 1:
@@ -1106,3 +1357,11 @@ def place_zone_captions(zones, gap):
     else:
       out.append("none" if suppressed else "column")
   return out
+
+
+def v213(chart_secs=300, **overrides):
+  """Params of the v2.13 indicator: every v2.13 behaviour on (the Pine defaults)."""
+  kw = dict(structure_mode="displacement", protected_mode="trailing", range_mode="protected", fresh_sd=True, ob_break_anchor=True,
+            fvg_def="engine", composite_independent=True, swept_before_impulse=True)
+  kw.update(overrides)
+  return P21(chart_secs=chart_secs, **kw)

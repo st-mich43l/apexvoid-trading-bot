@@ -192,6 +192,111 @@ def test_session_boxes_span_each_session_high_low_in_local_time():
   assert ny[0][0] < ldn[0][3], "London and New York overlap by design"
 
 
+# ---- v2.13 ---------------------------------------------------------------------------------------------------------------------------------
+
+def run213(path, tf, secs, **tp_kw):
+  return tm.TradePlanSim(bars_from(path, tf), m.v213(secs), tm.v213_trade(**tp_kw)).run()
+
+
+def _bare_sim(ring_obstacles):
+  """A sim whose only key levels are the ones the test plants: one far pool and (optionally) one unswept internal swing."""
+  sim = tm.TradePlanSim(bars_from(LIVE, "M5"), m.v213(300), tm.v213_trade(ring_obstacles=ring_obstacles)).run()
+  sim.zones, sim.lm.pools, sim.lm.ring = [], [], []
+  s = sim.s
+  s.last_swing_high = s.last_swing_low = s.previous_swing_high = s.previous_swing_low = m.NAN
+  s.bias = 0
+  i = s.n - 1
+  for arr in (sim.asia_h, sim.asia_l, sim.asia_live_h, sim.asia_live_l):
+    arr[i] = m.NAN
+  return sim, i
+
+
+def test_an_unswept_internal_swing_is_a_room_obstacle_and_refuses_a_target_that_pays_too_little():
+  for ring_on in (False, True):
+    sim, i = _bare_sim(ring_on)
+    s = sim.s
+    entry, risk = s.c[i], 2.0
+    far = entry + 10.0
+    sim.lm.pools = [m.Pool(1, far, far, i - 100, i - 90, i - 100, 1, 2, "Swing")]
+    for fraction, expect_target in ((0.9, False), (1.1, True)):
+      level = entry + fraction * sim.tp.min_rr * risk
+      s.h[i] = min(s.h[i], level - 0.01)  # nothing after the pivot traded through it
+      sim.lm.ring = [[level, i - 1, 1]]
+      target, name, raw, nearest = sim.key_target(i, True, entry, risk)
+      if not ring_on:
+        assert name == "Swing" or name == "BSL", (name, "the far pool is the only level without the obstacle")
+        assert target is not None and raw == far
+      elif expect_target:
+        assert target is not None and name == "iBSL" and abs(raw - level) < 1e-9, (target, name)
+      else:
+        assert target is None, "a swing that pays %.1f x the minimum R:R must refuse, not skip to the far pool" % fraction
+  # a swing that was traded through is not an obstacle
+  sim, i = _bare_sim(True)
+  entry = sim.s.c[i]
+  sim.s.h[i] = entry + 5.0
+  sim.lm.ring = [[entry + 2.0, i - 1, 1]]
+  assert sim.key_target(i, True, entry, 2.0)[0] is None
+
+
+def test_the_pip_cap_refuses_and_never_tightens_the_stop():
+  free = run213(FIX, "M15", 900, max_stop_pips=0.0)
+  capped = run213(FIX, "M15", 900, max_stop_pips=70.0)
+  tight = run213(FIX, "M15", 900, max_stop_pips=1.0)
+  assert len(free.trades) >= len(capped.trades) >= 1 and len(tight.trades) == 0
+  assert tight.refusals.get("stop over pip cap", 0) > 0
+  for sim in (free, capped):
+    for t in sim.trades:
+      atr = sim.s.atr[t.entry_bar]
+      bottom, top = t.zone_edges
+      want = bottom - sim.tp.stop_buffer_atr * atr if t.dir == 1 else top + sim.tp.stop_buffer_atr * atr
+      assert abs(t.stop - want) < 1e-9, "a stop was moved: the cap refuses, it never tightens"
+  for t in capped.trades:
+    assert abs(t.entry - t.stop) / capped.tp.pip_size <= 70.0 + 1e-6
+  assert any(abs(t.entry - t.stop) / free.tp.pip_size > 70.0 for t in free.trades) or len(free.trades) == len(capped.trades)
+
+
+def test_every_trigger_bar_that_opened_nothing_is_counted_once_by_its_first_failing_reason():
+  allowed = set(tm.REFUSALS) | {"no zone touched"}
+  for path, tf, secs in [(LIVE, "M5", 300), (FIX, "M15", 900), (REPO, "M5", 300)]:
+    sim = run213(path, tf, secs)
+    assert set(sim.refusals) <= allowed, sim.refusals
+    assert sum(sim.refusals.values()) + len(sim.trades) + (1 if sim.open is not None else 0) == sim.trigger_bars, (sim.refusals, len(sim.trades), sim.trigger_bars)
+    assert sim.refusals, "no refusal recorded on %s %s" % (path, tf)
+
+
+def test_preview_below_the_minimum_is_flagged():
+  seen = {True: 0, False: 0}
+  for path, tf, secs in CASES:
+    for i_back in (0, 5, 17, 40):
+      sim = tm.TradePlanSim(tuple(x[:len(x) - i_back] for x in bars_from(path, tf)), m.v213(secs), tm.v213_trade()).run()
+      pv = tm.preview(sim)
+      if pv is not None:
+        assert pv["below_min"] is (pv["rr"] < sim.tp.min_rr)
+        seen[pv["below_min"]] += 1
+  assert seen[True] + seen[False] >= 4, seen
+
+
+def test_engine_asia_ends_at_london_open_on_both_sides_of_the_clock_change():
+  import datetime
+  def utc(y, mo, d, h, mi=0):
+    return int(datetime.datetime(y, mo, d, h, mi, tzinfo=datetime.UTC).timestamp())
+  # Fri 23 Oct 2026 is London summer time (open 07:00 UTC), Tue 27 Oct is winter time (open 08:00 UTC)
+  for (y, mo, d), london_open in (((2026, 10, 23), 7), ((2026, 10, 27), 8)):
+    start = utc(y, mo, d - 1, 22)  # 07:00 Tokyo
+    assert tm.engine_asia(start) and not tm.engine_asia(start - 300)
+    assert tm.engine_asia(utc(y, mo, d, london_open) - 300), "the last Asia bar is the one before London open"
+    assert not tm.engine_asia(utc(y, mo, d, london_open)), "a bar inside London is never Asia"
+  ts = [utc(2026, 10, 22, 21, 0) + k * 300 for k in range(12 * 36)]
+  h = [100.0 + (k % 7) for k in range(len(ts))]
+  l = [90.0 - (k % 5) for k in range(len(ts))]
+  boxes = tm.session_boxes(ts, h, l, 7, 17, "Asia/Tokyo", exclude=tm.ENGINE_LONDON)
+  ends = [datetime.datetime.fromtimestamp(b[3] + 300, datetime.UTC) for b in boxes]
+  assert ends and ends[0].hour == 7 and ends[0].day == 23, ends
+  hi, lo, live_hi, live_lo = tm.asia_ranges(ts, h, l, engine=True)
+  first_done = next(k for k in range(len(ts)) if not m.isna(hi[k]))
+  assert datetime.datetime.fromtimestamp(ts[first_done], datetime.UTC).hour == 7, "the completed range is published at London open"
+
+
 if __name__ == "__main__":
   for name, fn in list(globals().items()):
     if name.startswith("test_"):
