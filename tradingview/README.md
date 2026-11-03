@@ -50,7 +50,7 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
 | `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms (00:00-08:00 UTC by default). When the session ends it becomes the completed range below. |
-| `Asia` / `London` / `New York` boxes | very faint box (dotted border, dim title) per session, so it stays behind the technical zones (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
+| `Asia` / `London` / `New York` boxes | faint fill with a clearer dashed outline and title per session, so the session reads at a glance without tinting the technical zones (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
 | `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`Prev Asia H/L` while a session is live). |
 | `HTF H · 240` / `HTF L · 240` | dashed | Optional confirmed higher-timeframe swing levels. |
 
@@ -210,7 +210,7 @@ reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 **04 Fair Value Gaps** — show FVG, minimum gap (0.10 ATR), middle-candle body
 (0.5 ATR), invalidation method.
 
-**05 Sessions** — Asian show/hours/timezone/retained ranges, `Draw a range box for each session`, London and New York hours and timezones (defined in local time, so daylight saving is handled), retained boxes per session (3), box transparency (95; higher is fainter).
+**05 Sessions** — Asian show/hours/timezone/retained ranges, `Draw a range box for each session`, London and New York hours and timezones (defined in local time, so daylight saving is handled), retained boxes per session (3), box fill transparency (93; higher is fainter).
 
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
