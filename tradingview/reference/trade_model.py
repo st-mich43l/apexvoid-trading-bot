@@ -354,46 +354,6 @@ class TradePlanSim(m.V21Pipeline):
                 time=sum(1 for t in self.trades if t.outcome == "TIME"), skipped=dict(self.skipped))
 
 
-def preview(sim, i=None):
-  """Planned RR box at bar i (default: last bar): nearest qualified POI on the bias side, entry at its
-  near edge, stop beyond the far edge, take-profit at the next key level (R:R below the trade minimum
-  is allowed). Mirrors f_renderTradePreview. Returns a dict or None."""
-  s, tp, p = sim.s, sim.tp, sim.p
-  i = s.n - 1 if i is None else i
-  if sim.open is not None or s.bias == 0:
-    return None
-  atr = s.atr[i]
-  is_long = s.bias == 1
-  eq = s.dealing_range()[2]
-  band_hi, band_lo = max(s.h[-p.scale_lookback_bars:]), min(s.l[-p.scale_lookback_bars:])
-  pick, best_gap = None, 1e18
-  for z in sim.zones:
-    allowed = tp.zone_kinds == "All qualified POIs" or (tp.zone_kinds == "Order blocks and supply/demand" and z.kind != 2) or (tp.zone_kinds == "Order blocks only" and z.kind == 1)
-    if (z.born, z.top) in sim.spent or not allowed or z.side != s.bias:
-      continue
-    mid = (z.top + z.bottom) / 2.0
-    edge = z.top if is_long else z.bottom
-    gap = abs(s.c[i] - edge)
-    right_side = mid <= s.c[i] if is_long else mid >= s.c[i]
-    pd_ok = (not tp.require_pd) or m.isna(eq) or (mid <= eq if is_long else mid >= eq)
-    if right_side and pd_ok and gap < best_gap and gap <= p.zone_display_distance_atr * atr and p.scale_ok(edge, s.c[i], atr, band_hi, band_lo) and sim.poi_path(z, not z.touched) != "Candidate":
-      pick, best_gap = z, gap
-  if pick is None:
-    return None
-  entry = pick.top if is_long else pick.bottom
-  stop = pick.bottom - tp.stop_buffer_atr * atr if is_long else pick.top + tp.stop_buffer_atr * atr
-  risk = abs(entry - stop)
-  if not (tp.min_stop_atr * atr <= risk <= tp.max_stop_atr * atr):
-    return None
-  if tp.max_stop_pips > 0 and risk / tp.pip_size > tp.max_stop_pips + 1e-9:
-    return None
-  target, name, level, nearest = sim.key_target(i, is_long, entry, risk, enforce_min=False)
-  if target is None:
-    return None
-  rr = abs(target - entry) / risk
-  return dict(dir=s.bias, entry=entry, stop=stop, target=target, rr=rr, below_min=rr < tp.min_rr, zone=pick.title, target_name=name, edges=(pick.bottom, pick.top), nearest_ahead=nearest, raw_level=level)
-
-
 def v213_trade(**overrides):
   """TradeParams of the v2.13 indicator (the Pine defaults)."""
   kw = dict(ring_obstacles=True, max_stop_pips=70.0, asia_mode="engine")

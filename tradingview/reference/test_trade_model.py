@@ -102,25 +102,6 @@ def test_a_zone_trades_only_once():
     assert len(keys) == len(set(keys)), "a zone produced two trades"
 
 
-def test_planned_rr_box_is_available_and_well_formed():
-  shown = 0
-  for path, tf, secs in CASES:
-    sim = run(path, tf, secs)
-    pv = tm.preview(sim)
-    if pv is None:
-      continue
-    shown += 1
-    atr, close = sim.s.atr[-1], sim.s.c[-1]
-    bottom, top = pv["edges"]
-    long = pv["dir"] == 1
-    assert (pv["entry"] == top) if long else (pv["entry"] == bottom), "entry must be the zone's near edge"
-    assert pv["stop"] < bottom if long else pv["stop"] > top, "stop must be beyond the far edge"
-    assert (pv["target"] > pv["entry"]) if long else (pv["target"] < pv["entry"])
-    assert abs(abs(pv["raw_level"] - pv["entry"]) - pv["nearest_ahead"]) < 1e-9, "the plan target skipped a nearer key level"
-    assert abs(pv["entry"] - close) <= sim.p.zone_display_distance_atr * atr + 1e-9
-  assert shown >= 2, "the planned box should be available on most charts"
-
-
 def test_live_asian_range_is_the_running_extreme_and_becomes_the_completed_range():
   import datetime
   bars = bars_from(FIX, "M15")
@@ -262,18 +243,6 @@ def test_every_trigger_bar_that_opened_nothing_is_counted_once_by_its_first_fail
     assert set(sim.refusals) <= allowed, sim.refusals
     assert sum(sim.refusals.values()) + len(sim.trades) + (1 if sim.open is not None else 0) == sim.trigger_bars, (sim.refusals, len(sim.trades), sim.trigger_bars)
     assert sim.refusals, "no refusal recorded on %s %s" % (path, tf)
-
-
-def test_preview_below_the_minimum_is_flagged():
-  seen = {True: 0, False: 0}
-  for path, tf, secs in CASES:
-    for i_back in (0, 5, 17, 40):
-      sim = tm.TradePlanSim(tuple(x[:len(x) - i_back] for x in bars_from(path, tf)), m.v213(secs), tm.v213_trade()).run()
-      pv = tm.preview(sim)
-      if pv is not None:
-        assert pv["below_min"] is (pv["rr"] < sim.tp.min_rr)
-        seen[pv["below_min"]] += 1
-  assert seen[True] + seen[False] >= 4, seen
 
 
 def test_engine_asia_ends_at_london_open_on_both_sides_of_the_clock_change():
