@@ -67,7 +67,6 @@ int maxVisibleBullOB = input.int(2, "Visible bullish OBs", minval = 0, maxval = 
 int maxVisibleBearOB = input.int(2, "Visible bearish OBs", minval = 0, maxval = 10, group = G3)
 float obDisplayDistanceATR = input.float(25.0, "Maximum visible OB distance (ATR)", minval = 2, maxval = 100, step = 1, group = G3)
 bool showOBMidline = input.bool(true, "Show OB midpoint line", group = G3)
-bool showOBDebug = input.bool(false, "Debug: OB candidate log and rejection reasons", group = G3)
 bool showSD = input.bool(true, "Show swing supply / demand", group = G3)
 bool showBaseSD = input.bool(true, "Show base-and-impulse supply / demand", group = G3)
 string sdPatternFilter = input.string("All", "Base-and-impulse patterns", options = ["All", "Reversal only", "Continuation only"], group = G3)
@@ -339,15 +338,8 @@ var int[] zoneFirstTouch = array.new_int()   // bar of the first touch, -1 while
 // 0 accepted, 1 rejected, 2 replaced by a newer block, 3 covered by a swing block,
 // 4 mitigated, 5 invalidated, 6 aged out, 7 evicted from the retained store.
 var int[] obStats = array.new_int(8, 0)
-var string[] obDebugLog = array.new_string()
-var label[] obDebugLabels = array.new_label()
 var string[] obLastOutcome = array.new_string(1, "no candidate yet")
 
-f_obLog(string entry) =>
-    array.push(obDebugLog, entry)
-    if array.size(obDebugLog) > 14
-        array.shift(obDebugLog)
-    0
 
 f_removeZone(int idx) =>
     box oldBox = array.get(zones, idx)
@@ -1564,15 +1556,7 @@ f_obBuild(bool bull, int cls, string eventName, int anchorBar, float atrNow, int
         reason := "accepted"
     else if not str.contains(reason, "covered")
         f_inc(obStats, 1)
-    string srcText = bestK >= 0 and bestK <= 790 ? f_time(time[bestK]) : "n/a"
-    string logLine = (bull ? "BULL " : "BEAR ") + (cls == 2 ? "swing " : "int ") + eventName + " · src " + srcText + (added == 1 ? " · " + f_px(zBottom) + "-" + f_px(zTop) + " · ACCEPT" : " · REJECT: " + reason)
-    f_obLog(logLine)
     array.set(obLastOutcome, 0, added == 1 ? "last candidate accepted" : "last rejected: " + reason)
-    if showOBDebug
-        label debugLabel = label.new(bar_index, bull ? low : high, (added == 1 ? "✓ " : "✗ ") + (cls == 2 ? "OB" : "iOB"), xloc = xloc.bar_index, yloc = yloc.price, style = bull ? label.style_label_up : label.style_label_down, color = color.new(#090D18, 25), textcolor = added == 1 ? bullColor : bearColor, size = size.tiny, tooltip = logLine)
-        array.push(obDebugLabels, debugLabel)
-        if array.size(obDebugLabels) > 14
-            label.delete(array.shift(obDebugLabels))
     added
 
 bool bullOB = false
@@ -1974,7 +1958,6 @@ int visibleBearOB = 0
 int hiddenOBFar = 0
 int hiddenOBOverlap = 0
 int hiddenOBBudget = 0
-string[] obDebugRows = array.new_string()
 var int invalidatedZoneCount = 0
 var int agedZoneCount = 0
 
@@ -2008,7 +1991,6 @@ if array.size(zones) > 0
                     int endStat = farClose ? 5 : invalid ? 4 : 6
                     f_inc(obStats, endStat)
                     array.set(obLastOutcome, 0, farClose ? "last OB invalidated" : invalid ? "last OB mitigated" : "last OB aged out")
-                    f_obLog((side == 1 ? "BULL " : "BEAR ") + array.get(zoneEvents, i) + " · " + f_px(bottom) + "-" + f_px(top) + " · " + (farClose ? "INVALIDATED (close beyond far edge)" : invalid ? "MITIGATED (" + obMitigationMethod + ")" : "RETIRED (age)"))
                 f_removeZone(i)
             else
                 if not array.get(zoneTouched, i) and mitigationDepth > 0
@@ -2258,7 +2240,6 @@ if array.size(zones) > 0
                 activeBearOB += auditSide == -1 ? 1 : 0
                 visibleBullOB += auditVisible and auditSide == 1 ? 1 : 0
                 visibleBearOB += auditVisible and auditSide == -1 ? 1 : 0
-                string hiddenReason = ""
                 if not auditVisible
                     bool overlapsShown = false
                     for j = 0 to array.size(zones) - 1
@@ -2271,16 +2252,10 @@ if array.size(zones) > 0
                                 overlapsShown := true
                     if not withinDistance
                         hiddenOBFar += 1
-                        hiddenReason := auditDistance <= effObDistanceATR ? "outside the candle range (scale protection)" : "far (" + str.tostring(auditDistance, "0.0") + " ATR > " + str.tostring(effObDistanceATR, "0") + ")"
                     else if overlapsShown
                         hiddenOBOverlap += 1
-                        hiddenReason := "overlaps a higher-ranked OB"
                     else
                         hiddenOBBudget += 1
-                        hiddenReason := "per-side budget full"
-                int auditOrigin = array.get(zoneOrigins, i)
-                string auditSrc = bar_index - auditOrigin <= 790 ? f_time(time[bar_index - auditOrigin]) : "older"
-                array.push(obDebugRows, (auditSide == 1 ? "BULL " : "BEAR ") + (array.get(zoneClasses, i) == 2 ? "swing " : "int ") + array.get(zoneEvents, i) + " · src " + auditSrc + " · " + f_px(array.get(zoneBottoms, i)) + "-" + f_px(array.get(zoneTops, i)) + " · " + (array.get(zoneTouched, i) ? "Tested" : "Fresh") + " · " + (auditVisible ? "VISIBLE" : "hidden: " + hiddenReason))
 
 // ------- OPTIONAL CONFIRMED HIGHER-TIMEFRAME CONTEXT -------
 // The returned values are shifted by one HTF bar and requested with
@@ -3183,30 +3158,6 @@ f_renderPanel() =>
 
 if barstate.islast
     f_renderPanel()
-
-// ------- OB DEBUG VIEW (TEMPORARY, OFF BY DEFAULT) -------
-// Lists every active block with its lifecycle state and visibility reason, then the
-// most recent candidate evaluations (accepted and rejected) with the exact reason.
-var table obDebugTable = table.new(position.bottom_left, 1, 30, bgcolor = color.new(#090D18, 6), frame_color = color.new(bullColor, 45), frame_width = 1, border_width = 0)
-f_renderObDebug() =>
-    table.clear(obDebugTable, 0, 0, 0, 29)
-    if showOBDebug
-        table.cell(obDebugTable, 0, 0, "OB DEBUG · active " + str.tostring(activeOB) + " (visible " + str.tostring(visibleBullOB + visibleBearOB) + ") · far " + str.tostring(hiddenOBFar) + " · overlap " + str.tostring(hiddenOBOverlap) + " · budget " + str.tostring(hiddenOBBudget), text_color = color.white, text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
-        int debugRow = 1
-        if array.size(obDebugRows) > 0
-            for r = 0 to math.min(array.size(obDebugRows), 8) - 1
-                table.cell(obDebugTable, 0, debugRow, array.get(obDebugRows, r), text_color = color.silver, text_size = size.tiny, text_halign = text.align_left)
-                debugRow += 1
-        table.cell(obDebugTable, 0, debugRow, "RECENT CANDIDATES", text_color = #CDB5FF, text_size = size.tiny, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
-        debugRow += 1
-        if array.size(obDebugLog) > 0
-            for r = array.size(obDebugLog) - 1 to math.max(0, array.size(obDebugLog) - 14)
-                table.cell(obDebugTable, 0, debugRow, array.get(obDebugLog, r), text_color = str.contains(array.get(obDebugLog, r), "ACCEPT") ? bullColor : str.contains(array.get(obDebugLog, r), "REJECT") ? color.new(bearColor, 10) : color.silver, text_size = size.tiny, text_halign = text.align_left)
-                debugRow += 1
-    0
-
-if barstate.islast
-    f_renderObDebug()
 
 // ------- BAR-CLOSE ALERT EVENTS (EXTERNAL STRUCTURE, CONFIRMED ONLY) -------
 // BOS/CHoCH alerts now refer to confirmed external swings; internal breaks are

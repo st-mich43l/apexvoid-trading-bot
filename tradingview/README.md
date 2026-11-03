@@ -167,7 +167,7 @@ hide them, so:
   or liquidity pool is drawn only if it is within `Candle-scale window` (15 ATR) of the close
   **or** inside the price range the last `Candle range reference` (300) bars already span (plus
   one ATR). An object inside that range cannot stretch the price scale, so it is kept; one
-  outside it is not drawn. The panel and OB debug table report the reason, and
+  outside it is not drawn. The panel reports the reason, and
   hidden objects keep their state. The Debug profile ignores the limit; turn the toggle off to
   ignore it everywhere. Each object type also keeps its own distance setting.
 - **Maximum drawn length** (250 bars): the left edge of zone boxes, midlines, pool lines
@@ -233,8 +233,7 @@ major high/low, internal structure, draw BOS/CHoCH, external event history (6).
 `Minimum impulse candle body` (0.6), `Maximum origin candle range` (2.5),
 `Base tolerance vs leg extreme` (0.5), wicks, `OB mitigation method`
 (Close/Wick/Midpoint), visible bullish / bearish OBs (2 / 2), `Maximum visible OB
-distance` (25 ATR), midpoint line, **`Debug: OB candidate log and rejection
-reasons`**, supply/demand switch, departure (0.8) and width (1.0).
+distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and width (1.0).
 
 **04 Fair Value Gaps** — show FVG, `FVG definition` (Engine / Loose), minimum gap (0.10 ATR) and middle-candle body
 (0.5 ATR) for Loose, invalidation method.
@@ -255,18 +254,6 @@ switch / density / position, global text scale, annotation spacing.
 obstacle that pays less than the minimum reward : risk refuses the trade instead of being skipped. A stop over `Maximum stop (pips)` refuses and is never tightened (structure sets the stop;
 the ATR limits stay). The planned box is labelled `plan 1.2R · below 1.5` and dimmed when it is below the minimum, so it is never mistaken for a tradable plan. The `Trades` tooltip lists the trigger bars that
 opened nothing, each counted once by the first failing check: not a POI, wrong premium/discount side, entry too far from the zone, stop outside the ATR limits, stop over the pip cap, no target room, or no zone touched.
-
-### Debug view for order blocks
-
-Enable `Debug: OB candidate log and rejection reasons`. A bottom-left table lists
-every active block (direction, class, event, source time, price range, Fresh or
-Tested, VISIBLE or `hidden: far / overlaps a higher-ranked OB / per-side budget
-full`) followed by the 14 most recent candidate evaluations with the exact
-rejection reason (`base is not an opposite candle`, `origin too wide`, `weak
-displacement`, `no impulse candle`, `already invalidated/mitigated before
-detection`, `covered by an existing swing OB`). Small ✓ / ✗ markers are placed on
-the break bar; hover for the full line. Turn it off when finished; it is meant to be
-temporary.
 
 ### Alerts
 
@@ -290,7 +277,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 - **Too few order blocks:** raise `Visible bullish / bearish OBs`, raise `Maximum
   visible OB distance`, lower `Minimum displacement from OB`, or lower `Minimum
-  impulse candle body`. Check the Debug table to see which gate is rejecting.
+  impulse candle body`. The panel tooltip counts accepted and rejected candidates.
 - **Too many / noisy order blocks:** switch off internal OBs, raise displacement, or
   use `Midpoint` or `Wick` mitigation so spent blocks leave sooner.
 - **Block disappears after a wick through it:** that is the `Wick` / `Midpoint`
@@ -318,7 +305,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
-| 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram |
+| 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram. Removed to fit TradingView's 100,256-token limit: the temporary OB debug table (`Debug: OB candidate log and rejection reasons`) and the v2.12 swing-publication option |
 | 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
 | 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
 | 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
