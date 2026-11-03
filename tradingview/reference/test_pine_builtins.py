@@ -213,6 +213,17 @@ def test_annotations_use_the_gutter_and_three_tiers():
   assert len(re.findall(r"\btier[123]Size\b", code)) >= 12
 
 
+def test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range():
+  # v2.15.1: larger text needs more room, so labels merge at range / 36 (was / 48)
+  code = _code()
+  assert "/ 48.0" not in code and code.count("/ 36.0") == 2
+
+
+def test_prices_print_two_decimals_for_gold_like_symbols_only():
+  code = _code()
+  assert 'syminfo.mintick < 0.01 and math.abs(x) >= 100 ? str.tostring(x, "0.00") : str.tostring(x, format.mintick)' in code
+
+
 def test_every_right_column_label_carries_a_category_and_a_tier():
   code = _code()
   counts = [n for n in _args(code, "f_regLabel")]
@@ -237,6 +248,8 @@ if __name__ == "__main__":
   test_no_request_security_of_the_charts_own_structure_series()
   test_the_indicator_call_does_not_declare_no_scale()
   test_annotations_use_the_gutter_and_three_tiers()
+  test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range()
+  test_prices_print_two_decimals_for_gold_like_symbols_only()
   test_every_right_column_label_carries_a_category_and_a_tier()
   test_text_formatting_is_only_ever_a_constant()
   test_only_vetted_builtins_are_called()
