@@ -19,3 +19,52 @@ TradePlan is published.
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
   (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).
+
+## Exposure lane
+
+Impulse Pullback Scalp is the only strategy whose catalog profile carries `m1_scalp`, so it is the only one in the
+`scalp` exposure lane ([execution](../execution.md#exposure)): on XAU it may open against an opposite group at 80 pips
+(`exposure.opposite_position.scalp_minimum_separation_pips`, owner decision 2026-11-03) instead of 150, FX still never
+allows an opposite position, and the opposing-structure (zone book) gates are skipped for it. The same-direction rule is unchanged.
+
+## Terminal outcome of every opportunity
+
+Every Go opportunity of the scalp lane ends in exactly one outcome, written once as
+`scalp_outcome strategy=… opportunity_id=… terminal=… reason=… elapsed_s=…` and counted at Redis
+`scalp:metric:outcome:{strategy}:{terminal}`: `plan_published`, `admission_rejected:<reason_code>`, `waiting_retest_expired`,
+`invalidated_before_entry:<reason>`, `activation_rejected:<reason_code>`, `stale_on_arrival:<verdict>`, `adapter_rejected:<reason>`
+(`app/autotrade/scalp_outcome.py`). The first outcome wins; the one supersession is `plan_published` followed by an executor
+rejection (`activation_rejected`). Before this, ten production opportunities (7 invalidated by `IMPULSE_REFERENCE_LOST`, 3
+expired) left no order attempt and no Algo Bot log line.
+
+## Measurement on real M1 (publish counts and simulated outcomes, not P&L)
+
+`analysis-engine/test/ipreplay` replays the real XAU captures that carry M1 bars (`replay-xau-m1-production-capture-20261006`,
+`replay-xau-production-capture-20261014`, and the fresh `scalpwindow-xau-20261103`: M1 30 Oct 18:32 to 3 Nov 06:56 UTC, i.e. the
+sessions after the 25 Oct London and 1 Nov New York clock changes) and simulates a resting limit at the proximal edge of each entry
+band on the following M1 bars: a fill needs the ask to reach the limit (3-pip spread charged), the stop is the invalidation price
+(a bid or ask trade-through), the ladder is the adapter's (1R and 2R, or 1R only when the target offers less than 2R), the stop is
+taken first when one bar spans it and a target, and a fill is followed for 4 hours. Nothing here is an edge claim.
+
+| Variant | Opportunities | Filled | Stopped | Reached 1R (not 2R) | Reached 2R | Invalidated before a fill | Expired unfilled |
+|---|---|---|---|---|---|---|---|
+| as configured (expiry 15 min, displacement 4.0 ATR) | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| expiry 60 min, displacement 4.0 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| expiry 120 min, displacement 4.0 | 5 | 5 | 5 | 0 | 0 | 0 | 0 |
+| expiry 15 min, displacement 3.0 | 8 | 8 | 7 | 1 | 0 | 0 | 0 |
+| expiry 60 min, displacement 3.0 | 8 | 8 | 7 | 1 | 0 | 0 | 0 |
+| expiry 120 min, displacement 3.0 | 8 | 8 | 7 | 1 | 0 | 0 | 0 |
+
+Reading it:
+
+- **The replay reproduces production.** The four 2 November opportunities of `scalpwindow-xau-20261103` carry the same ids as the
+  production ones (`opp_981c63fb`, `opp_dcb0f136`, `opp_e9584b65`, `opp_8b0d91f4`), and the simulated stop times (07:33, 07:33,
+  13:01, 13:01 UTC) are the times production invalidated them with `IMPULSE_REFERENCE_LOST`. Those opportunities were stop-outs, not
+  missed trades: the quote was already in the band on the next bar, a resting limit filled at once, and price went through the stop
+  within 3 to 13 minutes.
+- **The expiry does not matter.** Every fill happens on the first or second bar and every outcome within 13 minutes, so 15, 60 and
+  120 minutes produce identical rows.
+- **Lowering the displacement to 3 ATR adds three opportunities, not edge.** Of the 8 distinct setups at 3 ATR (the 5 of the configured setting plus 3), 7 are stopped and 1 reaches 1R.
+- Small samples (5 to 8 setups over about 90 hours of M1). They say the strategy rarely publishes and that what it publishes
+  fails quickly in this window; they cannot say it has no edge. The configuration (`analysis.yml` `impulse_pullback`) is unchanged;
+  the owner decides from this table.

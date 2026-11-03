@@ -63,13 +63,17 @@ owning YAML file and its consumer together.
 ## Autonomous opposite-direction exposure
 
 Each instrument (usually through its pack) owns one rule under
-`exposure.opposite_position`; strategy names and scalp status are never
-consulted.
+`exposure.opposite_position`; strategy names are never consulted. The one
+strategy-derived input is the incoming trade's exposure lane (`scalp` for a catalog
+`m1_scalp` strategy, `standard` otherwise; [execution](execution.md#exposure)).
 
 | Instrument class | Config | Behavior |
 |---|---|---|
 | FX (EURUSD, GBPUSD, GBPJPY, USDJPY, any new pair) | `allowed: false` | any opposite exposure on the symbol blocks the plan at any distance (`fx_opposite_position_not_allowed`) |
-| XAU (`XAU`, `XAUUSD`, `GOLD`) | `allowed: true`, `minimum_separation_pips: 150` | the entry must be at least 150 pips (inclusive; `pip_size` 0.1, so 15.0 price) from EVERY existing opposite group, else `xau_opposite_position_too_close` |
+| XAU (`XAU`, `XAUUSD`, `GOLD`) | `allowed: true`, `minimum_separation_pips: 150`, `scalp_minimum_separation_pips: 80` | the entry must be at least 150 pips (inclusive; `pip_size` 0.1, so 15.0 price) from EVERY existing opposite group, else `xau_opposite_position_too_close`; an incoming scalp-lane trade needs 80 pips, else `xau_scalp_opposite_too_close` |
+
+`scalp_minimum_separation_pips` is required with `allowed: true` (positive and at most `minimum_separation_pips`) and
+forbidden with `allowed: false`; a config that breaks this fails to load in Algo Bot and in the cTrader Engine.
 
 A missing or invalid policy fails closed in both Algo Bot and cTrader Engine.
 Manual `/algo` plans are exempt (owner instruction).
