@@ -42,7 +42,7 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
 | `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
-| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the last confirmed external range, and its equilibrium. Clipped to the candle-scale window. |
+| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. The dealing range is the confirmed swing range extended to the live extreme of the current leg, so after a break it follows price instead of a days-old swing. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
 | `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
@@ -157,7 +157,7 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 | Compact row | Shows |
 | --- | --- |
 | Bias / Phase | External bias (and HTF bias when enabled); market phase |
-| Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the confirmed external range |
+| Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the dealing range (tooltip shows its low and high) |
 | High / Low | Last confirmed external swing high / low (tooltip: times and developing extreme) |
 | Protected | The external level whose break flips the bias |
 | Last break | Last external BOS/CHoCH with its age (tooltip: last internal break) |
@@ -286,6 +286,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
 | 2.9 | Planned RR box for the nearest qualified POI; trade boxes show only R:R |
 | 2.8 | Trade plan: price-action trigger at a qualified POI, next-key-level take-profit, last 5 trades drawn, paper stats |
+| 2.10 | Premium/discount and EQ use the dealing range (confirmed swing to the live extreme of the leg), not a stale confirmed swing; trade plan uses the same EQ |
 | 2.7 | One right-edge label column; one BOS per candle; slim premium/discount gauge |
 | 2.6 | BOS/CHoCH lines end on the candle that closed beyond the swing |
 | 2.5 | BSL/SSL kept when inside the candle range; nearest unswept internal swing markers |
