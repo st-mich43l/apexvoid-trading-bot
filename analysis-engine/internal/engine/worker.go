@@ -20,6 +20,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/state"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	strategykeylevel "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
@@ -79,7 +80,22 @@ func NewSymbolWorker(symbol market.Symbol, settings Settings, recorder *telemetr
 	if err != nil {
 		return nil, err
 	}
-	registry, err := strategy.NewRegistry(settings.Strategies, strategyFactories)
+	factories := strategyFactories
+	if settings.KeyLevelSource != nil {
+		factories = make(map[strategy.StrategyID]strategy.Factory, len(strategyFactories))
+		for id, factory := range strategyFactories {
+			factories[id] = factory
+		}
+		factories[strategykeylevel.ID] = func(cfg strategy.Config) (strategy.Strategy, error) {
+			built, err := strategykeylevel.New(cfg)
+			if err != nil {
+				return nil, err
+			}
+			built.(*strategykeylevel.Strategy).UseLevelSource(settings.KeyLevelSource)
+			return built, nil
+		}
+	}
+	registry, err := strategy.NewRegistry(settings.Strategies, factories)
 	if err != nil {
 		return nil, err
 	}
