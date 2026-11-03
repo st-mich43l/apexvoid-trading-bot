@@ -236,6 +236,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	}
 	zoneBandFloor := math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr))
 	levels, zones := s.structure(base)
+	coverage := levelCoverage(levels, s.cfg.MinimumTouches, frame.Bars)
 
 	// Each level's confirmed attempt becomes a full candidate (reaction-anchored invalidation, the sweep requirement, the stop budget, the target) BEFORE
 	// the highest-stars one is kept, so an attempt the strategy then refuses can no longer suppress a valid one on another level. (v5 chose the best
@@ -328,7 +329,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			continue
 		}
 		chosen := confirmed[0]
-		candidate, ok := s.candidate(ctx, base, &chosen)
+		candidate, ok := s.candidate(ctx, base, &chosen, coverage)
 		if !ok {
 			continue
 		}
@@ -351,7 +352,7 @@ func reactionFactors(confirmationType string, htfAligned bool, touches int, sess
 	return strategyutil.ReactionFactors(confirmationType, htfAligned, touches, sessionSweep)
 }
 
-func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt) (opportunity.Candidate, bool) {
+func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt, coverage float64) (opportunity.Candidate, bool) {
 	atr := d.ATR
 	direction := a.direction
 	buffer := s.cfg.InvalidationBufferATR * atr
@@ -407,6 +408,7 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity",
 		localTrend: d.Frame.Structure, choch: a.detector.RecentCHoCH(maxInt(1, d.Settings.ReactionLookbackBars)), htfAligned: a.detector.HTFAligned(),
 		htfTouches: htfTouches, htfWeight: htfWeight,
+		levelKind: a.level.Kind, levelBand: a.level.Band, swings: d.Frame.Swings, coverage: coverage,
 	})
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
