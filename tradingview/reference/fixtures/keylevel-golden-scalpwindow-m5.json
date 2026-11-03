@@ -1,0 +1,633 @@
+{
+ "capture": "scalpwindow-xau-20261103.json",
+ "timeframe": "M5",
+ "window": 150,
+ "fractal_n": 2,
+ "last_bar_time": 1793688600,
+ "atr": 4.4221428571428145,
+ "median_atr_of_window": 3.895357142857149,
+ "cluster_atr": 0.5,
+ "round_step": 5,
+ "minimum_touches": 2,
+ "maximum_cluster_span_multiple": 2,
+ "breakout_accept_bars": 2,
+ "last_close": 3914.72,
+ "swings": [
+  {
+   "bar": 1854,
+   "time": 1793641500,
+   "kind": "low",
+   "price": 3953.54
+  },
+  {
+   "bar": 1859,
+   "time": 1793643000,
+   "kind": "high",
+   "price": 3965.76
+  },
+  {
+   "bar": 1869,
+   "time": 1793646000,
+   "kind": "low",
+   "price": 3951.9
+  },
+  {
+   "bar": 1871,
+   "time": 1793646600,
+   "kind": "high",
+   "price": 3954.95
+  },
+  {
+   "bar": 1879,
+   "time": 1793649000,
+   "kind": "low",
+   "price": 3938.92
+  },
+  {
+   "bar": 1881,
+   "time": 1793649600,
+   "kind": "high",
+   "price": 3951.01
+  },
+  {
+   "bar": 1887,
+   "time": 1793651400,
+   "kind": "low",
+   "price": 3937.49
+  },
+  {
+   "bar": 1892,
+   "time": 1793652900,
+   "kind": "high",
+   "price": 3947.97
+  },
+  {
+   "bar": 1896,
+   "time": 1793654100,
+   "kind": "high",
+   "price": 3947.59
+  },
+  {
+   "bar": 1896,
+   "time": 1793654100,
+   "kind": "low",
+   "price": 3944.49
+  },
+  {
+   "bar": 1899,
+   "time": 1793655000,
+   "kind": "low",
+   "price": 3944.28
+  },
+  {
+   "bar": 1902,
+   "time": 1793655900,
+   "kind": "high",
+   "price": 3948.01
+  },
+  {
+   "bar": 1904,
+   "time": 1793656500,
+   "kind": "low",
+   "price": 3945.13
+  },
+  {
+   "bar": 1905,
+   "time": 1793660400,
+   "kind": "high",
+   "price": 3949.01
+  },
+  {
+   "bar": 1907,
+   "time": 1793661000,
+   "kind": "low",
+   "price": 3942.96
+  },
+  {
+   "bar": 1924,
+   "time": 1793666100,
+   "kind": "high",
+   "price": 3964.45
+  },
+  {
+   "bar": 1925,
+   "time": 1793666400,
+   "kind": "low",
+   "price": 3948.06
+  },
+  {
+   "bar": 1928,
+   "time": 1793667300,
+   "kind": "high",
+   "price": 3962.57
+  },
+  {
+   "bar": 1931,
+   "time": 1793668200,
+   "kind": "low",
+   "price": 3945.88
+  },
+  {
+   "bar": 1933,
+   "time": 1793668800,
+   "kind": "high",
+   "price": 3959.31
+  },
+  {
+   "bar": 1937,
+   "time": 1793670000,
+   "kind": "low",
+   "price": 3946.57
+  },
+  {
+   "bar": 1939,
+   "time": 1793670600,
+   "kind": "high",
+   "price": 3953.3
+  },
+  {
+   "bar": 1943,
+   "time": 1793671800,
+   "kind": "low",
+   "price": 3941.08
+  },
+  {
+   "bar": 1946,
+   "time": 1793672700,
+   "kind": "high",
+   "price": 3948.62
+  },
+  {
+   "bar": 1948,
+   "time": 1793673300,
+   "kind": "low",
+   "price": 3941.7
+  },
+  {
+   "bar": 1952,
+   "time": 1793674500,
+   "kind": "high",
+   "price": 3951.35
+  },
+  {
+   "bar": 1963,
+   "time": 1793677800,
+   "kind": "low",
+   "price": 3924.47
+  },
+  {
+   "bar": 1966,
+   "time": 1793678700,
+   "kind": "high",
+   "price": 3930.82
+  },
+  {
+   "bar": 1966,
+   "time": 1793678700,
+   "kind": "low",
+   "price": 3923.97
+  },
+  {
+   "bar": 1969,
+   "time": 1793679600,
+   "kind": "low",
+   "price": 3924.78
+  },
+  {
+   "bar": 1971,
+   "time": 1793680200,
+   "kind": "high",
+   "price": 3928.89
+  },
+  {
+   "bar": 1973,
+   "time": 1793680800,
+   "kind": "low",
+   "price": 3921.37
+  },
+  {
+   "bar": 1977,
+   "time": 1793682000,
+   "kind": "low",
+   "price": 3921.34
+  },
+  {
+   "bar": 1980,
+   "time": 1793682900,
+   "kind": "high",
+   "price": 3929.69
+  },
+  {
+   "bar": 1984,
+   "time": 1793684100,
+   "kind": "low",
+   "price": 3917.59
+  },
+  {
+   "bar": 1985,
+   "time": 1793684400,
+   "kind": "high",
+   "price": 3927.88
+  },
+  {
+   "bar": 1989,
+   "time": 1793685600,
+   "kind": "low",
+   "price": 3916.37
+  },
+  {
+   "bar": 1990,
+   "time": 1793685900,
+   "kind": "high",
+   "price": 3924.6
+  },
+  {
+   "bar": 1992,
+   "time": 1793686500,
+   "kind": "low",
+   "price": 3917.59
+  },
+  {
+   "bar": 1996,
+   "time": 1793687700,
+   "kind": "high",
+   "price": 3926.99
+  }
+ ],
+ "levels": [
+  {
+   "price": 3917.183333333333,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 2.2110714285714073,
+   "role": "ambiguous"
+  },
+  {
+   "price": 3920.6775,
+   "kind": "round",
+   "touches": 2,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3924.7275,
+   "kind": "round",
+   "touches": 5,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3929.6075,
+   "kind": "round",
+   "touches": 4,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3939.1025,
+   "kind": "round",
+   "touches": 3,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3941.9133333333334,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3944.9725000000003,
+   "kind": "round",
+   "touches": 6,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3949.4558333333334,
+   "kind": "round",
+   "touches": 8,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3952.5225,
+   "kind": "reaction",
+   "touches": 4,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3955,
+   "kind": "round",
+   "touches": 3,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  },
+  {
+   "price": 3964.255,
+   "kind": "reaction",
+   "touches": 2,
+   "band": 2.2110714285714073,
+   "role": "broken_support"
+  }
+ ],
+ "strategy_levels": [
+  {
+   "price": 3917.183333333333,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "ambiguous"
+  },
+  {
+   "price": 3924.673333333333,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3927.92,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3930.1275,
+   "kind": "round",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3939.1025,
+   "kind": "round",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3941.9133333333334,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3945.048333333333,
+   "kind": "round",
+   "touches": 4,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3949.116875,
+   "kind": "round",
+   "touches": 6,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3951.42,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3954.465,
+   "kind": "reaction",
+   "touches": 3,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  },
+  {
+   "price": 3964.255,
+   "kind": "reaction",
+   "touches": 2,
+   "band": 1.9476785714285745,
+   "role": "broken_support"
+  }
+ ],
+ "strategy_swings": [
+  {
+   "bar": 1854,
+   "time": 1793641500,
+   "kind": "low",
+   "price": 3953.54
+  },
+  {
+   "bar": 1859,
+   "time": 1793643000,
+   "kind": "high",
+   "price": 3965.76
+  },
+  {
+   "bar": 1869,
+   "time": 1793646000,
+   "kind": "low",
+   "price": 3951.9
+  },
+  {
+   "bar": 1871,
+   "time": 1793646600,
+   "kind": "high",
+   "price": 3954.95
+  },
+  {
+   "bar": 1879,
+   "time": 1793649000,
+   "kind": "low",
+   "price": 3938.92
+  },
+  {
+   "bar": 1881,
+   "time": 1793649600,
+   "kind": "high",
+   "price": 3951.01
+  },
+  {
+   "bar": 1887,
+   "time": 1793651400,
+   "kind": "low",
+   "price": 3937.49
+  },
+  {
+   "bar": 1892,
+   "time": 1793652900,
+   "kind": "high",
+   "price": 3947.97
+  },
+  {
+   "bar": 1899,
+   "time": 1793655000,
+   "kind": "low",
+   "price": 3944.28
+  },
+  {
+   "bar": 1902,
+   "time": 1793655900,
+   "kind": "high",
+   "price": 3948.01
+  },
+  {
+   "bar": 1904,
+   "time": 1793656500,
+   "kind": "low",
+   "price": 3945.13
+  },
+  {
+   "bar": 1905,
+   "time": 1793660400,
+   "kind": "high",
+   "price": 3949.01
+  },
+  {
+   "bar": 1907,
+   "time": 1793661000,
+   "kind": "low",
+   "price": 3942.96
+  },
+  {
+   "bar": 1924,
+   "time": 1793666100,
+   "kind": "high",
+   "price": 3964.45
+  },
+  {
+   "bar": 1925,
+   "time": 1793666400,
+   "kind": "low",
+   "price": 3948.06
+  },
+  {
+   "bar": 1928,
+   "time": 1793667300,
+   "kind": "high",
+   "price": 3962.57
+  },
+  {
+   "bar": 1931,
+   "time": 1793668200,
+   "kind": "low",
+   "price": 3945.88
+  },
+  {
+   "bar": 1933,
+   "time": 1793668800,
+   "kind": "high",
+   "price": 3959.31
+  },
+  {
+   "bar": 1937,
+   "time": 1793670000,
+   "kind": "low",
+   "price": 3946.57
+  },
+  {
+   "bar": 1939,
+   "time": 1793670600,
+   "kind": "high",
+   "price": 3953.3
+  },
+  {
+   "bar": 1943,
+   "time": 1793671800,
+   "kind": "low",
+   "price": 3941.08
+  },
+  {
+   "bar": 1946,
+   "time": 1793672700,
+   "kind": "high",
+   "price": 3948.62
+  },
+  {
+   "bar": 1948,
+   "time": 1793673300,
+   "kind": "low",
+   "price": 3941.7
+  },
+  {
+   "bar": 1952,
+   "time": 1793674500,
+   "kind": "high",
+   "price": 3951.35
+  },
+  {
+   "bar": 1963,
+   "time": 1793677800,
+   "kind": "low",
+   "price": 3924.47
+  },
+  {
+   "bar": 1966,
+   "time": 1793678700,
+   "kind": "high",
+   "price": 3930.82
+  },
+  {
+   "bar": 1966,
+   "time": 1793678700,
+   "kind": "low",
+   "price": 3923.97
+  },
+  {
+   "bar": 1971,
+   "time": 1793680200,
+   "kind": "high",
+   "price": 3928.89
+  },
+  {
+   "bar": 1977,
+   "time": 1793682000,
+   "kind": "low",
+   "price": 3921.34
+  },
+  {
+   "bar": 1980,
+   "time": 1793682900,
+   "kind": "high",
+   "price": 3929.69
+  },
+  {
+   "bar": 1984,
+   "time": 1793684100,
+   "kind": "low",
+   "price": 3917.59
+  },
+  {
+   "bar": 1985,
+   "time": 1793684400,
+   "kind": "high",
+   "price": 3927.88
+  },
+  {
+   "bar": 1989,
+   "time": 1793685600,
+   "kind": "low",
+   "price": 3916.37
+  },
+  {
+   "bar": 1990,
+   "time": 1793685900,
+   "kind": "high",
+   "price": 3924.6
+  },
+  {
+   "bar": 1992,
+   "time": 1793686500,
+   "kind": "low",
+   "price": 3917.59
+  },
+  {
+   "bar": 1996,
+   "time": 1793687700,
+   "kind": "high",
+   "price": 3926.99
+  }
+ ]
+}

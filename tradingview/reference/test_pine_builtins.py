@@ -15,6 +15,7 @@ PINE = os.path.join(os.path.dirname(__file__), "..", "apexvoid_price_action.pine
 VETTED = {
     "array.clear",
     "array.get",
+    "array.median",
     "array.new_bool",
     "array.new_box",
     "array.new_color",
@@ -78,6 +79,8 @@ VETTED = {
     "line.set_xy1",
     "line.set_xy2",
     "math.abs",
+    "math.ceil",
+    "math.floor",
     "math.max",
     "math.min",
     "math.round",
@@ -167,6 +170,102 @@ def source_tokens(src):
   return len(re.findall(r"[A-Za-z_][A-Za-z_0-9]*|\d+\.?\d*|==|!=|<=|>=|:=|=>|\?|:|[-+*/%<>=(),\[\].]", code))
 
 
+def test_no_request_security_of_the_charts_own_structure_series():
+  # v2.14 requested `[bias[1], activeProtected[1]]` on two other frames and TradingView counted 104,204 compiled tokens at 33,514 source tokens (limit 100,256):
+  # a request.security of a global series compiles its whole dependency chain once per call. Use a small pure function instead.
+  src = open(PINE, encoding="utf-8").read()
+  code = "\n".join(l.split("//")[0] for l in src.splitlines())
+  assert not re.search(r"request\.security\([^\n]*\[[^\]\n]*(bias|activeProtected|protectedHigh|protectedLow)", code), "request.security of the structure series"
+
+
+def test_the_indicator_call_does_not_declare_no_scale():
+  # `scale = scale.none` put the drawings on their own hidden scale: after the price axis was dragged or zoomed they kept their pixels and drifted off the candles
+  src = open(PINE, encoding="utf-8").read()
+  call = [l for l in src.splitlines() if l.startswith("indicator(")]
+  assert len(call) == 1 and "scale.none" not in call[0] and "scale =" not in call[0], call
+
+
+def _code():
+  src = open(PINE, encoding="utf-8").read()
+  return "\n".join(l.split("//")[0] for l in src.splitlines())
+
+
+def _args(code, name):
+  """Top-level argument count of every `name(...)` call (strings and nested brackets respected)."""
+  out = []
+  for m in re.finditer(r"\b%s\(" % re.escape(name), code):
+    i, depth, n, quote = m.end(), 1, 1, False
+    while depth:
+      c = code[i]
+      if c == '"' and code[i - 1] != "\\":
+        quote = not quote
+      elif not quote:
+        depth += (c in "([") - (c in ")]")
+        n += 1 if c == "," and depth == 1 else 0
+      i += 1
+    out.append(n)
+  return out
+
+
+def test_annotations_use_the_gutter_and_three_tiers():
+  # v2.15: objects end `gutter` bars right of the last candle (captions are right-aligned inside it) and text sizes come from three tiers
+  code = _code()
+  assert "bar_index + 5" not in code and "bar_index + 7" not in code, "a drawing still ends at a hard-coded offset"
+  for old in ("majorTextSize", "structureTextSize", "zoneTextSize", "contextTextSize"):
+    assert old not in code, old
+  assert len(re.findall(r"\btier[123]Size\b", code)) >= 12
+
+
+def test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range():
+  # v2.15.1: larger text needs more room, so labels merge at range / 36 (was / 48)
+  code = _code()
+  assert "/ 48.0" not in code and code.count("/ 36.0") == 3  # label gap, column cluster gap, and the key-level caption yield
+
+
+def test_prices_print_two_decimals_for_gold_like_symbols_only():
+  code = _code()
+  assert 'syminfo.mintick < 0.01 and math.abs(x) >= 100 ? str.tostring(x, "0.00") : str.tostring(x, format.mintick)' in code
+
+
+def test_every_right_column_label_carries_a_category_and_a_tier():
+  code = _code()
+  counts = [n for n in _args(code, "f_regLabel")]
+  assert len(counts) >= 10 and set(counts) == {7}, counts  # the definition has 7 parameters too
+
+
+def test_text_formatting_is_only_ever_a_constant():
+  # `text_formatting` needs a const text_format (community note, not confirmed in the official reference): a ternary on a series would not compile
+  code = _code()
+  uses = re.findall(r"text_formatting\s*=\s*([^,)]*)", code)
+  assert all(re.fullmatch(r"text\.format_[a-z]+", u.strip()) for u in uses), uses
+  assert "set_text_formatting" not in code
+
+
+def test_key_level_loops_are_guarded_against_empty_arrays():
+  # a Pine `for i = 0 to n - 1` with n = 0 runs twice (0, -1): every loop over an array that can be empty needs its guard
+  code = _code()
+  body = code[code.index("f_keyLevels() =>"):code.index("f_keyLevels()", code.index("f_keyLevels() =>") + 20)]
+  assert "keyRing" not in code and "showBrokenKeys" not in code and "array.median" in body
+  for guard in ("w >= 5", "ns > 0", "array.size(pr) > 0", "array.size(gap) > 0", "array.size(rlY) > 0"):
+    assert guard in body, guard
+  assert "|80|35|60|62|45|" in body, "the stronger-object priorities (PROT, EQ, pools, zones) the layer yields to"
+
+
+def test_no_block_opener_is_left_empty():
+  # CE10013 "Mismatched input ... expecting end of line without line continuation": an `if` / `else` / `for` / `while` / function header whose body was deleted
+  # (v2.16.1 removed an assignment and left `if choch` with nothing under it). Every block header needs a more indented line below it.
+  lines = [l.rstrip() for l in open(PINE, encoding="utf-8").read().splitlines()]
+  code = [(i + 1, l) for i, l in enumerate(lines) if l.strip() and not l.strip().startswith("//")]
+  bad = []
+  for (n, line), (_, nxt) in zip(code, code[1:]):
+    head = re.match(r"\s*(if|else if|else|for|while)\b", line) or line.rstrip().endswith("=>")
+    code_part = line.split("//")[0].rstrip()
+    if head and (code_part.endswith("=>") or re.match(r"\s*(if|else if|else|for|while)\b", line)) and not code_part.endswith(("(", ",", "and", "or")):
+      if len(nxt) - len(nxt.lstrip()) <= len(line) - len(line.lstrip()):
+        bad.append(n)
+  assert not bad, "empty block body after line(s) %s" % bad[:10]
+
+
 def test_script_stays_under_the_compiled_token_budget():
   n = source_tokens(open(PINE, encoding="utf-8").read())
   assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
@@ -174,6 +273,15 @@ def test_script_stays_under_the_compiled_token_budget():
 
 if __name__ == "__main__":
   test_script_stays_under_the_compiled_token_budget()
+  test_no_request_security_of_the_charts_own_structure_series()
+  test_the_indicator_call_does_not_declare_no_scale()
+  test_annotations_use_the_gutter_and_three_tiers()
+  test_no_block_opener_is_left_empty()
+  test_key_level_loops_are_guarded_against_empty_arrays()
+  test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range()
+  test_prices_print_two_decimals_for_gold_like_symbols_only()
+  test_every_right_column_label_carries_a_category_and_a_tier()
+  test_text_formatting_is_only_ever_a_constant()
   test_only_vetted_builtins_are_called()
   test_no_reserved_word_is_declared_as_a_name()
   test_main_body_stays_within_the_size_limit()
