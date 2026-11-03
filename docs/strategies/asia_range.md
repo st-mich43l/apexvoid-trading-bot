@@ -67,6 +67,34 @@ quality dimensions (`range_validity`, `force`, `rejection`, `sweep_depth`, `entr
 `invalid_stop_geometry`, `no_target_room`, `target_already_reached`, `risk_exceeds_execution_envelope`, `confluence_below_floor`, `insufficient_m5_history`,
 `insufficient_m15_history`.
 
+## Why it has published no live opportunity (finding of 3 Nov 2026)
+
+The strategy was deployed on 29 October and no `asia_range` opportunity has been published since. Two suspects were checked on real bars; only one holds.
+
+1. **Daylight saving: not the cause.** Every committed capture predates the London change of 25 October and the New York change of 1 November, so the live period was untested.
+   `TestAsiaRangeIsAnchoredAndPublishesOnEachSideOfTheClockChanges` builds a morning on each side of both changes (Fri 23 Oct BST, Mon 26 Oct GMT, Fri 30 Oct, Mon 2 Nov EST) with
+   the engine's real session calendar and asserts that `ASIA_H` / `ASIA_L` finalize at **that date's** London open (07:00 UTC before, 08:00 after), that the London levels finalize at that
+   date's New York open (13:00 / 14:00 UTC), that the strategy anchors there, and that a London raid inside the window publishes. All four pass with no code change; the
+   fresh capture also contains a real post-change publish (Tue 27 Oct, BUY 09:55 UTC).
+2. **The market did not offer the setup, by the strategy's own range test.** `TestAsiaRangeDayByDay` replays `scalpwindow-xau-20261103` (every Asia range after 22 Oct) and
+   prints each day against the `[1, 6]` M15 ATR window:
+
+| London open | Asia range | in M15 ATR | outcome |
+|---|---|---|---|
+| Fri 23 Oct | 455 pips | 5.7 | `confluence_below_floor`, `target_already_reached` |
+| Mon 26 Oct | 412 pips | 7.0 | `range_too_wide` |
+| Tue 27 Oct | 284 pips | 4.5 | **published** BUY 09:55 UTC (and 10 refused episodes) |
+| Wed 28 Oct | 428 pips | 9.0 | `range_too_wide` |
+| **Thu 29 Oct (deployed)** | 468 pips | 6.7 | `range_too_wide` |
+| **Fri 30 Oct** | 612 pips | 7.6 | `range_too_wide` |
+| **Mon 2 Nov** | 373 pips | 5.6 | in window; `no_retest`, `reclaim_window_expired` |
+
+Live days since the deploy: two Asia ranges wider than the strategy's maximum (6.7 and 7.6 M15 ATR) and one inside the window with no valid episode; 3 Nov's range finalizes at 08:00 UTC.
+Across the seven XAU captures the strategy published 3 setups (2 raids, 1 acceptance), and `range_too_wide` is the commonest day-level refusal in the post-22 October gold regime, where a
+$30 to $60 Asian session is not a consolidation. `strategy_refused{strategy="asia_range", reason}` now reports every such refusal live (once per distinct episode; `Evaluate` counts, `Analyze` does not).
+
+Nothing was changed to manufacture volume: `maximum_range_atr` stays 6. Whether a wider range (a maximum of 8 would have admitted 26 Oct, 29 Oct and 30 Oct) still describes a consolidation is the owner's call, and would need its own measurement.
+
 ## Release and rollback
 
 New strategy id, so new opportunity ids; no existing id changes. Rollback: `analysis.strategies.asia_range.enabled: false` (the entry must stay) and
