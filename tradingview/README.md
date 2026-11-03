@@ -152,11 +152,12 @@ Tokyo ended early at London open (a bar inside London is never Asia, so the end 
 drawn on the chart only, live while the session runs and then as the completed range (configurable); the panel does not show it. The live
 and completed Asian high/low are also key levels for the trade-plan take-profit. On charts above 5m the session is evaluated on a 5-minute request.
 
-**Multi-timeframe structure (v2.14).** The panel row `MTF` shows the bias and the protected level of two other timeframes (`MTF frame 1`/`2`, default 15 and 60; a frame
-at or below the chart's is not shown), and the Bias row says `chart against M15+H1` when the chart disagrees with both. The value is the chart's own `bias` and
-`activeProtected` requested on that frame (`request.security`, `[1]` + `lookahead_on`): only the last completed bar of the frame is read, and it is exactly what the indicator
-shows on that frame's own chart, with that frame's Auto lengths. The old optional HTF context (a separate 12-bar pivot and close algorithm that could contradict the HTF chart)
-and its lines are removed. The Python model checks the alignment bar by bar (`reference/test_mtf_v214.py`).
+**Multi-timeframe structure (not in this script).** v2.14 first shipped a panel row that requested the chart's own `bias` / `activeProtected` on two other frames
+(`request.security` of a global series). TradingView rejected it: **104,204 compiled tokens against the 100,256 limit (CE10117)** at 33,514 source tokens. A
+`request.security` of a global series compiles that series' whole dependency chain once per call (the structure state machine here), about 3,000 compiled tokens per
+frame, and this script has no room for even one. The row, its inputs and the `chart against M15+H1` tag are therefore removed; the old optional HTF context stays removed
+(it used a different algorithm and could contradict the HTF chart). The aligned multi-frame view is specified and verified in the model (`reference/mtf.py`,
+`reference/test_mtf_v214.py`, `reference/report_v214.py`) for a small companion indicator that carries only the structure algorithm.
 
 ### Display profiles
 
@@ -197,8 +198,7 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 
 | Compact row | Shows |
 | --- | --- |
-| Bias / Phase | External bias (with `chart against M15+H1` when both other frames disagree); market phase |
-| MTF | Bias and protected level of the two other frames, coloured per frame (hidden for a frame at or below the chart's) |
+| Bias / Phase | External bias; market phase |
 | Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the dealing range (tooltip shows its low and high) |
 | Range H / L | The dealing range high / low (same range as the premium/discount gauge; tooltip: the confirmed swings with times and the developing extreme) |
 | Protected | The external level whose break flips the bias |
@@ -212,7 +212,7 @@ Full panel (`Standard` / `Expanded`):
 
 | Section | Rows |
 | --- | --- |
-| Market state | External bias (and the MTF tag), market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
+| Market state | External bias, market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
 | Structure | Confirmed major high/low (tooltip: when each was confirmed), developing extreme, protected level, last external BOS/CHoCH with its age, **last internal break** with its age, invalidated level (Expanded) |
 | Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
 | Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** (a trailing `*` means that pool is active but not drawn, e.g. beyond the candle-scale window; `LQ n/m` in the barrier row is drawn / active pools) |
@@ -256,7 +256,6 @@ distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
 switch / density / position, global text scale, annotation spacing.
 
-**07 Multi-Timeframe Structure** — `MTF frame 1` (15), `MTF frame 2` (60).
 
 **08 Trade Plan** — show, planned RR box before the trigger (on), entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise), trades drawn (5), box colours.
 
@@ -315,7 +314,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
-| 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; panel row `MTF` shows the bias and protected level of two other frames (the chart's own series on that frame) and replaces the optional HTF context; the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
 | 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram. Removed to fit TradingView's 100,256-token limit: the temporary OB debug table (`Debug: OB candidate log and rejection reasons`) and the v2.12 swing-publication option |
 | 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
 | 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
