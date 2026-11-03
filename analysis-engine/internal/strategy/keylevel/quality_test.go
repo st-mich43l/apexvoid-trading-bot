@@ -7,6 +7,7 @@ import (
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // supportHistory builds closed bars around a support at 100 (ATR 1, band 0.1): each episode is a bar that visits the level and is
@@ -230,5 +231,83 @@ func TestIntegrityIsTheShareOfFailedClosesSinceTheFirstVisit(t *testing.T) {
 	fresh := baseInputs(0, 0.6, 0.95)
 	if _, c := score(t, fresh); c["score_level_integrity"] != 0 {
 		t.Fatalf("a level with no history earned integrity: %v", c["score_level_integrity"])
+	}
+}
+
+func TestRoundClassJudgesThePriceNotTheKind(t *testing.T) {
+	for price, want := range map[float64]float64{3900: 4, 3950: 3, 3910: 2, 3915: 1, 3920.677: 0, 3914.99: 0, 4000: 4, 3905: 1, 3940: 2, 3925: 1, 3955.0000001: 1} {
+		if got := roundClass(price); got != want {
+			t.Errorf("roundClass(%v) = %v, want %v", price, got, want)
+		}
+	}
+}
+
+func TestLevelOriginAndAgeFromTheSwingsWithinTheBand(t *testing.T) {
+	swings := []techniquezone.Swing{
+		{Index: 10, Price: 100.0, Kind: "low"}, {Index: 30, Price: 100.2, Kind: "low"}, {Index: 50, Price: 99.9, Kind: "high"}, {Index: 70, Price: 105, Kind: "high"},
+	}
+	origin, age := levelOrigin(swings, 100.0, 0.5, 99)
+	if origin != 1 || age != 49 {
+		t.Errorf("two lows and a high within the band: origin %v age %v, want +1 and 49 (newest member at 50, confirmed at 99)", origin, age)
+	}
+	if origin, age := levelOrigin(swings, 100.0, 0.5, 40); origin != 1 || age != 10 {
+		t.Errorf("at confirmation bar 40 only the swings up to it count: origin %v age %v, want +1 and 10", origin, age)
+	}
+	if origin, _ := levelOrigin(swings, 105, 0.5, 99); origin != -1 {
+		t.Errorf("a high alone: origin %v, want -1", origin)
+	}
+	if origin, _ := levelOrigin(swings[:3], 100.0, 0.5, 99); origin != 1 {
+		t.Error("lows 2 against highs 1 stays +1")
+	}
+	if origin, _ := levelOrigin([]techniquezone.Swing{{Index: 1, Price: 100, Kind: "low"}, {Index: 2, Price: 100, Kind: "high"}}, 100, 0.1, 9); origin != 0 {
+		t.Error("a tie is mixed (0)")
+	}
+	if origin, age := levelOrigin(swings, 200, 0.5, 99); origin != 0 || age != 100 {
+		t.Errorf("no member: origin %v age %v, want 0 and the 100 bars read (finite)", origin, age)
+	}
+}
+
+func TestLevelCoverageIsTheUnionOfBandsOverTheWindowRange(t *testing.T) {
+	bars := []market.Candle{{High: 110, Low: 100}, {High: 108, Low: 101}}
+	levels := []techniquezone.Level{
+		{Price: 102, Band: 1, Touches: 3}, {Price: 102.5, Band: 1, Touches: 2}, // overlap: [101, 103.5] together
+		{Price: 108, Band: 1, Touches: 2},  // [107, 109]
+		{Price: 105, Band: 1, Touches: 1},  // below the minimum touches: not counted
+		{Price: 99.5, Band: 1, Touches: 4}, // [98.5, 100.5] clipped to the window: 0.5
+	}
+	if got, want := levelCoverage(levels, 2, bars), (0.5+2.5+2)/10.0; math.Abs(got-want) > 1e-12 {
+		t.Errorf("coverage %v, want %v", got, want)
+	}
+	if got := levelCoverage(nil, 2, bars); got != 0 {
+		t.Errorf("no level covers nothing, got %v", got)
+	}
+	if got := levelCoverage(levels, 2, nil); !math.IsNaN(got) {
+		t.Errorf("no bars: %v, want NaN (the measurement is then left out)", got)
+	}
+}
+
+func TestForwardLabelsArePublishedAsMeasurementsOnly(t *testing.T) {
+	in := baseInputs(3, 0.6, 0.95)
+	in.levelKind, in.levelBand, in.coverage = "round", 0.1, 0.25
+	in.swings = []techniquezone.Swing{{Index: 3, Price: 100, Kind: "low"}, {Index: 8, Price: 100.05, Kind: "low"}}
+	withLabels, components := score(t, in)
+	for _, name := range []string{"level_kind", "level_round_class", "level_origin", "level_age_bars", "level_band_atr", "level_coverage"} {
+		v, ok := components[name]
+		if !ok || math.IsNaN(v) || math.IsInf(v, 0) {
+			t.Errorf("%s: missing or not finite (%v, %v)", name, v, ok)
+		}
+	}
+	if components["level_kind"] != 1 || components["level_round_class"] != 4 || components["level_origin"] != 1 || components["level_band_atr"] != 0.1 || components["level_coverage"] != 0.25 {
+		t.Errorf("unexpected label values: %v", components)
+	}
+	for name := range components {
+		if len(name) > 6 && name[:6] == "score_" && (name == "score_level_kind" || name == "score_level_origin" || name == "score_level_coverage") {
+			t.Errorf("%s: a label became a scored dimension", name)
+		}
+	}
+	// a label never changes the score: the same reaction with other label inputs scores the same
+	in.levelKind, in.coverage, in.swings = "reaction", 0.9, nil
+	if again, _ := score(t, in); again != withLabels {
+		t.Errorf("the forward labels moved the quality: %v vs %v", again, withLabels)
 	}
 }

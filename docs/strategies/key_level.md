@@ -75,6 +75,14 @@ machine-readable factors (`htf_aligned`, `touches`, `wick_rejection`,
 
 **Instrument stop budget (v5).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
 
+**Forward labels (informational only).** Every candidate also publishes six measurements about its level, so realised outcomes can later be cut by what kind of level it was. They are
+never a score, a gate or a star, and they do not change `Overall`: `level_kind` (0 reaction, 1 round), `level_round_class` (how round the level's *price* is: 0 none, 1 a multiple of 5, 2 of 10,
+3 of 50, 4 of 100), `level_origin` (+1 formed by swing lows, -1 by highs, 0 mixed, from the swings within the band known at the confirmation bar), `level_age_bars` (bars at the confirmation since
+the newest member swing; the bars read when no swing is within the band), `level_band_atr` (the level's own band over the ATR) and `level_coverage` (the share of the window's [low, high] inside any level band
+at the evaluation: the selectivity of the definition). They travel with the candidate: Go `Quality.Components` -> the Kafka `quality.components` payload -> `match.quality_components` in algo-bot ->
+`auto_trade_plan_snapshots.quality_components` (one immutable JSONB row per published trade plan, indexed by `opportunity_id`, which realised trades join on). A candidate that never becomes a published
+plan has no snapshot row. Whether the edge is in the level or the reaction is measured in `keylevel-edge-source.md`.
+
 ## Evidence
 
 - `test/keylevelparity`: replays six committed real captures — XAU of the
