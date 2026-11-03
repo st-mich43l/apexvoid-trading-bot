@@ -182,6 +182,51 @@ def test_the_indicator_call_does_not_declare_no_scale():
   assert len(call) == 1 and "scale.none" not in call[0] and "scale =" not in call[0], call
 
 
+def _code():
+  src = open(PINE, encoding="utf-8").read()
+  return "\n".join(l.split("//")[0] for l in src.splitlines())
+
+
+def _args(code, name):
+  """Top-level argument count of every `name(...)` call (strings and nested brackets respected)."""
+  out = []
+  for m in re.finditer(r"\b%s\(" % re.escape(name), code):
+    i, depth, n, quote = m.end(), 1, 1, False
+    while depth:
+      c = code[i]
+      if c == '"' and code[i - 1] != "\\":
+        quote = not quote
+      elif not quote:
+        depth += (c in "([") - (c in ")]")
+        n += 1 if c == "," and depth == 1 else 0
+      i += 1
+    out.append(n)
+  return out
+
+
+def test_annotations_use_the_gutter_and_three_tiers():
+  # v2.15: objects end `gutter` bars right of the last candle (captions are right-aligned inside it) and text sizes come from three tiers
+  code = _code()
+  assert "bar_index + 5" not in code and "bar_index + 7" not in code, "a drawing still ends at a hard-coded offset"
+  for old in ("majorTextSize", "structureTextSize", "zoneTextSize", "contextTextSize"):
+    assert old not in code, old
+  assert len(re.findall(r"\btier[123]Size\b", code)) >= 12
+
+
+def test_every_right_column_label_carries_a_category_and_a_tier():
+  code = _code()
+  counts = [n for n in _args(code, "f_regLabel")]
+  assert len(counts) >= 10 and set(counts) == {7}, counts  # the definition has 7 parameters too
+
+
+def test_text_formatting_is_only_ever_a_constant():
+  # `text_formatting` needs a const text_format (community note, not confirmed in the official reference): a ternary on a series would not compile
+  code = _code()
+  uses = re.findall(r"text_formatting\s*=\s*([^,)]*)", code)
+  assert all(re.fullmatch(r"text\.format_[a-z]+", u.strip()) for u in uses), uses
+  assert "set_text_formatting" not in code
+
+
 def test_script_stays_under_the_compiled_token_budget():
   n = source_tokens(open(PINE, encoding="utf-8").read())
   assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
@@ -191,6 +236,9 @@ if __name__ == "__main__":
   test_script_stays_under_the_compiled_token_budget()
   test_no_request_security_of_the_charts_own_structure_series()
   test_the_indicator_call_does_not_declare_no_scale()
+  test_annotations_use_the_gutter_and_three_tiers()
+  test_every_right_column_label_carries_a_category_and_a_tier()
+  test_text_formatting_is_only_ever_a_constant()
   test_only_vetted_builtins_are_called()
   test_no_reserved_word_is_declared_as_a_name()
   test_main_body_stays_within_the_size_limit()
