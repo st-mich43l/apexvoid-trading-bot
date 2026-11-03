@@ -1072,8 +1072,8 @@ var string[] lastSweepText = array.new_string(1, "—")
 var int[] sweepBars = array.new_int()
 var int[] sweepSides = array.new_int()
 
-f_recordSweep(int bar, int side, string text) =>
-    array.set(lastSweepText, 0, text)
+f_recordSweep(int bar, int side, string note) =>
+    array.set(lastSweepText, 0, note)
     array.push(sweepBars, bar)
     array.push(sweepSides, side)
     if array.size(sweepBars) > 200
