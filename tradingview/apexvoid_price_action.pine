@@ -98,7 +98,7 @@ string londonTZ = input.string("Europe/London", "London session timezone", optio
 string nySession = input.session("0800-1700", "New York session hours (New York time)", group = G5)
 string nyTZ = input.string("America/New_York", "New York session timezone", options = ["America/New_York", "Etc/UTC", "America/Chicago"], group = G5)
 int sessionBoxHistory = input.int(3, "Retained session boxes per session", minval = 1, maxval = 10, group = G5)
-int sessionBoxTransparency = input.int(90, "Session box transparency", minval = 60, maxval = 98, group = G5)
+int sessionBoxTransparency = input.int(95, "Session box transparency (higher = fainter, stays behind zones)", minval = 60, maxval = 99, group = G5)
 
 color bullColor = input.color(#00C7AE, "Bullish / demand color", group = G6)
 color bearColor = input.color(#F26B85, "Bearish / supply color", group = G6)
@@ -2237,7 +2237,7 @@ f_updateSessionBox(box[] store, bool inside, int startT, float hi, float lo, int
             box.set_bottom(lastBox, lo)
             box.set_right(lastBox, endT)
         else
-            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, 45), border_width = 1, bgcolor = color.new(tone, sessionBoxTransparency), text = name, text_color = color.new(tone, 10), text_size = size.small, text_halign = text.align_left, text_valign = text.align_top)
+            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, math.max(60, sessionBoxTransparency - 15)), border_width = 1, border_style = line.style_dotted, bgcolor = color.new(tone, sessionBoxTransparency), text = name, text_color = color.new(tone, 45), text_size = size.small, text_halign = text.align_left, text_valign = text.align_top)
             array.push(store, newBox)
             while array.size(store) > sessionBoxHistory
                 box.delete(array.shift(store))
