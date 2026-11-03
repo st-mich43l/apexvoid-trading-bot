@@ -16,7 +16,6 @@ const string G3 = "03  Order Blocks & Zones"
 const string G4 = "04  Fair Value Gaps"
 const string G5 = "05  Sessions"
 const string G6 = "06  Visuals & Performance"
-const string G7 = "07  Multi-Timeframe Structure"
 const string G8 = "08  Trade Plan"
 
 string displayProfile = input.string("Balanced — Recommended", "Display profile", options = ["Balanced — Recommended", "Minimal", "Detailed", "Debug"], group = G6)
@@ -132,9 +131,6 @@ string dashboardDensity = input.string("Compact", "Dashboard display size", opti
 string dashboardPositionInput = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right"], group = G6)
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
-
-string mtfFrame1 = input.timeframe("15", "MTF frame 1", group = G7)
-string mtfFrame2 = input.timeframe("60", "MTF frame 2", group = G7)
 
 bool showTradePlan = input.bool(true, "Show trade plan (long / short position boxes)", group = G8)
 bool showTradePreview = input.bool(true, "Show a planned RR box for the nearest qualified POI before it triggers", group = G8)
@@ -2316,21 +2312,6 @@ if array.size(zones) > 0
                     else
                         hiddenOBBudget += 1
 
-// ------- MULTI-TIMEFRAME STRUCTURE -------
-// v2.14: the chart's OWN bias and protected level evaluated on the other frames, so a frame shown here is what that frame's own chart shows (same algorithm, same
-// Auto lengths). [1] + lookahead_on: only the last completed bar of that frame is read, so nothing repaints. A frame at or below the chart's is not shown.
-[mtfBias1, mtfProt1] = request.security(syminfo.tickerid, mtfFrame1, [bias[1], activeProtected[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
-[mtfBias2, mtfProt2] = request.security(syminfo.tickerid, mtfFrame2, [bias[1], activeProtected[1]], gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
-bool mtfOn1 = timeframe.in_seconds(mtfFrame1) > chartSecs
-bool mtfOn2 = timeframe.in_seconds(mtfFrame2) > chartSecs
-
-f_tfName(string tf) =>
-    int secs = timeframe.in_seconds(tf)
-    secs < 3600 ? "M" + str.tostring(int(secs / 60)) : secs < 86400 ? "H" + str.tostring(int(secs / 3600)) : "D"
-
-f_mtfText(string tf, int b, float prot) =>
-    f_tfName(tf) + (b == 1 ? " Bull" : b == -1 ? " Bear" : " —") + (na(prot) ? "" : " " + f_px(prot))
-
 // ------- ASIAN HIGH/LOW -------
 // Session state is evaluated natively on <=5m, and inside a 5m security context
 // on higher chart TFs. Only COMPLETED sessions are published by this function.
@@ -3050,8 +3031,6 @@ f_renderPanel() =>
         string auditShort = "POI " + str.tostring(qualifiedPoiCount) + " · hidden " + str.tostring(hiddenDistanceCount + hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount)
         bool compactPanel = dashboardDensity == "Compact"
         bool expandedPanel = dashboardDensity == "Expanded"
-        string htfBiasSuffix = mtfOn1 and mtfOn2 and bias != 0 and mtfBias1 == mtfBias2 and mtfBias1 == -bias ? " · chart against " + f_tfName(mtfFrame1) + "+" + f_tfName(mtfFrame2) : ""
-        int mtfRow = compactPanel ? 7 : 17
         bool nearestBullIsActionable = actionableBullPoi and math.abs(nearestBullPoi - nearestActionableBullPoi) <= syminfo.mintick
         bool nearestBearIsActionable = actionableBearPoi and math.abs(nearestBearPoi - nearestActionableBearPoi) <= syminfo.mintick
         string bullPoiDisplay = na(nearestBullPoi) ? "—" : compactPanel ? f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D") : nearestBullPoiText
@@ -3091,7 +3070,7 @@ f_renderPanel() =>
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         if compactPanel
             f_key(2, "Bias")
-            f_val(2, biasText + htfBiasSuffix, valueColor, "Directional leg: " + legText)
+            f_val(2, biasText, valueColor, "Directional leg: " + legText)
             f_key(3, "Phase")
             f_val(3, phaseText, valueColor, "Directional leg: " + legText)
             f_key(4, "Range")
@@ -3115,7 +3094,7 @@ f_renderPanel() =>
         else
             f_head(1, "MARKET STATE")
             f_key(2, "External Bias")
-            f_val(2, biasText + htfBiasSuffix, valueColor, "")
+            f_val(2, biasText, valueColor, "")
             f_key(3, "Market Phase")
             f_val(3, phaseText, valueColor, "")
             f_key(4, "Directional Leg")
@@ -3163,12 +3142,6 @@ f_renderPanel() =>
             if expandedPanel
                 f_key(26, "Zone Audit")
                 f_val(26, auditShort, color.new(color.white, 12), auditText)
-        if mtfOn1
-            f_key(mtfRow, "MTF")
-            f_val(mtfRow, f_mtfText(mtfFrame1, mtfBias1, mtfProt1), mtfBias1 == 1 ? bullColor : mtfBias1 == -1 ? bearColor : color.silver, "Bias and protected level of the " + f_tfName(mtfFrame1) + " chart at its last closed bar")
-        if mtfOn2
-            f_key(mtfRow + (mtfOn1 ? 1 : 0), mtfOn1 ? "" : "MTF")
-            f_val(mtfRow + (mtfOn1 ? 1 : 0), f_mtfText(mtfFrame2, mtfBias2, mtfProt2), mtfBias2 == 1 ? bullColor : mtfBias2 == -1 ? bearColor : color.silver, "Bias and protected level of the " + f_tfName(mtfFrame2) + " chart at its last closed bar")
     0
 
 if barstate.islast

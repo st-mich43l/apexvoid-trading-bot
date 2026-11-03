@@ -167,6 +167,14 @@ def source_tokens(src):
   return len(re.findall(r"[A-Za-z_][A-Za-z_0-9]*|\d+\.?\d*|==|!=|<=|>=|:=|=>|\?|:|[-+*/%<>=(),\[\].]", code))
 
 
+def test_no_request_security_of_the_charts_own_structure_series():
+  # v2.14 requested `[bias[1], activeProtected[1]]` on two other frames and TradingView counted 104,204 compiled tokens at 33,514 source tokens (limit 100,256):
+  # a request.security of a global series compiles its whole dependency chain once per call. Use a small pure function instead.
+  src = open(PINE, encoding="utf-8").read()
+  code = "\n".join(l.split("//")[0] for l in src.splitlines())
+  assert not re.search(r"request\.security\([^\n]*\[[^\]\n]*(bias|activeProtected|protectedHigh|protectedLow)", code), "request.security of the structure series"
+
+
 def test_script_stays_under_the_compiled_token_budget():
   n = source_tokens(open(PINE, encoding="utf-8").read())
   assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
@@ -174,6 +182,7 @@ def test_script_stays_under_the_compiled_token_budget():
 
 if __name__ == "__main__":
   test_script_stays_under_the_compiled_token_budget()
+  test_no_request_security_of_the_charts_own_structure_series()
   test_only_vetted_builtins_are_called()
   test_no_reserved_word_is_declared_as_a_name()
   test_main_body_stays_within_the_size_limit()

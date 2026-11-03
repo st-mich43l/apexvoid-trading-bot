@@ -1,8 +1,10 @@
-"""Multi-timeframe structure, as the indicator shows it (v2.14, panel row MTF).
+"""Multi-timeframe structure view: the spec of a frame seen from a lower chart (the aligned view a companion indicator must show).
 
-The Pine script requests the CHART's own `bias` and `activeProtected` series on another timeframe with `[1]` and `lookahead_on`, so a chart bar sees the
-state at the close of the last COMPLETED bar of that frame. This module is that view: `frame_states` runs the model on one frame's own bars (what the chart of
-that frame shows), `seen_from` aligns it to a lower chart the way the request does. `agreement` and `flips` are the counts of the pull request.
+v2.14 first shipped this as a panel row (the chart's own `bias` and `activeProtected` requested on two other frames with `[1]` and `lookahead_on`). TradingView
+rejected the script for size: 104,204 compiled tokens against the 100,256 limit, because a request.security of a global series compiles its whole dependency chain
+once per call. The row was removed; this module and its tests stay as the verified specification. A chart bar sees the state at the close of the last COMPLETED
+bar of the frame: `frame_states` runs the model on one frame's own bars (what that frame's chart shows), `seen_from` aligns it to a lower chart the way the request
+did, and `agreement` / `flips` (report_v214.py) are the counts of the pull request.
 """
 import os
 import sys
