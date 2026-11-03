@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.15", "AV PA v2.15", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.15.1", "AV PA v2.15.1", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -99,7 +99,7 @@ string nySession = input.session("0900-1700", "New York session hours (New York 
 string nyTZ = input.string("America/New_York", "New York session timezone", options = ["America/New_York", "Etc/UTC", "America/Chicago"], group = G5)
 int sessionBoxHistory = input.int(3, "Retained session boxes per session", minval = 1, maxval = 10, group = G5)
 int sessionBoxTransparency = input.int(93, "Session box fill transparency (higher = fainter)", minval = 60, maxval = 99, group = G5)
-bool showSessionTitles = input.bool(true, "Show session titles", group = G5)
+bool showSessionTitles = input.bool(false, "Show session titles (the box colour already names the session)", group = G5)
 
 color bullColor = input.color(#00C7AE, "Bullish / demand color", group = G6)
 color bearColor = input.color(#F26B85, "Bearish / supply color", group = G6)
@@ -192,9 +192,9 @@ int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
 bool compactText = textScaleInput == "Compact"
 bool largeText = textScaleInput == "Large"
 // Label tiers: 1 decision levels, 2 structure, 3 context.
-string tier1Size = compactText ? size.tiny : largeText ? size.normal : size.small
-string tier2Size = compactText ? size.tiny : size.small
-string tier3Size = largeText ? size.small : size.tiny
+string tier1Size = compactText ? size.small : largeText ? size.large : size.normal
+string tier2Size = compactText ? size.small : size.normal
+string tier3Size = compactText ? size.tiny : largeText ? size.normal : size.small
 bool shortVocab = labelVocab == "Short"
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.
@@ -217,8 +217,9 @@ var bool[] externalEventUp = array.new_bool()   // direction of each external ev
 var line[] internalEventLines = array.new_line()
 var label[] internalEventLabels = array.new_label()
 
+// Gold-like prices print at most 2 decimals (3935.16, not 3935.158); a small price (FX) keeps the symbol's own tick format.
 f_px(float x) =>
-    str.tostring(x, format.mintick)
+    syminfo.mintick < 0.01 and math.abs(x) >= 100 ? str.tostring(x, "0.00") : str.tostring(x, format.mintick)
 
 f_cnt(int[] counts, int idx) =>
     str.tostring(array.get(counts, idx))
@@ -271,7 +272,7 @@ f_structureLine(int x1, int x2, float level, bool bullish, bool choch, bool inte
                 occupied := occupied or (math.abs(midX - label.get_x(existing)) <= annotationBarSpacing and math.abs(labelY - label.get_y(existing)) <= atr * annotationATRSpacing)
         if occupied
             labelY -= atr * annotationATRSpacing
-    label structureLabel = label.new(x = midX, y = labelY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(#090D18, 10), textcolor = color.new(c, internal ? 50 : 25), size = internal ? tier3Size : tier2Size)
+    label structureLabel = label.new(x = midX, y = labelY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(#090D18, 10), textcolor = color.new(c, internal ? 20 : 0), size = internal ? tier3Size : tier2Size)
     if internal
         array.push(internalEventLines, structureLine)
         array.push(internalEventLabels, structureLabel)
@@ -1890,7 +1891,7 @@ f_zoneTip(int i) =>
 // when ranking qualifies them. Visible zones of one side that overlap or sit closer than a label height form one cluster: one caption (the best member's, with the
 // union of the kinds) and one tooltip for the whole cluster; the other boxes are drawn without text.
 f_renderZones() =>
-    float labelGap = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 48.0)
+    float labelGap = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 36.0)
     float[] placedText = array.new_float()
     int zoneCount = array.size(zones)
     int[] grp = array.new_int(zoneCount, -1)
@@ -2472,7 +2473,7 @@ f_updateSessionBox(box[] store, bool inside, int startT, float hi, float lo, int
             box.set_bottom(lastBox, lo)
             box.set_right(lastBox, endT)
         else
-            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, math.max(30, sessionBoxTransparency - 45)), border_width = 1, border_style = line.style_dashed, bgcolor = color.new(tone, sessionBoxTransparency), text = showSessionTitles ? name : "", text_color = color.new(tone, 50), text_size = tier3Size, text_halign = text.align_left, text_valign = text.align_bottom)
+            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, math.max(30, sessionBoxTransparency - 45)), border_width = 1, border_style = line.style_dashed, bgcolor = color.new(tone, sessionBoxTransparency), text = showSessionTitles ? name : "", text_color = color.new(tone, 20), text_size = tier3Size, text_halign = text.align_left, text_valign = text.align_bottom)
             array.push(store, newBox)
             if array.size(store) > 2
                 box.set_text(array.get(store, array.size(store) - 3), "")
@@ -2868,7 +2869,7 @@ f_emitCluster(int[] members, int slot) =>
     if m > shown
         caption += " +" + str.tostring(m - shown)
     float y = array.get(rlY, top)
-    color tone = topTier == 1 ? array.get(rlTone, top) : color.new(array.get(rlTone, top), topTier == 2 ? 25 : 50)
+    color tone = topTier == 1 ? array.get(rlTone, top) : color.new(array.get(rlTone, top), topTier == 2 ? 25 : 20)
     string labelSize = topTier == 1 ? tier1Size : topTier == 2 ? tier2Size : tier3Size
     if slot >= array.size(colLabels)
         label made = label.new(bar_index + gutter + 2, y, caption, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 60), textcolor = tone, size = labelSize, tooltip = tip)
@@ -2894,8 +2895,8 @@ if barstate.islast
     if regCount > 0
         int[] byPrice = array.sort_indices(rlY, order.descending)
         // Labels closer than this merge: at least the annotation spacing, and about one label
-        // height (~1/48 of the candle range the chart already shows) so the merge rule follows the zoom.
-        float clusterGap = math.max(annotationATRSpacing * nz(atr, syminfo.mintick), (scaleBandHigh - scaleBandLow) / 48.0)
+        // height (~1/36 of the candle range the chart already shows) so the merge rule follows the zoom.
+        float clusterGap = math.max(annotationATRSpacing * nz(atr, syminfo.mintick), (scaleBandHigh - scaleBandLow) / 36.0)
         int[] members = array.new_int()
         float previousY = na
         for r = 0 to regCount - 1
@@ -3005,7 +3006,7 @@ f_renderPanel() =>
         if array.size(tradeLog) > 0
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.15", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.15.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         if compactPanel
             f_key(2, "Bias")
