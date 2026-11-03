@@ -145,8 +145,19 @@ def test_known_non_existent_builtins_are_absent():
     assert bad not in src, bad
 
 
+def test_no_reserved_word_is_declared_as_a_name():
+  # CE10150: "text" cannot be used as a variable, parameter or function name (TradingView rejected `f_recordSweep(..., string text)` in v2.13).
+  import re
+  src = open(PINE, encoding="utf-8").read()
+  code = "\n".join(l.split("//")[0] for l in src.splitlines())
+  decl = re.compile(r"\b(?:int|float|bool|string|color|line|box|label)(?:\[\])?\s+(text)\b\s*(?=[,)=])")
+  hits = [m.group(0) for m in decl.finditer(code)]
+  assert not hits, hits
+
+
 if __name__ == "__main__":
   test_only_vetted_builtins_are_called()
+  test_no_reserved_word_is_declared_as_a_name()
   test_main_body_stays_within_the_size_limit()
   test_known_non_existent_builtins_are_absent()
   print("ok pine built-ins")
