@@ -251,6 +251,21 @@ def test_key_level_loops_are_guarded_against_empty_arrays():
   assert "|80|35|60|62|45|" in body, "the stronger-object priorities (PROT, EQ, pools, zones) the layer yields to"
 
 
+def test_no_block_opener_is_left_empty():
+  # CE10013 "Mismatched input ... expecting end of line without line continuation": an `if` / `else` / `for` / `while` / function header whose body was deleted
+  # (v2.16.1 removed an assignment and left `if choch` with nothing under it). Every block header needs a more indented line below it.
+  lines = [l.rstrip() for l in open(PINE, encoding="utf-8").read().splitlines()]
+  code = [(i + 1, l) for i, l in enumerate(lines) if l.strip() and not l.strip().startswith("//")]
+  bad = []
+  for (n, line), (_, nxt) in zip(code, code[1:]):
+    head = re.match(r"\s*(if|else if|else|for|while)\b", line) or line.rstrip().endswith("=>")
+    code_part = line.split("//")[0].rstrip()
+    if head and (code_part.endswith("=>") or re.match(r"\s*(if|else if|else|for|while)\b", line)) and not code_part.endswith(("(", ",", "and", "or")):
+      if len(nxt) - len(nxt.lstrip()) <= len(line) - len(line.lstrip()):
+        bad.append(n)
+  assert not bad, "empty block body after line(s) %s" % bad[:10]
+
+
 def test_script_stays_under_the_compiled_token_budget():
   n = source_tokens(open(PINE, encoding="utf-8").read())
   assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
@@ -261,6 +276,7 @@ if __name__ == "__main__":
   test_no_request_security_of_the_charts_own_structure_series()
   test_the_indicator_call_does_not_declare_no_scale()
   test_annotations_use_the_gutter_and_three_tiers()
+  test_no_block_opener_is_left_empty()
   test_key_level_loops_are_guarded_against_empty_arrays()
   test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range()
   test_prices_print_two_decimals_for_gold_like_symbols_only()
