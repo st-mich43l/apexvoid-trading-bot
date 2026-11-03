@@ -122,8 +122,7 @@ class TradePlanSim(m.V21Pipeline):
     levels.append((s.last_swing_high if is_long else s.last_swing_low, "Swing high" if is_long else "Swing low"))
     levels.append((s.previous_swing_high if is_long else s.previous_swing_low, "Prev swing high" if is_long else "Prev swing low"))
     levels.append((self.asia_h[i] if is_long else self.asia_l[i], "Asia H" if is_long else "Asia L"))
-    if not m.isna(s.last_swing_high) and not m.isna(s.last_swing_low):
-      levels.append(((s.last_swing_high + s.last_swing_low) / 2.0, "EQ"))
+    levels.append((s.dealing_range()[2], "EQ"))
     for z in self.zones:
       if z.kind != 2 and z.side == -pool_side:
         levels.append((z.bottom if is_long else z.top, z.title))
@@ -215,7 +214,7 @@ class TradePlanSim(m.V21Pipeline):
     triggered = rejection if tp.trigger == "Rejection wick" else engulf if tp.trigger == "Engulfing" else (rejection or engulf)
     if not triggered:
       return
-    eq = (s.last_swing_high + s.last_swing_low) / 2.0 if not m.isna(s.last_swing_high) and not m.isna(s.last_swing_low) else m.NAN
+    eq = s.dealing_range()[2]
     best_rr, pick = 0.0, None
     saw_no_target = saw_bad_stop = False
     for z in self.zones:
@@ -281,7 +280,7 @@ def preview(sim, i=None):
     return None
   atr = s.atr[i]
   is_long = s.bias == 1
-  eq = (s.last_swing_high + s.last_swing_low) / 2.0 if not m.isna(s.last_swing_high) and not m.isna(s.last_swing_low) else m.NAN
+  eq = s.dealing_range()[2]
   band_hi, band_lo = max(s.h[-p.scale_lookback_bars:]), min(s.l[-p.scale_lookback_bars:])
   pick, best_gap = None, 1e18
   for z in sim.zones:

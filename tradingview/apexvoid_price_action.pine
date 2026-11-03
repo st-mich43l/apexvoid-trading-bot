@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.9.1", "AV PA v2.9.1", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.10", "AV PA v2.10", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -742,6 +742,22 @@ else if downBreak
 bool transitionContext = str.contains(lastBreak, "CHoCH") and not na(lastBreakBar) and bar_index - lastBreakBar <= externalLength * 2
 bool expansionContext = bias == 1 ? (not na(lastSwingHigh) and close > lastSwingHigh) : bias == -1 ? (not na(lastSwingLow) and close < lastSwingLow) : false
 bool rangeContext = not transitionContext and not expansionContext and not na(lastSwingHigh) and not na(lastSwingLow) and close <= lastSwingHigh and close >= lastSwingLow
+
+// Dealing range for premium / discount: the confirmed swing range, extended to the live extreme of
+// the current leg. After a break the last confirmed swing on the far side can be days old (price
+// "below range"); the range that matters runs from the confirmed swing to where the leg has
+// actually gone, so the equilibrium and the premium / discount halves describe the current market.
+float dealingHigh = lastSwingHigh
+float dealingLow = lastSwingLow
+int dealingHighBar = lastHighBar
+int dealingLowBar = lastLowBar
+if developingDirection == -1 and not na(developingLow) and (na(dealingLow) or developingLow < dealingLow)
+    dealingLow := developingLow
+    dealingLowBar := developingLowBar
+if developingDirection == 1 and not na(developingHigh) and (na(dealingHigh) or developingHigh > dealingHigh)
+    dealingHigh := developingHigh
+    dealingHighBar := developingHighBar
+float dealingMid = not na(dealingHigh) and not na(dealingLow) and dealingHigh > dealingLow ? (dealingHigh + dealingLow) / 2.0 : na
 
 // A confirmed level remains factual after it breaks, but it is visually
 // retired so the developing extreme cannot be mistaken for the old boundary.
@@ -2203,7 +2219,7 @@ f_keyTarget(bool isLong, float entry, float risk, bool enforceMin) =>
     array.push(names, isLong ? "Prev swing high" : "Prev swing low")
     array.push(levels, isLong ? asiaHigh : asiaLow)
     array.push(names, isLong ? "Asia H" : "Asia L")
-    array.push(levels, not na(lastSwingHigh) and not na(lastSwingLow) ? (lastSwingHigh + lastSwingLow) / 2.0 : na)
+    array.push(levels, dealingMid)
     array.push(names, "EQ")
     if array.size(zones) > 0
         for z = 0 to array.size(zones) - 1
@@ -2254,7 +2270,7 @@ f_renderTradePreview() =>
         line.delete(array.pop(tradePreviewLines))
     if showTradePlan and showTradePreview and tradeDir == 0 and bias != 0 and not na(atr) and array.size(zones) > 0
         bool isLong = bias == 1
-        float eqLevel = not na(lastSwingHigh) and not na(lastSwingLow) ? (lastSwingHigh + lastSwingLow) / 2.0 : na
+        float eqLevel = dealingMid
         int pickZone = -1
         float bestGap = 1.0e10
         for z = 0 to array.size(zones) - 1
@@ -2358,7 +2374,7 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
         bool engulfing = isLong ? (close[1] < open[1] and close > open and close > open[1] and open <= close[1]) : (close[1] > open[1] and close < open and close < open[1] and open >= close[1])
         bool triggered = tradeTrigger == "Rejection wick" ? rejection : tradeTrigger == "Engulfing" ? engulfing : (rejection or engulfing)
         if triggered
-            float eqLevel = not na(lastSwingHigh) and not na(lastSwingLow) ? (lastSwingHigh + lastSwingLow) / 2.0 : na
+            float eqLevel = dealingMid
             float bestRR = 0.0
             int pickZone = -1
             float pickStop = na
@@ -2519,12 +2535,12 @@ var box pdPremiumBox = na
 var box pdDiscountBox = na
 var line pdEqLine = na
 if barstate.islast
-    bool pdValid = showPremiumDiscount and not minimalMode and not na(lastSwingHigh) and not na(lastSwingLow) and not na(lastHighBar) and not na(lastLowBar) and not na(atr) and lastSwingHigh > lastSwingLow
-    float pdMid = pdValid ? (lastSwingHigh + lastSwingLow) / 2.0 : na
+    bool pdValid = showPremiumDiscount and not minimalMode and not na(dealingMid) and not na(dealingHighBar) and not na(dealingLowBar) and not na(atr)
+    float pdMid = pdValid ? dealingMid : na
     float pdWindow = protectCandleScale ? scaleWindowATR * nz(atr, syminfo.mintick) : 1.0e10
-    float pdTop = pdValid ? math.min(lastSwingHigh, math.max(close + pdWindow, scaleBandHigh + nz(atr, 0.0))) : na
-    float pdBottom = pdValid ? math.max(lastSwingLow, math.min(close - pdWindow, scaleBandLow - nz(atr, 0.0))) : na
-    int pdLeft = pdValid ? math.max(math.min(lastHighBar, lastLowBar), bar_index - maxDrawBars) : bar_index
+    float pdTop = pdValid ? math.min(dealingHigh, math.max(close + pdWindow, scaleBandHigh + nz(atr, 0.0))) : na
+    float pdBottom = pdValid ? math.max(dealingLow, math.min(close - pdWindow, scaleBandLow - nz(atr, 0.0))) : na
+    int pdLeft = pdValid ? math.max(math.min(dealingHighBar, dealingLowBar), bar_index - maxDrawBars) : bar_index
     float premiumLow = pdValid ? math.max(pdMid, pdBottom) : na
     float discountHigh = pdValid ? math.min(pdMid, pdTop) : na
     bool premiumShown = pdValid and pdTop > premiumLow
@@ -2537,7 +2553,7 @@ if barstate.islast
         else
             box.set_lefttop(pdPremiumBox, gaugeLeft, pdTop)
             box.set_rightbottom(pdPremiumBox, bar_index + 5, premiumLow)
-        f_regLabel(premiumLow + (pdTop - premiumLow) * 0.8, "PREMIUM", supplyColor, 15, "Upper half of the confirmed external range: supply side")
+        f_regLabel(premiumLow + (pdTop - premiumLow) * 0.8, "PREMIUM", supplyColor, 15, "Upper half of the dealing range (confirmed swing to the live extreme of the leg): supply side")
     else if not na(pdPremiumBox)
         box.delete(pdPremiumBox)
         pdPremiumBox := na
@@ -2547,7 +2563,7 @@ if barstate.islast
         else
             box.set_lefttop(pdDiscountBox, gaugeLeft, discountHigh)
             box.set_rightbottom(pdDiscountBox, bar_index + 5, pdBottom)
-        f_regLabel(pdBottom + (discountHigh - pdBottom) * 0.2, "DISCOUNT", demandColor, 15, "Lower half of the confirmed external range: demand side")
+        f_regLabel(pdBottom + (discountHigh - pdBottom) * 0.2, "DISCOUNT", demandColor, 15, "Lower half of the dealing range (confirmed swing to the live extreme of the leg): demand side")
     else if not na(pdDiscountBox)
         box.delete(pdDiscountBox)
         pdDiscountBox := na
@@ -2557,7 +2573,7 @@ if barstate.islast
         else
             line.set_xy1(pdEqLine, pdLeft, pdMid)
             line.set_xy2(pdEqLine, bar_index + 5, pdMid)
-        f_regLabel(pdMid, "EQ " + str.tostring(pdMid, format.mintick), liquidityColor, 35, "Equilibrium: 50% of the confirmed external range")
+        f_regLabel(pdMid, "EQ " + str.tostring(pdMid, format.mintick), liquidityColor, 35, "Equilibrium: 50% of the dealing range")
     else if not na(pdEqLine)
         line.delete(pdEqLine)
         pdEqLine := na
@@ -2649,8 +2665,8 @@ f_renderPanel() =>
         color valueColor = bias == 1 ? bullColor : bias == -1 ? bearColor : color.silver
         string biasText = bias == 1 ? "BULLISH" : bias == -1 ? "BEARISH" : "NEUTRAL"
         string phaseText = transitionContext ? "Structural transition" : expansionContext ? (bias == 1 ? "Bull expansion" : "Bear expansion") : developingDirection == -bias and bias != 0 ? (bias == -1 ? "Counter-trend rebound" : "Counter-trend pullback") : rangeContext ? "Range / consolidation" : bias == 0 ? "Range / discovery" : internalBias == -bias ? "Corrective pullback" : "Trend / balance"
-        float majorMid = not na(lastSwingHigh) and not na(lastSwingLow) ? (lastSwingHigh + lastSwingLow) / 2.0 : na
-        string rangeText = na(majorMid) ? "Range pending" : close > lastSwingHigh ? "Above range" : close < lastSwingLow ? "Below range" : close >= majorMid ? "Premium" : "Discount"
+        float majorMid = dealingMid
+        string rangeText = na(majorMid) ? "Range pending" : close > dealingHigh ? "Above range" : close < dealingLow ? "Below range" : close >= majorMid ? "Premium" : "Discount"
         string highText = na(lastSwingHigh) ? "—" : str.tostring(lastSwingHigh, format.mintick)
         string lowText = na(lastSwingLow) ? "—" : str.tostring(lastSwingLow, format.mintick)
         string developingText = developingDirection == 1 and not na(developingHigh) ? "High · " + str.tostring(developingHigh, format.mintick) : developingDirection == -1 and not na(developingLow) ? "Low · " + str.tostring(developingLow, format.mintick) : "—"
@@ -2687,7 +2703,7 @@ f_renderPanel() =>
         // Compact = major information only: bias and phase, where price sits in the range
         // (premium / discount), swing levels, last structure event, nearest POIs, nearest
         // liquidity, Asian range and a one-line zone summary. Hover cells for detail.
-        float rangePct = not na(lastSwingHigh) and not na(lastSwingLow) and lastSwingHigh > lastSwingLow ? (close - lastSwingLow) / (lastSwingHigh - lastSwingLow) * 100.0 : na
+        float rangePct = not na(dealingMid) ? (close - dealingLow) / (dealingHigh - dealingLow) * 100.0 : na
         bool inRange = rangeText == "Premium" or rangeText == "Discount"
         string rangeCompact = na(rangePct) ? "Range pending" : rangeText + (inRange ? " " + str.tostring(rangePct, "0") + "%" : "") + " · EQ " + str.tostring(majorMid, format.mintick)
         color rangeTone = rangeText == "Premium" or rangeText == "Above range" ? supplyColor : rangeText == "Discount" or rangeText == "Below range" ? demandColor : color.silver
@@ -2696,7 +2712,9 @@ f_renderPanel() =>
         bool liveAsia = not na(asiaLiveHigh) and not na(asiaLiveLow)
         string asiaCompact = liveAsia ? "Live " + str.tostring(asiaLiveHigh, format.mintick) + " / " + str.tostring(asiaLiveLow, format.mintick) : asiaHighText + " / " + asiaLowText
         string zonesCompact = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + " · S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " · FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG)
-        string swingTip = "High " + highText + (na(lastHighTime) ? "" : " · " + str.format_time(lastHighTime, "MM-dd HH:mm", syminfo.timezone)) + "\nLow " + lowText + (na(lastLowTime) ? "" : " · " + str.format_time(lastLowTime, "MM-dd HH:mm", syminfo.timezone)) + "\nDeveloping extreme " + developingText + "\nLast confirmed external swings (chart time zone)."
+        string dealingHighText = na(dealingHigh) ? "—" : str.tostring(dealingHigh, format.mintick)
+        string dealingLowText = na(dealingLow) ? "—" : str.tostring(dealingLow, format.mintick)
+        string swingTip = "Dealing range " + dealingLowText + " - " + dealingHighText + ": the confirmed swing range extended to the live extreme of the current leg (the range premium / discount and EQ use).\nConfirmed swings: high " + highText + (na(lastHighTime) ? "" : " · " + str.format_time(lastHighTime, "MM-dd HH:mm", syminfo.timezone)) + ", low " + lowText + (na(lastLowTime) ? "" : " · " + str.format_time(lastLowTime, "MM-dd HH:mm", syminfo.timezone)) + " (chart time zone).\nDeveloping extreme " + developingText
         int closedTrades = array.size(tradeResults)
         int tradeWins = 0
         if closedTrades > 0
@@ -2710,16 +2728,16 @@ f_renderPanel() =>
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
         if compactPanel
-            table.cell(dashboard, 0, 0, "APEXVOID v2.9", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.10", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 2, "Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 2, biasText + htfBiasSuffix, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Directional leg: " + legText)
             table.cell(dashboard, 0, 3, "Phase", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 3, phaseText, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Directional leg: " + legText)
             table.cell(dashboard, 0, 4, "Range", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 4, rangeCompact, text_color = rangeTone, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Position of the close inside the last confirmed external range. Premium (upper half) is the supply side, discount (lower half) the demand side; EQ is the 50% level.")
-            table.cell(dashboard, 0, 6, "High / Low", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-            table.cell(dashboard, 1, 6, highText + " / " + lowText, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = swingTip)
+            table.cell(dashboard, 1, 4, rangeCompact, text_color = rangeTone, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Position of the close inside the dealing range: the confirmed swing range extended to the live extreme of the current leg (" + str.tostring(dealingLow, format.mintick) + " - " + str.tostring(dealingHigh, format.mintick) + "). Premium (upper half) is the supply side, discount (lower half) the demand side; EQ is the 50% level.")
+            table.cell(dashboard, 0, 6, "Range H / L", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
+            table.cell(dashboard, 1, 6, dealingHighText + " / " + dealingLowText, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = swingTip)
             table.cell(dashboard, 0, 9, "Protected", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 9, protectedText, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "The external level whose break flips the bias.")
             table.cell(dashboard, 0, 10, "Last break", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
@@ -2737,7 +2755,7 @@ f_renderPanel() =>
             table.cell(dashboard, 1, 27, tradeSummary, text_color = tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = tradeTip)
             table.cell(dashboard, 1, 22, zonesCompact, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
         else
-            table.cell(dashboard, 0, 0, "APEXVOID v2.9", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.10", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
             table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)

@@ -179,6 +179,34 @@ def test_zone_captions_never_overlap_inside_boxes():
   assert m.label_gap(3.0, 4500.0, 3500.0) > gap
 
 
+def test_dealing_range_follows_the_current_leg_not_a_stale_swing():
+  """Regression: after a break the confirmed swing on the far side can be days old, so premium /
+  discount measured on it described the past (price 'below range'). The dealing range extends to the
+  live extreme of the current leg, so price stays inside it."""
+  d = json.load(open(LIVE_0600))["timeframes"]["M15"]
+  bars = tuple([x[k] for x in d] for k in range(5))
+  st = m.Structure(bars, m.P21(chart_secs=900))
+  c = bars[4]
+  total = old_outside = new_outside = 0
+  for i in range(st.n):
+    st.step_pivots(i)
+    hi, lo, mid = st.dealing_range()
+    if m.isna(mid) or m.isna(st.last_swing_high) or m.isna(st.last_swing_low):
+      continue
+    total += 1
+    old_outside += c[i] > st.last_swing_high or c[i] < st.last_swing_low
+    new_outside += c[i] > hi + 1e-9 or c[i] < lo - 1e-9
+    assert lo <= st.last_swing_low + 1e-9 and hi >= st.last_swing_high - 1e-9, "the dealing range must contain the confirmed range"
+    assert abs(mid - (hi + lo) / 2.0) < 1e-9
+    if st.dev_dir == -1 and not m.isna(st.dev_low) and st.dev_low < st.last_swing_low:
+      assert lo == st.dev_low, "a leg that broke the low must pull the range down with it"
+    if st.dev_dir == 1 and not m.isna(st.dev_high) and st.dev_high > st.last_swing_high:
+      assert hi == st.dev_high
+  assert total > 500
+  assert old_outside > 0.2 * total, "fixture no longer shows the stale-range problem (%d/%d)" % (old_outside, total)
+  assert new_outside <= 0.02 * total, "price should sit inside the dealing range (%d/%d outside)" % (new_outside, total)
+
+
 def test_one_bos_per_break_candle():
   evs = [(865, True, False, 330), (865, True, False, 662), (900, False, True, 700), (900, False, True, 710), (950, True, False, 10)]
   kept = m.dedupe_breaks(evs)
