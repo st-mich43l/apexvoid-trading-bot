@@ -122,6 +122,7 @@
     "cancel_on_expiry": true
   },
   "expires_at": 2000000000,
+  "exposure_lane": "standard",
   "management": {
     "be_after_target_id": null,
     "be_buffer_ticks": 6,

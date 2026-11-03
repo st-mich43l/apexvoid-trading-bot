@@ -51,13 +51,17 @@ class OppositePositionPolicy:
 
   ``allowed=False`` blocks any opposite exposure on the symbol regardless of
   distance. ``allowed=True`` requires ``minimum_separation_pips`` (inclusive)
-  between the incoming entry and EVERY existing opposite group.
+  between the incoming entry and EVERY existing opposite group; an incoming
+  scalp-lane trade needs only ``scalp_minimum_separation_pips`` (inclusive).
   """
 
   symbol: str
   allowed: bool
   minimum_separation_pips: float | None
   pip_size: float
+  # Separation an incoming SCALP-lane trade needs (XAU only; <= minimum). ``None``
+  # on a hand-built policy means "no scalp exemption": the standard minimum applies.
+  scalp_minimum_separation_pips: float | None = None
 
 
 def _opposite_position_policy(
@@ -84,11 +88,33 @@ def _opposite_position_policy(
         f"{instrument_id} allows opposite positions and needs a positive "
         "exposure.opposite_position.minimum_separation_pips"
       )
-    return OppositePositionPolicy(instrument_id, True, float(minimum), pip_size)
+    scalp_minimum = policy.get("scalp_minimum_separation_pips")
+    if (
+      isinstance(scalp_minimum, bool)
+      or not isinstance(scalp_minimum, (int, float))
+      or scalp_minimum <= 0
+    ):
+      raise EffectiveInstrumentError(
+        f"{instrument_id} allows opposite positions and needs a positive "
+        "exposure.opposite_position.scalp_minimum_separation_pips"
+      )
+    if scalp_minimum > minimum:
+      raise EffectiveInstrumentError(
+        f"{instrument_id} exposure.opposite_position.scalp_minimum_separation_pips "
+        f"({scalp_minimum}) must not exceed minimum_separation_pips ({minimum})"
+      )
+    return OppositePositionPolicy(
+      instrument_id, True, float(minimum), pip_size, float(scalp_minimum)
+    )
   if minimum is not None:
     raise EffectiveInstrumentError(
       f"{instrument_id} blocks opposite positions; "
       "minimum_separation_pips must not be declared"
+    )
+  if policy.get("scalp_minimum_separation_pips") is not None:
+    raise EffectiveInstrumentError(
+      f"{instrument_id} blocks opposite positions; "
+      "scalp_minimum_separation_pips must not be declared"
     )
   return OppositePositionPolicy(instrument_id, False, None, pip_size)
 

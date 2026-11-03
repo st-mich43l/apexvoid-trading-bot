@@ -46,7 +46,7 @@ from app.analysis_client.provenance import (
 from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
 from app.analysis_client.models import ArbitrationEnvelope, InvalidationEnvelope, OpportunityEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
-from app.autotrade import units
+from app.autotrade import scalp_outcome, units
 from app.autotrade.go_containment import (
   STRUCTURE_TIMEFRAME_TAG,
   containment_reason,
@@ -530,6 +530,7 @@ class GoOpportunityPolicy:
       # Analysis stays on: the opportunity is produced, stored and decided, but
       # no match (hence no TradePlan) is built for this instrument.
       await self._decide(event, "not_adapted", contained, owner="go")
+      await self._scalp_outcome(profile, payload, scalp_outcome.ADAPTER_REJECTED, f"contained:{contained}")
       return "not_adapted"
     # The live Kafka opportunity event is the technical-source boundary.
     now = int(self._clock())
@@ -562,11 +563,13 @@ class GoOpportunityPolicy:
     recovery_age_override = recovered_live and verdict.code == "event_too_old"
     if not verdict.ok and not already_adapted and not recovery_age_override:
       await self._decide(event, "not_adapted", verdict.code, owner="go", **verdict.details())
+      await self._scalp_outcome(profile, payload, scalp_outcome.STALE_ON_ARRIVAL, verdict.code)
       return "not_adapted"
     try:
       match = build_strategy_match(event, profile=profile, now=now)
     except AdapterRejection as exc:
       await self._decide(event, "rejected", exc.code, message=exc.message)
+      await self._scalp_outcome(profile, payload, scalp_outcome.ADAPTER_REJECTED, exc.code)
       return "rejected"
 
     # The arbitration topic is intentionally separate from the once-only
@@ -585,6 +588,18 @@ class GoOpportunityPolicy:
     )
     log.info("Go opportunity adapted opportunity=%s match=%s", payload.id, match.match_id)
     return "match_written"
+
+  async def _scalp_outcome(
+    self, profile: Any, payload: Any, terminal: str, reason: str | None, *, started_at: int | None = None,
+  ) -> None:
+    """Scalp-lane opportunities only; first outcome per opportunity wins (see scalp_outcome)."""
+    await scalp_outcome.record_scalp_outcome(
+      self._client(), strategy=profile.legacy_strategy,
+      opportunity_id=str(getattr(payload, "id", None) or getattr(payload, "opportunity_id", "")),
+      terminal=terminal, reason=reason,
+      started_at=started_at if started_at is not None else getattr(payload, "created_at", None),
+      symbol=str(getattr(payload, "symbol", "XAU")), now=self._clock(),
+    )
 
   async def on_terminal(self, event: InvalidationEnvelope, result: LifecycleResult) -> str:
     # Withdrawal is idempotent, so it runs for every disposition — including a
@@ -609,6 +624,19 @@ class GoOpportunityPolicy:
     record = await load_setup(client, match_id)
     go_reason = f"go_{payload.reason_code.lower()}"
     profile = REVIEWED_SCOPES[payload.strategy]
+    # A scalp-lane opportunity the Go engine ends before any plan, rejection or stale verdict already
+    # owns an outcome: no order was ever attempted. First outcome wins, so a published or rejected
+    # one keeps its own.
+    started = None if record is None else record.created_at
+    if str(payload.reason_code).upper() == "SETUP_EXPIRED":
+      await self._scalp_outcome(
+        profile, payload, scalp_outcome.WAITING_RETEST_EXPIRED, None, started_at=started,
+      )
+    else:
+      await self._scalp_outcome(
+        profile, payload, scalp_outcome.INVALIDATED_BEFORE_ENTRY, str(payload.reason_code).upper(),
+        started_at=started,
+      )
     # What the invalidation event itself knows, in the legacy vocabulary the outcome uses.
     event_source = SimpleNamespace(strategy=profile.legacy_strategy, structural_source=f"go:{profile.catalog_id}")
     if record is not None and record.state not in _TERMINAL_OR_LIVE:
