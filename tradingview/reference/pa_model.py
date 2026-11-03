@@ -119,6 +119,9 @@ class Structure:
     self.previous_swing_high = self.previous_swing_low = NAN
     self.last_high_bar = self.last_low_bar = None
     self.high_broken = self.low_broken = False
+    self.dev_dir = 0
+    self.dev_high = self.dev_low = NAN
+    self.dev_high_bar = self.dev_low_bar = None
     self.bias = 0
     self.last_break_bar = None
     self.last_break_choch = False
@@ -145,6 +148,18 @@ class Structure:
       if (self.c[k] > level + a * need) if up else (self.c[k] < level - a * need):
         return k
     return i
+
+  def dealing_range(self):
+    """Premium/discount range (mirrors dealingHigh/dealingLow in the Pine file): the confirmed swing
+    range extended to the live extreme of the current leg. Returns (high, low, mid) or (nan, nan, nan)."""
+    hi, lo = self.last_swing_high, self.last_swing_low
+    if self.dev_dir == -1 and not isna(self.dev_low) and (isna(lo) or self.dev_low < lo):
+      lo = self.dev_low
+    if self.dev_dir == 1 and not isna(self.dev_high) and (isna(hi) or self.dev_high > hi):
+      hi = self.dev_high
+    if isna(hi) or isna(lo) or not hi > lo:
+      return NAN, NAN, NAN
+    return hi, lo, (hi + lo) / 2.0
 
   def a_at(self, i):
     return self.atr[i] if i >= 0 else NAN
@@ -201,6 +216,9 @@ class Structure:
         self.last_swing_low, self.last_low_bar = self.cand_low, self.cand_low_bar
         self.low_broken = False
         ev["new_major_low"], ev["major_low_price"], ev["major_low_bar"] = True, self.cand_low, self.cand_low_bar
+        self.dev_dir = 1
+        self.dev_high, self.dev_high_bar = max(eh, self.h[i]), (cb if eh >= self.h[i] else i)
+        self.dev_low, self.dev_low_bar = NAN, None
         if self.bias == 1:
           self.protected_low = self.last_swing_low
         self.cand_high, self.cand_high_bar, self.cand_type = eh, cb, 1
@@ -216,9 +234,16 @@ class Structure:
         self.last_swing_high, self.last_high_bar = self.cand_high, self.cand_high_bar
         self.high_broken = False
         ev["new_major_high"], ev["major_high_price"], ev["major_high_bar"] = True, self.cand_high, self.cand_high_bar
+        self.dev_dir = -1
+        self.dev_low, self.dev_low_bar = min(el, self.l[i]), (cb if el <= self.l[i] else i)
+        self.dev_high, self.dev_high_bar = NAN, None
         if self.bias == -1:
           self.protected_high = self.last_swing_high
         self.cand_low, self.cand_low_bar, self.cand_type = el, cb, -1
+    if self.dev_dir == 1 and (isna(self.dev_high) or self.h[i] > self.dev_high):
+      self.dev_high, self.dev_high_bar = self.h[i], i
+    if self.dev_dir == -1 and (isna(self.dev_low) or self.l[i] < self.dev_low):
+      self.dev_low, self.dev_low_bar = self.l[i], i
     up = not isna(self.last_swing_high) and not self.high_broken and c > self.last_swing_high + atr * (p.break_buffer + p.confirm_atr)
     down = not isna(self.last_swing_low) and not self.low_broken and c < self.last_swing_low - atr * (p.break_buffer + p.confirm_atr)
     if up:
@@ -228,6 +253,7 @@ class Structure:
       ev["break_bar"] = self.first_close_beyond(i, self.last_high_bar, self.last_swing_high, True)
       self.high_broken = True
       self.bias = 1
+      self.dev_dir, self.dev_high, self.dev_high_bar, self.dev_low, self.dev_low_bar = 1, self.h[i], i, NAN, None
       self.last_break_bar, self.last_break_choch = i, choch
       self.protected_low = self.last_swing_low
     elif down:
@@ -237,6 +263,7 @@ class Structure:
       ev["break_bar"] = self.first_close_beyond(i, self.last_low_bar, self.last_swing_low, False)
       self.low_broken = True
       self.bias = -1
+      self.dev_dir, self.dev_low, self.dev_low_bar, self.dev_high, self.dev_high_bar = -1, self.l[i], i, NAN, None
       self.last_break_bar, self.last_break_choch = i, choch
       self.protected_high = self.last_swing_high
     return ev
