@@ -155,7 +155,25 @@ def test_no_reserved_word_is_declared_as_a_name():
   assert not hits, hits
 
 
+# TradingView rejects a script above 100256 compiled tokens (CE10117). v2.13 compiled to 107040 tokens at 36581 of the tokens counted below, i.e. about 2.93
+# compiled tokens each; the budget keeps a margin of about 1.5% under the limit. This is an estimate: only the TradingView compiler gives the real number.
+SOURCE_TOKEN_BUDGET = 33700
+
+
+def source_tokens(src):
+  import re
+  code = "\n".join(l.split("//")[0] for l in src.splitlines())
+  code = re.sub(r'"(?:[^"\\]|\\.)*"', '"s"', code)
+  return len(re.findall(r"[A-Za-z_][A-Za-z_0-9]*|\d+\.?\d*|==|!=|<=|>=|:=|=>|\?|:|[-+*/%<>=(),\[\].]", code))
+
+
+def test_script_stays_under_the_compiled_token_budget():
+  n = source_tokens(open(PINE, encoding="utf-8").read())
+  assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
+
+
 if __name__ == "__main__":
+  test_script_stays_under_the_compiled_token_budget()
   test_only_vetted_builtins_are_called()
   test_no_reserved_word_is_declared_as_a_name()
   test_main_body_stays_within_the_size_limit()
