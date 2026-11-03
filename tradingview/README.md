@@ -29,6 +29,18 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
    check on a long history that object limits (250 boxes, 350 lines, 500 labels) are
    not hit.
 
+**Upgrading from an earlier version.** TradingView keeps the old script's settings on a
+chart that already holds the indicator, including its price-scale pin, so a source change
+does not reach it. Up to v2.14 the script declared `scale = scale.none`; a chart that still
+carries that pin draws zones, lines and labels on their own hidden scale and they drift off
+the candles when the price axis is dragged or zoomed.
+
+1. Remove the indicator from the chart and add it again. Alternatively, on the indicator
+   open ⋯ → Pin to scale → Pin to right scale.
+2. With auto-scale on, right-click the price axis → **Scale price chart only**. Auto-scale
+   then fits the candles, so zones, pools and session boxes that lie outside the visible
+   candles cannot squash them; drawings stay at their true prices.
+
 ### What is drawn
 
 | Element | Look | Meaning |
@@ -188,7 +200,7 @@ hide them, so:
 - **Zone captions:** text inside a box needs a box tall enough (zoom-aware) and a free slot;
   otherwise the caption joins the label column.
 
-Not covered: Asian levels, optional HTF lines and the current major/protected lines are not
+Not covered: Asian levels and session boxes and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
 
 ### Market Intelligence panel
@@ -309,12 +321,14 @@ All fire on bar close. Create them from the indicator's alert dialog.
 - The trade plan sends no orders. On about two weeks of XAUUSD its paper results showed no edge;
   treat the in-chart tracker as a way to collect evidence on your own history.
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
+- The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
 
 ### Version history
 
 | Version | Change |
 | --- | --- |
-| 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU); the indicator no longer declares `scale = scale.none`, so its zones, lines and labels share the candles' price scale and follow it when the axis is dragged or zoomed (with "No scale" they stayed on their own scale and drifted off the candles) |
+| 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.14.1 | Pullback leg kept after a confirmed swing; scale.none removal reaches existing charts (upgrade note). A confirmed higher high (lower low) still promotes the higher low (lower high), but only an internal BOS in the bias direction moves the developing leg to the bias side, so the pullback the swing was published after stays visible (14 / 17 / 4 / 17 of 98 / 77 / 26 / 55 swings on M5 / M15 / M30 / H1 had hidden it in v2.14). `scale = scale.none` is gone (zones follow the candles' scale); existing charts keep the old pin until the indicator is re-added or re-pinned, see Install → Upgrading. |
 | 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram. Removed to fit TradingView's 100,256-token limit: the temporary OB debug table (`Debug: OB candidate log and rejection reasons`) and the v2.12 swing-publication option |
 | 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
 | 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |

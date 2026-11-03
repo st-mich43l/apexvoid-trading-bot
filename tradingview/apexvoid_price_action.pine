@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.14", "AV PA v2.14", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.14.1", "AV PA v2.14.1", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -477,7 +477,7 @@ var int internalBias = 0
 
 bool newMajorHigh = false
 bool newMajorLow = false
-int protectedRatchet = 0   // v2.14: +1 / -1 on a bar where the trailing protected level moved toward price in the bias direction
+int protectedRatchet = 0   // v2.14: +1 / -1 on a bar where an internal BOS moved the trailing protected level toward price in the bias direction
 float majorHighPrice = na
 float majorLowPrice = na
 int majorHighBar = na
@@ -824,20 +824,18 @@ if newMajorHigh and bias == -1 and (not trailingProtected or na(protectedHigh) o
 if newMajorLow and bias == 1 and (not trailingProtected or na(protectedLow) or lastSwingLow > protectedLow)
     protectedLow := lastSwingLow
     protectedLowBar := lastLowBar
-// v2.14: a confirmed higher high (lower low) promotes the internal higher low (lower high) that produced it, between the protected bar and the swing.
+// v2.14: a confirmed higher high (lower low) promotes the internal higher low (lower high) that produced it, between the protected bar and the swing. It leaves the developing leg alone: the swing was published after a pullback.
 if trailingProtected and newMajorHigh and bias == 1 and not na(protectedLowBar)
     f_ringPick(ilRing, protectedLowBar, lastHighBar - 1)
     if not na(array.get(extOut, 0)) and (na(protectedLow) or array.get(extOut, 0) > protectedLow)
         protectedLow := array.get(extOut, 0)
         protectedLowBar := int(array.get(extOut, 1))
-        protectedRatchet := 1
 if trailingProtected and newMajorLow and bias == -1 and not na(protectedHighBar)
     f_ringPick(ihRing, protectedHighBar, lastLowBar - 1)
     if not na(array.get(extOut, 0)) and (na(protectedHigh) or array.get(extOut, 0) < protectedHigh)
         protectedHigh := array.get(extOut, 0)
         protectedHighBar := int(array.get(extOut, 1))
-        protectedRatchet := -1
-// v2.14: a protected level that moved toward price puts the developing leg on the bias side: the extreme since the protected bar (the dealing range's own value).
+// v2.14: an internal BOS that moved the protected level toward price puts the developing leg on the bias side: the extreme since the protected bar (the dealing range's own value).
 if protectedRatchet == 1 and not na(protectedLowBar)
     f_extremeSince(protectedLowBar, true, true)
     developingDirection := 1
@@ -3066,7 +3064,7 @@ f_renderPanel() =>
         if array.size(tradeLog) > 0
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.14", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.14.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         if compactPanel
             f_key(2, "Bias")

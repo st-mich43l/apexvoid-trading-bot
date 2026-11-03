@@ -175,6 +175,13 @@ def test_no_request_security_of_the_charts_own_structure_series():
   assert not re.search(r"request\.security\([^\n]*\[[^\]\n]*(bias|activeProtected|protectedHigh|protectedLow)", code), "request.security of the structure series"
 
 
+def test_the_indicator_call_does_not_declare_no_scale():
+  # `scale = scale.none` put the drawings on their own hidden scale: after the price axis was dragged or zoomed they kept their pixels and drifted off the candles
+  src = open(PINE, encoding="utf-8").read()
+  call = [l for l in src.splitlines() if l.startswith("indicator(")]
+  assert len(call) == 1 and "scale.none" not in call[0] and "scale =" not in call[0], call
+
+
 def test_script_stays_under_the_compiled_token_budget():
   n = source_tokens(open(PINE, encoding="utf-8").read())
   assert n <= SOURCE_TOKEN_BUDGET, "%d source tokens (budget %d, about %d compiled of 100256)" % (n, SOURCE_TOKEN_BUDGET, n * 2.93)
@@ -183,6 +190,7 @@ def test_script_stays_under_the_compiled_token_budget():
 if __name__ == "__main__":
   test_script_stays_under_the_compiled_token_budget()
   test_no_request_security_of_the_charts_own_structure_series()
+  test_the_indicator_call_does_not_declare_no_scale()
   test_only_vetted_builtins_are_called()
   test_no_reserved_word_is_declared_as_a_name()
   test_main_body_stays_within_the_size_limit()

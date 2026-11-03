@@ -157,7 +157,7 @@ class Structure:
     self.trk = {}                 # displacement-mode zigzag trackers
     self.pub_lags = []            # (publication bar - swing bar) of every external swing
     self.i_low_ring, self.i_high_ring = [], []   # v2.14: the last 8 internal pivot lows / highs as (bar, price), in detection order
-    self.ratchet = 0              # v2.14: +1 / -1 when the protected level ratcheted toward price on this bar in the bias direction
+    self.ratchet = 0              # v2.14: +1 / -1 when an internal BOS in the bias direction ratcheted the protected level toward price on this bar (a swing promotion does not set it)
 
   def first_close_beyond(self, i, swing_bar, level, up):
     """Bar of the first close beyond the swing (the candle a BOS/CHoCH line must end on).
@@ -306,17 +306,15 @@ class Structure:
   def _protect_on_swing(self, side):
     """A newly published swing while the bias agrees refreshes the protected level: legacy overwrites it, trailing only moves it toward price."""
     if self.p.protected_mode == "trailing" and self.p.protected_hl:
-      # v2.14: a confirmed higher high in a bull bias (lower low in a bear bias) promotes the higher low (lower high) that produced it
+      # v2.14: a confirmed higher high in a bull bias (lower low in a bear bias) promotes the higher low (lower high) that produced it; the developing leg is NOT touched: the swing was published after a pullback, which is the leg it shows (v2.14.1)
       if side == -1 and self.bias == 1 and self.protected_low_bar is not None and self.last_high_bar is not None:
         hit = self.ring_pick(self.i_low_ring, self.protected_low_bar, self.last_high_bar - 1)
         if hit and (isna(self.protected_low) or hit[1] > self.protected_low):
           self.protected_low, self.protected_low_bar = hit[1], hit[0]
-          self.ratchet = 1
       if side == 1 and self.bias == -1 and self.protected_high_bar is not None and self.last_low_bar is not None:
         hit = self.ring_pick(self.i_high_ring, self.protected_high_bar, self.last_low_bar - 1)
         if hit and (isna(self.protected_high) or hit[1] < self.protected_high):
           self.protected_high, self.protected_high_bar = hit[1], hit[0]
-          self.ratchet = -1
     if side == 1 and self.bias == 1:
       if self.p.protected_mode != "trailing" or isna(self.protected_low) or self.last_swing_low > self.protected_low:
         self.protected_low, self.protected_low_bar = self.last_swing_low, self.last_low_bar
@@ -426,7 +424,7 @@ class Structure:
     if self.dev_dir == -1 and (isna(self.dev_low) or self.l[i] < self.dev_low):
       self.dev_low, self.dev_low_bar = self.l[i], i
     if self.ratchet and p.dev_follows_protected:
-      # v2.14: the developing leg is the protected leg: the extreme since the protected bar, the same value the dealing range uses
+      # v2.14: after an internal BOS in the bias direction the developing leg is the protected leg: the extreme since the protected bar, the same value the dealing range uses
       if self.ratchet == 1 and not isna(self.protected_low) and self.protected_low_bar is not None:
         seg = self.h[self.protected_low_bar:i + 1]
         self.dev_dir, self.dev_high, self.dev_high_bar = 1, max(seg), self.protected_low_bar + seg.index(max(seg))
