@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.13", "AV PA v2.13", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.16.1", "AV PA v2.16.1", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -16,7 +16,7 @@ const string G3 = "03  Order Blocks & Zones"
 const string G4 = "04  Fair Value Gaps"
 const string G5 = "05  Sessions"
 const string G6 = "06  Visuals & Performance"
-const string G7 = "07  Higher-Timeframe Context"
+const string G7 = "07  Key Levels"
 const string G8 = "08  Trade Plan"
 
 string displayProfile = input.string("Balanced — Recommended", "Display profile", options = ["Balanced — Recommended", "Minimal", "Detailed", "Debug"], group = G6)
@@ -27,7 +27,6 @@ float minLegATR = input.float(1.50, "Minimum external leg displacement (ATR)", m
 float confirmATR = input.float(0.15, "External confirmation threshold (ATR)", minval = 0, maxval = 1, step = 0.01, group = G1)
 float breakBuffer = input.float(0.00, "BOS/CHOCH close buffer (ATR)", minval = 0, maxval = 1, step = 0.01, group = G1)
 string protectedMode = input.string("Trailing (internal BOS)", "Protected level", options = ["Trailing (internal BOS)", "Last confirmed swing (v2.12)"], group = G1)
-bool showHistoricalMajor = input.bool(false, "Show historical major classifications", group = G1)
 bool showMajorLevels = input.bool(true, "Extend current major high / low", group = G1)
 bool showInternalSwing = input.bool(false, "Show internal structure", group = G1)
 bool showBreaks = input.bool(true, "Draw BOS / CHOCH", group = G1)
@@ -100,6 +99,7 @@ string nySession = input.session("0900-1700", "New York session hours (New York 
 string nyTZ = input.string("America/New_York", "New York session timezone", options = ["America/New_York", "Etc/UTC", "America/Chicago"], group = G5)
 int sessionBoxHistory = input.int(3, "Retained session boxes per session", minval = 1, maxval = 10, group = G5)
 int sessionBoxTransparency = input.int(93, "Session box fill transparency (higher = fainter)", minval = 60, maxval = 99, group = G5)
+bool showSessionTitles = input.bool(false, "Show session titles (the box colour already names the session)", group = G5)
 
 color bullColor = input.color(#00C7AE, "Bullish / demand color", group = G6)
 color bearColor = input.color(#F26B85, "Bearish / supply color", group = G6)
@@ -128,18 +128,20 @@ int maxStructureEvents = input.int(60, "Maximum BOS/CHoCH events", minval = 10, 
 int zoneMaxAge = input.int(600, "Zone maximum age (bars)", minval = 50, maxval = 5000, group = G6)
 bool showDashboard = input.bool(true, "Show Market Intelligence panel", group = G6)
 string textScaleInput = input.string("Standard", "Global text scale", options = ["Compact", "Standard", "Large"], group = G6)
-string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard", "Expanded"], group = G6)
+string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard"], group = G6)
 string dashboardPositionInput = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right"], group = G6)
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
+int gutter = input.int(12, "Annotation gutter (bars right of the last candle)", minval = 4, maxval = 40, group = G6)
 
-bool showHTFContext = input.bool(false, "Show confirmed HTF context", group = G7)
-string htfTimeframe = input.timeframe("240", "Higher timeframe", group = G7)
-int htfSwingLength = input.int(12, "HTF swing confirmation bars", minval = 3, maxval = 50, group = G7)
-bool drawHTFLevels = input.bool(false, "Draw HTF swing levels", group = G7)
+bool showKeyLevels = input.bool(true, "Show key levels (engine key_level definition, dimmed)", group = G7)
+int keyPerSide = input.int(3, "Key levels per side", minval = 1, maxval = 10, group = G7)
+int keyWindowInput = input.int(0, "Key level window (bars, 0 = auto by timeframe)", minval = 0, maxval = 780, group = G7)
+float keyRoundInput = input.float(0.0, "Round step (price, 0 = auto: 5.0 on XAU, off otherwise)", minval = 0, step = 0.5, group = G7)
+bool showKeyBand = input.bool(false, "Show key level band", group = G7)
+color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
 
-bool showTradePlan = input.bool(true, "Show trade plan (long / short position boxes)", group = G8)
-bool showTradePreview = input.bool(true, "Show a planned RR box for the nearest qualified POI before it triggers", group = G8)
+bool showTradePlan = input.bool(true, "Track the trade plan (paper results in the panel; nothing is drawn on the chart)", group = G8)
 string tradeZoneKinds = input.string("All qualified POIs", "Entry zones", options = ["All qualified POIs", "Order blocks and supply/demand", "Order blocks only"], group = G8)
 string tradeTrigger = input.string("Rejection or engulfing", "Entry trigger candle", options = ["Rejection or engulfing", "Rejection wick", "Engulfing"], group = G8)
 int tradeTriggerBars = input.int(2, "Trigger window after the first touch (bars)", minval = 0, maxval = 10, group = G8)
@@ -157,14 +159,14 @@ int tradeTimeoutBars = input.int(96, "Close a trade at market after (bars)", min
 float tradeCost = input.float(0.0, "Round-turn cost (price units, deducted from every result)", minval = 0, step = 0.01, group = G8)
 float tradeMaxStopPips = input.float(70.0, "Maximum stop (pips, 0 = off): a stop over the cap refuses, it is never tightened", minval = 0, step = 5, group = G8)
 float tradePipSizeInput = input.float(0.0, "Pip size in price units (0 = auto: 0.1 for XAU, 10 x mintick otherwise)", minval = 0, step = 0.0001, group = G8)
-int tradeHistory = input.int(5, "Trades drawn on the chart (most recent)", minval = 1, maxval = 20, group = G8)
-color tradeProfitColor = input.color(#00C7AE, "Target box color", group = G8)
-color tradeRiskColor = input.color(#F26B85, "Stop box color", group = G8)
 
 int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
 int externalLength = sensitivity == "Manual" ? manualExternal : chartSecs <= 300 ? 12 : chartSecs <= 900 ? 16 : chartSecs <= 3600 ? 20 : chartSecs <= 14400 ? 24 : 30
 float atr = ta.atr(14)
+int keyWindow = keyWindowInput > 0 ? keyWindowInput : chartSecs <= 300 ? 150 : chartSecs <= 900 ? 250 : 400
+bool isGold = str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")
+float keyStep = keyRoundInput > 0 ? keyRoundInput : isGold ? 5.0 : 0.0
 // Candle-scale protection: an object may be drawn if it is near price (window in ATR) or
 // inside the price range the last `Candle range reference` bars already span, so it can
 // never stretch the chart's price scale beyond what the candles themselves need.
@@ -177,10 +179,6 @@ float internalHigh = ta.pivothigh(high, internalLength, internalLength)
 float internalLow = ta.pivotlow(low, internalLength, internalLength)
 bool newInternalHigh = barstate.isconfirmed and not na(internalHigh)
 bool newInternalLow = barstate.isconfirmed and not na(internalLow)
-float externalHigh = ta.pivothigh(high, externalLength, externalLength)
-float externalLow = ta.pivotlow(low, externalLength, externalLength)
-bool newExternalHigh = barstate.isconfirmed and not na(externalHigh)
-bool newExternalLow = barstate.isconfirmed and not na(externalLow)
 bool minimalMode = displayProfile == "Minimal"
 bool balancedMode = displayProfile == "Balanced — Recommended"
 bool detailedMode = displayProfile == "Detailed"
@@ -198,19 +196,19 @@ int effectiveExternalEvents = minimalMode ? math.min(majorEventLimit, 3) : balan
 int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
 bool compactText = textScaleInput == "Compact"
 bool largeText = textScaleInput == "Large"
-string majorTextSize = compactText ? size.small : largeText ? size.large : size.normal
-string structureTextSize = compactText ? size.small : largeText ? size.large : size.normal
-string zoneTextSize = compactText ? size.small : largeText ? size.large : size.normal
-string contextTextSize = compactText ? size.small : largeText ? size.large : size.normal
+// Label tiers: 1 decision levels, 2 structure, 3 context.
+string tier1Size = compactText ? size.small : largeText ? size.large : size.normal
+string tier2Size = compactText ? size.small : size.normal
+string tier3Size = compactText ? size.tiny : largeText ? size.normal : size.small
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.
-string dashboardTitleSize = dashboardDensity == "Expanded" ? size.large : dashboardDensity == "Compact" ? size.small : size.normal
-string dashboardValueSize = dashboardDensity == "Expanded" ? size.normal : size.small
+string dashboardTitleSize = dashboardDensity == "Compact" ? size.small : size.normal
+string dashboardValueSize = size.small
 string dashboardSectionSize = size.small
 float primaryLabelOffsetATR = compactText ? 0.16 : largeText ? 0.30 : 0.22
 float structureLabelOffsetATR = compactText ? 0.14 : largeText ? 0.26 : 0.19
-float dashboardKeyWidth = dashboardDensity == "Compact" ? 6.0 : dashboardDensity == "Expanded" ? 9.0 : 7.0
-float dashboardValueWidth = dashboardDensity == "Compact" ? 9.0 : dashboardDensity == "Expanded" ? 14.0 : 11.0
+float dashboardKeyWidth = dashboardDensity == "Compact" ? 6.0 : 7.0
+float dashboardValueWidth = dashboardDensity == "Compact" ? 9.0 : 11.0
 // Zero delegates row height to TradingView's text-fit sizing.
 float dashboardRowHeight = 0.0
 string dashboardPosition = dashboardPositionInput == "Top Left" ? position.top_left : dashboardPositionInput == "Bottom Right" ? position.bottom_right : position.top_right
@@ -223,8 +221,9 @@ var bool[] externalEventUp = array.new_bool()   // direction of each external ev
 var line[] internalEventLines = array.new_line()
 var label[] internalEventLabels = array.new_label()
 
+// Gold-like prices print at most 2 decimals (3935.16, not 3935.158); a small price (FX) keeps the symbol's own tick format.
 f_px(float x) =>
-    str.tostring(x, format.mintick)
+    syminfo.mintick < 0.01 and math.abs(x) >= 100 ? str.tostring(x, "0.00") : str.tostring(x, format.mintick)
 
 f_cnt(int[] counts, int idx) =>
     str.tostring(array.get(counts, idx))
@@ -232,24 +231,22 @@ f_cnt(int[] counts, int idx) =>
 f_time(int t) =>
     str.format_time(t, "MM-dd HH:mm", syminfo.timezone)
 
+f_labelsNear(label[] labels, int x, float y) =>
+    bool found = false
+    if array.size(labels) > 0
+        for i = 0 to array.size(labels) - 1
+            found := found or (math.abs(x - label.get_x(array.get(labels, i))) <= annotationBarSpacing and math.abs(y - label.get_y(array.get(labels, i))) <= atr * annotationATRSpacing)
+    found
+
 f_eventLabel(int x, float y, string title, color tone, bool above) =>
     int safeX = math.max(x, bar_index - 9999)
     float renderY = y + (above ? atr * primaryLabelOffsetATR : -atr * primaryLabelOffsetATR)
     // Pine exposes no pixel bounds. Use deterministic bar/ATR slots against
     // existing contextual and external-structure captions instead.
     for pass = 0 to 2
-        bool occupied = false
-        if array.size(eventLabels) > 0
-            for i = 0 to array.size(eventLabels) - 1
-                label existing = array.get(eventLabels, i)
-                occupied := occupied or (math.abs(safeX - label.get_x(existing)) <= annotationBarSpacing and math.abs(renderY - label.get_y(existing)) <= atr * annotationATRSpacing)
-        if array.size(externalEventLabels) > 0
-            for i = 0 to array.size(externalEventLabels) - 1
-                label existing = array.get(externalEventLabels, i)
-                occupied := occupied or (math.abs(safeX - label.get_x(existing)) <= annotationBarSpacing and math.abs(renderY - label.get_y(existing)) <= atr * annotationATRSpacing)
-        if occupied
+        if f_labelsNear(eventLabels, safeX, renderY) or f_labelsNear(externalEventLabels, safeX, renderY)
             renderY += above ? atr * annotationATRSpacing : -atr * annotationATRSpacing
-    label l = label.new(x = safeX, y = renderY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = above ? label.style_label_down : label.style_label_up, color = color.new(#090D18, 18), textcolor = tone, size = contextTextSize)
+    label l = label.new(x = safeX, y = renderY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(#090D18, 10), textcolor = tone, size = tier3Size)
     array.push(eventLabels, l)
     if array.size(eventLabels) > maxEventLabels
         label.delete(array.shift(eventLabels))
@@ -266,18 +263,9 @@ f_structureLine(int x1, int x2, float level, bool bullish, bool choch, bool inte
     // Keep both BOS and CHoCH captions centered and clearly below the line.
     float labelY = level - nz(atr, syminfo.mintick * 10) * structureLabelOffsetATR
     for pass = 0 to 2
-        bool occupied = false
-        if array.size(externalEventLabels) > 0
-            for i = 0 to array.size(externalEventLabels) - 1
-                label existing = array.get(externalEventLabels, i)
-                occupied := occupied or (math.abs(midX - label.get_x(existing)) <= annotationBarSpacing and math.abs(labelY - label.get_y(existing)) <= atr * annotationATRSpacing)
-        if array.size(internalEventLabels) > 0
-            for i = 0 to array.size(internalEventLabels) - 1
-                label existing = array.get(internalEventLabels, i)
-                occupied := occupied or (math.abs(midX - label.get_x(existing)) <= annotationBarSpacing and math.abs(labelY - label.get_y(existing)) <= atr * annotationATRSpacing)
-        if occupied
+        if f_labelsNear(externalEventLabels, midX, labelY) or f_labelsNear(internalEventLabels, midX, labelY)
             labelY -= atr * annotationATRSpacing
-    label structureLabel = label.new(x = midX, y = labelY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_center, color = color.new(#090D18, 12), textcolor = c, size = structureTextSize)
+    label structureLabel = label.new(x = midX, y = labelY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(#090D18, 10), textcolor = color.new(c, internal ? 20 : 0), size = internal ? tier3Size : tier2Size)
     if internal
         array.push(internalEventLines, structureLine)
         array.push(internalEventLabels, structureLabel)
@@ -313,7 +301,6 @@ f_structureLine(int x1, int x2, float level, bool bullish, bool choch, bool inte
 // zoneKind: 1 = OB; 2 = FVG; 3 = supply/demand.
 // zoneSide: +1 = bullish; -1 = bearish.
 var box[] zones = array.new_box()
-var label[] zoneCaptionLabels = array.new_label()
 var float[] zoneTops = array.new_float()
 var float[] zoneBottoms = array.new_float()
 var int[] zoneOrigins = array.new_int()
@@ -343,16 +330,12 @@ var string[] obLastOutcome = array.new_string(1, "no candidate yet")
 
 f_removeZone(int idx) =>
     box oldBox = array.get(zones, idx)
-    label oldCaption = array.get(zoneCaptionLabels, idx)
     line oldMid = array.get(zoneMidLines, idx)
     if not na(oldBox)
         box.delete(oldBox)
-    if not na(oldCaption)
-        label.delete(oldCaption)
     if not na(oldMid)
         line.delete(oldMid)
     array.remove(zones, idx)
-    array.remove(zoneCaptionLabels, idx)
     array.remove(zoneTops, idx)
     array.remove(zoneBottoms, idx)
     array.remove(zoneOrigins, idx)
@@ -391,10 +374,8 @@ f_addZone(int origin, float top, float bottom, int side, int kind, string title,
                     duplicate := duplicate or (overlap > 0 and smaller > 0 and overlap / smaller >= 0.85)
         if not duplicate
             box zoneBox = na
-            label zoneCaption = na
             line zoneMid = na
             array.push(zones, zoneBox)
-            array.push(zoneCaptionLabels, zoneCaption)
             array.push(zoneTops, top)
             array.push(zoneBottoms, bottom)
             array.push(zoneOrigins, math.max(origin, bar_index - 9999))
@@ -469,7 +450,6 @@ var int developingLowBar = na
 var line developingLine = na
 var line activeLegLine = na
 var line protectedLine = na
-var string invalidatedText = "—"
 
 var float lastInternalHigh = na
 var float previousInternalHigh = na
@@ -483,6 +463,7 @@ var int internalBias = 0
 
 bool newMajorHigh = false
 bool newMajorLow = false
+int protectedRatchet = 0   // v2.14: +1 / -1 on a bar where an internal BOS moved the trailing protected level toward price in the bias direction
 float majorHighPrice = na
 float majorLowPrice = na
 int majorHighBar = na
@@ -498,6 +479,8 @@ var float[] dispHighTr = array.new_float(4, na)
 var float[] dispPubTr = array.new_float(4, na)
 var float[] dispOut = array.new_float(5, 0.0)   // [kind (-1 low published, +1 high published, 0 none), swing bar, swing price, counter price, counter bar]
 var float[] extOut = array.new_float(2, na)     // [value, bar] of f_extremeSince
+var float[] ilRing = array.new_float(0)         // v2.14: the last 8 internal pivot lows as [bar, price] pairs; ihRing the highs
+var float[] ihRing = array.new_float(0)
 
 f_trkUpdate(float[] tr, bool isLow) =>
     float price = isLow ? low : high
@@ -588,6 +571,31 @@ f_extremeSince(int fromBar, bool wantHigh, bool inclusive) =>
                 array.set(extOut, 1, (bar_index - k) * 1.0)
     0
 
+f_ringPush(float[] ring, int bar, float price) =>
+    array.push(ring, bar * 1.0)
+    array.push(ring, price)
+    if array.size(ring) > 16
+        array.shift(ring)
+        array.shift(ring)
+    0
+
+// The most recent ring pivot with afterBar < bar <= uptoBar, in extOut (empty when none).
+f_ringPick(float[] ring, int afterBar, int uptoBar) =>
+    array.set(extOut, 0, float(na))
+    array.set(extOut, 1, float(na))
+    int k = array.size(ring) - 2
+    while k >= 0
+        float b = array.get(ring, k)
+        if b > afterBar and b <= uptoBar
+            array.set(extOut, 0, array.get(ring, k + 1))
+            array.set(extOut, 1, b)
+            break
+        k -= 2
+    0
+
+var line[] keyLines = array.new_line()
+var box[] keyBoxes = array.new_box()
+
 f_swingText(float price, float prev, float tol, string first, string eq, string up, string down) =>
     na(prev) ? first : math.abs(price - prev) <= tol ? eq : price > prev ? up : down
 
@@ -597,19 +605,20 @@ f_majorLine(line old, int bar, float price, color tone) =>
         line.delete(old)
     line result = na
     if showMajorLevels
-        result := line.new(x1 = math.max(bar, bar_index - 9999), y1 = price, x2 = bar_index + 5, y2 = price, xloc = xloc.bar_index, color = color.new(tone, 35), style = line.style_solid, width = 2)
+        result := line.new(x1 = math.max(bar, bar_index - 9999), y1 = price, x2 = bar_index + gutter, y2 = price, xloc = xloc.bar_index, color = color.new(tone, 35), style = line.style_solid, width = 2)
     result
 
 f_majorTag(label old, int bar, float price, bool isLow, color tone) =>
     if not na(old)
         label.delete(old)
-    label.new(x = math.max(bar, bar_index - 9999), y = price + (isLow ? -1 : 1) * nz(atr[externalLength], atr) * primaryLabelOffsetATR, text = isLow ? "MAJOR LOW" : "MAJOR HIGH", xloc = xloc.bar_index, yloc = yloc.price, style = isLow ? label.style_label_up : label.style_label_down, color = color.new(#090D18, 16), textcolor = tone, size = majorTextSize, tooltip = isLow ? "Confirmed external swing low" : "Confirmed external swing high")
+    label.new(x = math.max(bar, bar_index - 9999), y = price + (isLow ? -1 : 1) * nz(atr[externalLength], atr) * primaryLabelOffsetATR, text = isLow ? "MAJOR LOW" : "MAJOR HIGH", xloc = xloc.bar_index, yloc = yloc.price, style = isLow ? label.style_label_up : label.style_label_down, color = color.new(#090D18, 16), textcolor = tone, size = tier1Size, text_formatting = text.format_bold, tooltip = isLow ? "Confirmed external swing low" : "Confirmed external swing high")
 
 // Internal structure remains independent from external bias.
 if newInternalHigh
     previousInternalHigh := lastInternalHigh
     lastInternalHigh := internalHigh
     lastInternalHighBar := bar_index - internalLength
+    f_ringPush(ihRing, lastInternalHighBar, internalHigh)
     internalHighBroken := false
     if showInternal
         float tolerance = nz(atr[internalLength], atr) * equalTolerance
@@ -620,6 +629,7 @@ if newInternalLow
     previousInternalLow := lastInternalLow
     lastInternalLow := internalLow
     lastInternalLowBar := bar_index - internalLength
+    f_ringPush(ilRing, lastInternalLowBar, internalLow)
     internalLowBroken := false
     if showInternal
         float tolerance = nz(atr[internalLength], atr) * equalTolerance
@@ -646,6 +656,7 @@ if internalUpBreak
         if not na(trailLow) and (na(protectedLow) or trailLow > protectedLow)
             protectedLow := trailLow
             protectedLowBar := int(array.get(extOut, 1))
+            protectedRatchet := 1
     internalHighBroken := true
     internalBias := 1
 if internalDownBreak
@@ -661,6 +672,7 @@ if internalDownBreak
         if not na(trailHigh) and (na(protectedHigh) or trailHigh < protectedHigh)
             protectedHigh := trailHigh
             protectedHighBar := int(array.get(extOut, 1))
+            protectedRatchet := -1
     internalLowBroken := true
     internalBias := -1
 
@@ -677,10 +689,6 @@ float pubHighPrice = na
 int pubHighBar = na
 float pubHighCounter = na
 int pubHighCounterBar = na
-if debugMode and newExternalHigh
-    f_eventLabel(bar_index - externalLength, externalHigh, "xEH", bearColor, true)
-if debugMode and newExternalLow
-    f_eventLabel(bar_index - externalLength, externalLow, "xEL", bullColor, false)
 if barstate.isconfirmed and not na(atr)
     f_dispStep(externalCandidateType)
     int dispKind = int(array.get(dispOut, 0))
@@ -717,12 +725,7 @@ if pubLow
     developingLow := na
     developingLowBar := na
     currentMajorLowLine := f_majorLine(currentMajorLowLine, pubLowBar, pubLowPrice, bullColor)
-    if minimalMode or not showHistoricalMajor
-        currentMajorLowTag := f_majorTag(currentMajorLowTag, pubLowBar, pubLowPrice, true, bullColor)
-    else if showHistoricalMajor
-        float tolerance = nz(atr[externalLength], atr) * equalTolerance
-        string swingText = f_swingText(pubLowPrice, previousSwingLow, tolerance, "M SL", "M EQL", "M HL", "M LL")
-        f_eventLabel(pubLowBar, pubLowPrice, swingText, bullColor, false)
+    currentMajorLowTag := f_majorTag(currentMajorLowTag, pubLowBar, pubLowPrice, true, bullColor)
 
 if pubHigh
     previousSwingHigh := lastSwingHigh
@@ -742,18 +745,13 @@ if pubHigh
     developingHigh := na
     developingHighBar := na
     currentMajorHighLine := f_majorLine(currentMajorHighLine, pubHighBar, pubHighPrice, bearColor)
-    if minimalMode or not showHistoricalMajor
-        currentMajorHighTag := f_majorTag(currentMajorHighTag, pubHighBar, pubHighPrice, false, bearColor)
-    else if showHistoricalMajor
-        float tolerance = nz(atr[externalLength], atr) * equalTolerance
-        string swingText = f_swingText(pubHighPrice, previousSwingHigh, tolerance, "M SH", "M EQH", "M HH", "M LH")
-        f_eventLabel(pubHighBar, pubHighPrice, swingText, bearColor, true)
+    currentMajorHighTag := f_majorTag(currentMajorHighTag, pubHighBar, pubHighPrice, false, bearColor)
 
 if showMajorLevels
     if not na(currentMajorHighLine)
-        line.set_x2(currentMajorHighLine, highBroken and not na(highBreakBar) ? highBreakBar : bar_index + 5)
+        line.set_x2(currentMajorHighLine, highBroken and not na(highBreakBar) ? highBreakBar : bar_index + gutter)
     if not na(currentMajorLowLine)
-        line.set_x2(currentMajorLowLine, lowBroken and not na(lowBreakBar) ? lowBreakBar : bar_index + 5)
+        line.set_x2(currentMajorLowLine, lowBroken and not na(lowBreakBar) ? lowBreakBar : bar_index + gutter)
 
 // The live extreme belongs to the active leg, not to confirmed structure. It
 // updates immediately but remains visually dashed and is never called HH/LL.
@@ -772,10 +770,10 @@ if showMajorLevels and developingDirection != 0
     int legStartBar = developingDirection == 1 ? lastLowBar : lastHighBar
     if not na(developingPrice) and not na(developingBar)
         if na(developingLine)
-            developingLine := line.new(math.max(developingBar, bar_index - 9999), developingPrice, bar_index + 5, developingPrice, xloc = xloc.bar_index, color = color.new(developingTone, 25), style = line.style_dashed, width = 1)
+            developingLine := line.new(math.max(developingBar, bar_index - 9999), developingPrice, bar_index + gutter, developingPrice, xloc = xloc.bar_index, color = color.new(developingTone, 25), style = line.style_dashed, width = 1)
         else
             line.set_xy1(developingLine, math.max(developingBar, bar_index - 9999), developingPrice)
-            line.set_xy2(developingLine, bar_index + 5, developingPrice)
+            line.set_xy2(developingLine, bar_index + gutter, developingPrice)
             line.set_color(developingLine, color.new(developingTone, 25))
         if not na(legStartPrice) and not na(legStartBar)
             if na(activeLegLine)
@@ -801,6 +799,32 @@ if newMajorHigh and bias == -1 and (not trailingProtected or na(protectedHigh) o
 if newMajorLow and bias == 1 and (not trailingProtected or na(protectedLow) or lastSwingLow > protectedLow)
     protectedLow := lastSwingLow
     protectedLowBar := lastLowBar
+// v2.14: a confirmed higher high (lower low) promotes the internal higher low (lower high) that produced it, between the protected bar and the swing. It leaves the developing leg alone: the swing was published after a pullback.
+if trailingProtected and newMajorHigh and bias == 1 and not na(protectedLowBar)
+    f_ringPick(ilRing, protectedLowBar, lastHighBar - 1)
+    if not na(array.get(extOut, 0)) and (na(protectedLow) or array.get(extOut, 0) > protectedLow)
+        protectedLow := array.get(extOut, 0)
+        protectedLowBar := int(array.get(extOut, 1))
+if trailingProtected and newMajorLow and bias == -1 and not na(protectedHighBar)
+    f_ringPick(ihRing, protectedHighBar, lastLowBar - 1)
+    if not na(array.get(extOut, 0)) and (na(protectedHigh) or array.get(extOut, 0) < protectedHigh)
+        protectedHigh := array.get(extOut, 0)
+        protectedHighBar := int(array.get(extOut, 1))
+// v2.14: an internal BOS that moved the protected level toward price puts the developing leg on the bias side: the extreme since the protected bar (the dealing range's own value).
+if protectedRatchet == 1 and not na(protectedLowBar)
+    f_extremeSince(protectedLowBar, true, true)
+    developingDirection := 1
+    developingHigh := array.get(extOut, 0)
+    developingHighBar := int(array.get(extOut, 1))
+    developingLow := na
+    developingLowBar := na
+if protectedRatchet == -1 and not na(protectedHighBar)
+    f_extremeSince(protectedHighBar, false, true)
+    developingDirection := -1
+    developingLow := array.get(extOut, 0)
+    developingLowBar := int(array.get(extOut, 1))
+    developingHigh := na
+    developingHighBar := na
 
 float breakThreshold = atr * (breakBuffer + confirmATR)
 bool swingUpBreak = barstate.isconfirmed and not na(lastSwingHigh) and not highBroken and close > lastSwingHigh + breakThreshold
@@ -845,8 +869,6 @@ if downBreak and not na(downLevelBar)
 if upBreak
     bool initialBreak = bias == 0
     bool choch = protectedUpBreak or (bias == -1 and not na(protectedHigh))
-    if choch
-        invalidatedText := "High · " + f_px(protectedHigh)
     upCHOCH := choch
     upBOS := not choch
     if showBreaks
@@ -864,8 +886,10 @@ if upBreak
     lastBreakBar := bar_index
     lastBreakTime := time[bar_index - upBreakBar]
     if protectedUpBreak
-        // the protected low of the new bull leg is the lowest low since the protected high that was just taken
-        f_extremeSince(protectedHighBar, false, true)
+        // v2.14: the protected low of the new bull leg is the last internal pivot low between the protected high and the break; without one, the lowest low since it
+        f_ringPick(ilRing, protectedHighBar, upBreakBar)
+        if na(array.get(extOut, 0))
+            f_extremeSince(protectedHighBar, false, true)
         protectedLow := array.get(extOut, 0)
         protectedLowBar := int(array.get(extOut, 1))
     else if not trailingProtected or previousBias != 1 or na(protectedLow) or lastSwingLow > protectedLow
@@ -875,8 +899,6 @@ if upBreak
 else if downBreak
     bool initialBreak = bias == 0
     bool choch = protectedDownBreak or (bias == 1 and not na(protectedLow))
-    if choch
-        invalidatedText := "Low · " + f_px(protectedLow)
     downCHOCH := choch
     downBOS := not choch
     if showBreaks
@@ -894,7 +916,9 @@ else if downBreak
     lastBreakBar := bar_index
     lastBreakTime := time[bar_index - downBreakBar]
     if protectedDownBreak
-        f_extremeSince(protectedLowBar, true, true)
+        f_ringPick(ihRing, protectedLowBar, downBreakBar)
+        if na(array.get(extOut, 0))
+            f_extremeSince(protectedLowBar, true, true)
         protectedHigh := array.get(extOut, 0)
         protectedHighBar := int(array.get(extOut, 1))
     else if not trailingProtected or previousBias != -1 or na(protectedHigh) or lastSwingHigh < protectedHigh
@@ -943,11 +967,11 @@ float dealingMid = not na(dealingHigh) and not na(dealingLow) and dealingHigh > 
 if not na(currentMajorHighLine)
     line.set_style(currentMajorHighLine, highBroken ? line.style_dotted : line.style_solid)
     line.set_color(currentMajorHighLine, color.new(bearColor, highBroken ? 78 : 35))
-    line.set_x2(currentMajorHighLine, highBroken and not na(highBreakBar) ? highBreakBar : bar_index + 5)
+    line.set_x2(currentMajorHighLine, highBroken and not na(highBreakBar) ? highBreakBar : bar_index + gutter)
 if not na(currentMajorLowLine)
     line.set_style(currentMajorLowLine, lowBroken ? line.style_dotted : line.style_solid)
     line.set_color(currentMajorLowLine, color.new(bullColor, lowBroken ? 78 : 35))
-    line.set_x2(currentMajorLowLine, lowBroken and not na(lowBreakBar) ? lowBreakBar : bar_index + 5)
+    line.set_x2(currentMajorLowLine, lowBroken and not na(lowBreakBar) ? lowBreakBar : bar_index + gutter)
 if not na(currentMajorHighTag)
     label.set_textcolor(currentMajorHighTag, color.new(bearColor, highBroken ? 58 : 0))
 if not na(currentMajorLowTag)
@@ -960,10 +984,10 @@ int activeProtectedBar = bias == 1 ? protectedLowBar : bias == -1 ? protectedHig
 color protectedTone = bias == 1 ? bullColor : bearColor
 if showMajorLevels and not na(activeProtected) and not na(activeProtectedBar)
     if na(protectedLine)
-        protectedLine := line.new(math.max(activeProtectedBar, bar_index - 9999), activeProtected, bar_index + 5, activeProtected, xloc = xloc.bar_index, color = color.new(protectedTone, 52), style = line.style_dashed, width = 1)
+        protectedLine := line.new(math.max(activeProtectedBar, bar_index - 9999), activeProtected, bar_index + gutter, activeProtected, xloc = xloc.bar_index, color = color.new(protectedTone, 52), style = line.style_dashed, width = 1)
     else
         line.set_xy1(protectedLine, math.max(activeProtectedBar, bar_index - 9999), activeProtected)
-        line.set_xy2(protectedLine, bar_index + 5, activeProtected)
+        line.set_xy2(protectedLine, bar_index + gutter, activeProtected)
         line.set_color(protectedLine, color.new(protectedTone, 52))
 else
     if not na(protectedLine)
@@ -981,14 +1005,18 @@ string[] rlText = array.new_string()
 color[] rlTone = array.new_color()
 int[] rlPriority = array.new_int()
 string[] rlTip = array.new_string()
+int[] rlCat = array.new_int()    // 0 structure, 1 liquidity, 2 session, 3 zone, 4 key level
+int[] rlTier = array.new_int()   // 1 decision, 2 structure, 3 context
 
-f_regLabel(float y, string caption, color tone, int priority, string tip) =>
+f_regLabel(float y, string caption, color tone, int priority, string tip, int cat, int tier) =>
     if not na(y)
         array.push(rlY, y)
         array.push(rlText, caption)
         array.push(rlTone, tone)
         array.push(rlPriority, priority)
         array.push(rlTip, tip)
+        array.push(rlCat, cat)
+        array.push(rlTier, tier)
     0
 
 // ------- LIQUIDITY POOLS (LEVEL-FIRST BSL / SSL) -------
@@ -1402,10 +1430,11 @@ f_renderPools() =>
                 if pActive
                     f_inc(liqView, 0)
                 int leftX = math.max(pBirth, bar_index - maxDrawBars)
-                int rightX = pActive ? bar_index + 5 : math.max(pStateBar, leftX + 1)
+                int rightX = pActive ? bar_index + gutter : math.max(pStateBar, leftX + 1)
                 color lineTone = color.new(liquidityColor, pActive ? 25 : 78)
                 string baseName = pKind == "EQ" ? (pSide == 1 ? "EQH · BSL" : "EQL · SSL") : pKind == "PDH" ? "PDH · BSL" : pKind == "PDL" ? "PDL · SSL" : (pSide == 1 ? "BSL" : "SSL")
-                string labelText = baseName + (pState == 1 ? " · swept" : pState == 2 ? " · taken" : "")
+                string shortName = pKind == "EQ" ? (pSide == 1 ? "EQH" : "EQL") : pKind == "Swing" ? (pSide == 1 ? "BSL" : "SSL") : pKind
+                string labelText = shortName + (pState == 1 ? " · swept" : pState == 2 ? " · taken" : "")
                 string degreeText = pDegree == 1 ? "Internal equal level" : pDegree == 2 ? "External swing" : "External + equal / session level"
                 string poolTip = baseName + " " + f_px(pEdge) + "\n" + degreeText + " · tests " + str.tostring(pTests) + "\n" + (pState == 0 ? "Active" : pState == 1 ? "Swept (grab)" : "Consumed") + " · age " + str.tostring(bar_index - pBirth) + " bars"
                 if na(poolLine)
@@ -1431,7 +1460,7 @@ f_renderPools() =>
                     box emptyPoolBox = na
                     array.set(poolBoxes, i, emptyPoolBox)
                 if pActive
-                    f_regLabel(pEdge, labelText, liquidityColor, pKind == "EQ" ? 62 : 60, poolTip)
+                    f_regLabel(pEdge, labelText, liquidityColor, pKind == "EQ" ? 62 : 60, poolTip, 1, i == nearBsl or i == nearSsl ? 1 : 3)
                     if not na(poolLabel)
                         label.delete(poolLabel)
                         label emptyActiveLabel = na
@@ -1580,7 +1609,6 @@ if showOB and barstate.isconfirmed and not na(atr)
 // edge means the zone is dead: it is not added. A touch means it is drawn already Tested (first touch, measured depth): never Fresh, never actionable and
 // never a trade trigger, because it was retested before the indicator showed it.
 var float[] scanOut = array.new_float(3, 0.0)   // [closed through (0/1), first touching bar or -1, deepest penetration 0..1]
-var int[] sdCounters = array.new_int(1, 0)      // [swing supply/demand candidates refused]
 
 f_swingScan(int side, float top, float bottom, int majorBar) =>
     array.set(scanOut, 0, 0.0)
@@ -1605,9 +1633,7 @@ f_swingScan(int side, float top, float bottom, int majorBar) =>
 f_addSwingZone(int side, float top, float bottom, int majorBar, string title, color tone) =>
     int drawn = 0
     f_swingScan(side, top, bottom, majorBar)
-    if array.get(scanOut, 0) == 1.0
-        array.set(sdCounters, 0, array.get(sdCounters, 0) + 1)
-    else
+    if array.get(scanOut, 0) != 1.0
         drawn := f_addZone(majorBar, top, bottom, side, 3, title, tone, 0, "")
         if drawn == 1 and array.get(scanOut, 1) >= 0
             int newest = array.size(zones) - 1
@@ -1635,9 +1661,6 @@ if showSD and newMajorHigh
         if majorHighPrice - majorHighCounter >= atrAtSwing * sdDepartureATR
             f_addSwingZone(-1, majorHighPrice, lower, majorHighBar, "Supply", supplyColor)
             bearSD := true
-
-if showSD and (newMajorLow or newMajorHigh) and not bullSD and not bearSD
-    array.set(sdCounters, 0, array.get(sdCounters, 0) + 1)
 
 // ------- BASE-AND-IMPULSE SUPPLY / DEMAND (DBR / RBR / RBD / DBD) -------
 // A base is 1..N consecutive small candles. A zone exists once price leaves the base
@@ -1776,13 +1799,10 @@ bool rawBullFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and low > 
 bool rawBearFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and high < low[2]
 bool bullFVG = rawBullFVG and close[1] > open[1] and low - high[2] >= atr * (engineFvg ? fvgEngineATR : minGapATR) and fvgBodyOk
 bool bearFVG = rawBearFVG and close[1] < open[1] and low[2] - high >= atr * (engineFvg ? fvgEngineATR : minGapATR) and fvgBodyOk
-var int rejectedFVGCount = 0
 if bullFVG
     f_addZone(bar_index - 2, low, high[2], 1, 2, "Bull FVG", bullFvgColor, 0, "")
 if bearFVG
     f_addZone(bar_index - 2, low[2], high, -1, 2, "Bear FVG", bearFvgColor, 0, "")
-if (rawBullFVG and not bullFVG) or (rawBearFVG and not bearFVG)
-    rejectedFVGCount += 1
 
 // Named POI qualification path of zone i ("Candidate" = not qualified). Used by the display
 // pass and by the trade plan so a trade can only start from a zone that is marked as a POI.
@@ -1818,103 +1838,118 @@ f_poiPath(int i, bool fresh) =>
     string path = componentConfluence ? "Composite" : structureOriginOB ? "Structure-origin OB" : displacedSwingZone ? "Displaced swing zone" : baseImpulseZone ? "Base-impulse zone" : sweptImbalance ? "Swept imbalance" : "Candidate"
     path
 
+// Tooltip of zone i: the full wording, state, qualification path and range.
+f_zoneTip(int i) =>
+    bool touched = array.get(zoneTouched, i)
+    int kind = array.get(zoneKinds, i)
+    int obClass = array.get(zoneClasses, i)
+    string title = array.get(zonePoi, i) ? array.get(zonePoiTitles, i) : array.get(zoneTitles, i)
+    string obTipLine = kind == 1 ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
+    title + "\n" + obTipLine + array.get(zoneQualification, i) + "\nMitigated " + str.tostring(array.get(zoneMitigation, i) * 100.0, "#.0") + "%\n" + f_px(array.get(zoneBottoms, i)) + " — " + f_px(array.get(zoneTops, i))
+
 // Zone drawing pass. A function so the main script body stays within TradingView's size limit.
 // Hidden zones have no box object, so they cannot distort chart autoscaling; they are recreated
-// when ranking qualifies them.
+// when ranking qualifies them. Visible zones of one side that overlap or sit closer than a label height form one cluster: one caption (the best member's, with the
+// union of the kinds) and one tooltip for the whole cluster; the other boxes are drawn without text.
 f_renderZones() =>
-    // Rendering pass. Hidden zones have no box object, so they cannot distort
-    // chart autoscaling; they can be recreated later when ranking qualifies them.
-    // One label is about 1/48 of the candle range tall (zoom-aware); text inside a box needs room for
-    // it and a free slot, otherwise the caption joins the right-edge label column (merged there).
-    float labelGap = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 48.0)
+    float labelGap = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 36.0)
     float[] placedText = array.new_float()
-    for i = 0 to array.size(zones) - 1
+    int zoneCount = array.size(zones)
+    int[] grp = array.new_int(zoneCount, -1)
+    float[] score = array.new_float(zoneCount, 0.0)
+    for i = 0 to zoneCount - 1
+        if array.get(zoneVisible, i)
+            float top = array.get(zoneTops, i)
+            float bottom = array.get(zoneBottoms, i)
+            array.set(grp, i, i)
+            array.set(score, i, (array.get(zonePoi, i) ? 1000.0 : 0.0) + (array.get(zoneTouched, i) ? 0.0 : 500.0) - math.abs(close - (top + bottom) / 2.0) / math.max(atr, syminfo.mintick))
+            for j = 0 to i - 1
+                if array.get(zoneVisible, j) and array.get(zoneSides, j) == array.get(zoneSides, i) and array.get(grp, i) == i
+                    float otherTop = array.get(zoneTops, j)
+                    float otherBottom = array.get(zoneBottoms, j)
+                    if math.min(top, otherTop) - math.max(bottom, otherBottom) > 0 or math.abs((top + bottom - otherTop - otherBottom) / 2.0) < labelGap
+                        array.set(grp, i, array.get(grp, j))
+    for i = 0 to zoneCount - 1
         box zoneBox = array.get(zones, i)
-        bool visible = array.get(zoneVisible, i)
-        if visible
+        if array.get(zoneVisible, i)
             float top = array.get(zoneTops, i)
             float bottom = array.get(zoneBottoms, i)
             int origin = array.get(zoneOrigins, i)
             int kind = array.get(zoneKinds, i)
-            int side = array.get(zoneSides, i)
             bool touched = array.get(zoneTouched, i)
             bool poi = array.get(zonePoi, i)
             color tone = array.get(zoneColors, i)
-            string title = poi ? array.get(zonePoiTitles, i) : array.get(zoneTitles, i)
             bool isOB = kind == 1
-            int obClass = array.get(zoneClasses, i)
-            string obName = (obClass == 1 ? "iOB" : "OB") + (touched ? " · T" : "")
-            string shortTitle = poi ? title : isOB ? obName : array.get(zoneTitles, i)
-            float mitigation = array.get(zoneMitigation, i)
-            string zoneState = array.get(zoneQualification, i)
-            string obTipLine = isOB ? array.get(zoneEvents, i) + " · " + (obClass == 2 ? "swing" : "internal") + " · " + (touched ? "Tested" : "Fresh") + " · mitigation " + obMitigationMethod + "\n" : kind == 3 and obClass == 1 ? "Base-and-impulse " + array.get(zoneEvents, i) + " · " + (touched ? "Tested" : "Fresh") + "\n" : ""
-            string zoneTooltip = title + "\n" + obTipLine + zoneState + "\nMitigated " + str.tostring(mitigation * 100.0, "#.0") + "%\n" + f_px(bottom) + " — " + f_px(top)
             float zoneMid = (top + bottom) / 2.0
+            bool lead = true
+            int members = 0
+            string sdCode = ""
+            string obCode = ""
+            string fvgCode = ""
+            string tips = ""
+            for j = 0 to zoneCount - 1
+                if array.get(zoneVisible, j) and array.get(grp, j) == array.get(grp, i)
+                    if j != i and (array.get(score, j) > array.get(score, i) or (array.get(score, j) == array.get(score, i) and j < i))
+                        lead := false
+                    members += 1
+                    int memberKind = array.get(zoneKinds, j)
+                    if memberKind == 1
+                        obCode := array.get(zoneClasses, j) == 1 ? "+iOB" : "+OB"
+                    else if memberKind == 2
+                        fvgCode := "+FVG"
+                    else
+                        sdCode := (array.get(zoneSides, j) == 1 ? "+D" : "+S") + (array.get(zoneClasses, j) == 1 ? "·" + array.get(zoneEvents, j) : "")
+                    tips += (members > 1 ? "\n──\n" : "") + f_zoneTip(j)
+            string caption = (poi ? "◆ " : "") + str.substring(sdCode + obCode + fvgCode, 1) + (touched ? "·T" : "") + (members > 1 ? " ×" + str.tostring(members) : "")
             bool tallEnough = top - bottom >= labelGap * 1.4
-            bool suppressCaption = false
-            if not poi and array.size(zones) > 1
-                for j = 0 to array.size(zones) - 1
-                    if j != i and array.get(zoneVisible, j) and array.get(zonePoi, j)
-                        float poiTop = array.get(zoneTops, j)
-                        float poiBottom = array.get(zoneBottoms, j)
-                        suppressCaption := suppressCaption or math.min(top, poiTop) - math.max(bottom, poiBottom) > 0
             bool textFree = true
             if array.size(placedText) > 0
                 for t = 0 to array.size(placedText) - 1
                     textFree := textFree and math.abs(zoneMid - array.get(placedText, t)) >= labelGap
-            bool showInside = tallEnough and not suppressCaption and textFree
+            bool showInside = lead and tallEnough and textFree
             if showInside
                 array.push(placedText, zoneMid)
-            string insideText = showInside ? shortTitle : ""
+            string insideText = showInside ? caption : ""
+            string captionSize = poi ? tier1Size : tier2Size
+            color captionTone = poi ? tone : color.new(tone, 25)
             color zoneBorder = isOB ? color.new(tone, touched ? 72 : 42) : poi ? color.new(tone, 10) : color.new(tone, touched ? 75 : 50)
             int zoneBorderWidth = isOB ? 1 : poi ? 2 : 1
             string zoneBorderStyle = isOB and touched ? line.style_dashed : line.style_solid
             color zoneFill = isOB ? color.new(tone, touched ? 95 : math.min(97, zoneOpacity + 2)) : color.new(tone, touched ? 96 : poi ? math.max(82, zoneOpacity - 3) : zoneOpacity)
             int drawLeft = math.max(origin, bar_index - maxDrawBars)
             if na(zoneBox)
-                zoneBox := box.new(left = drawLeft, top = top, right = bar_index + 5, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = tone, text_size = zoneTextSize, text_halign = text.align_right)
+                zoneBox := box.new(left = drawLeft, top = top, right = bar_index + gutter, bottom = bottom, xloc = xloc.bar_index, border_color = zoneBorder, border_width = zoneBorderWidth, border_style = zoneBorderStyle, bgcolor = zoneFill, text = insideText, text_color = captionTone, text_size = captionSize, text_halign = text.align_right)
                 array.set(zones, i, zoneBox)
             else
                 box.set_left(zoneBox, drawLeft)
-                box.set_right(zoneBox, bar_index + 5)
+                box.set_right(zoneBox, bar_index + gutter)
                 box.set_border_color(zoneBox, zoneBorder)
                 box.set_border_width(zoneBox, zoneBorderWidth)
                 box.set_border_style(zoneBox, zoneBorderStyle)
                 box.set_bgcolor(zoneBox, zoneFill)
                 box.set_text(zoneBox, insideText)
-                box.set_text_color(zoneBox, tone)
-                box.set_text_size(zoneBox, zoneTextSize)
+                box.set_text_color(zoneBox, captionTone)
+                box.set_text_size(zoneBox, captionSize)
                 box.set_text_halign(zoneBox, text.align_right)
             line zoneMidLine = array.get(zoneMidLines, i)
             if isOB and showOBMidline
                 if na(zoneMidLine)
-                    zoneMidLine := line.new(drawLeft, zoneMid, bar_index + 5, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
+                    zoneMidLine := line.new(drawLeft, zoneMid, bar_index + gutter, zoneMid, xloc = xloc.bar_index, color = color.new(tone, 55), style = line.style_dotted, width = 1)
                     array.set(zoneMidLines, i, zoneMidLine)
                 else
                     line.set_x1(zoneMidLine, drawLeft)
-                    line.set_x2(zoneMidLine, bar_index + 5)
+                    line.set_x2(zoneMidLine, bar_index + gutter)
             else if not na(zoneMidLine)
                 line.delete(zoneMidLine)
                 line emptyMidLine = na
                 array.set(zoneMidLines, i, emptyMidLine)
-            label zoneCaption = array.get(zoneCaptionLabels, i)
-            if not na(zoneCaption)
-                label.delete(zoneCaption)
-                label emptyCaption = na
-                array.set(zoneCaptionLabels, i, emptyCaption)
-            if not showInside and not suppressCaption
-                string columnText = poi ? "◆ " + str.replace_all(title, "POI · ", "") : shortTitle
-                f_regLabel(zoneMid, columnText, tone, 45, zoneTooltip)
+            if lead and not showInside
+                f_regLabel(zoneMid, caption, tone, 45, tips, 3, poi ? 1 : 2)
         else
             if not na(zoneBox)
                 box.delete(zoneBox)
                 box hiddenBox = na
                 array.set(zones, i, hiddenBox)
-            label hiddenCaption = array.get(zoneCaptionLabels, i)
-            if not na(hiddenCaption)
-                label.delete(hiddenCaption)
-                label emptyCaption = na
-                array.set(zoneCaptionLabels, i, emptyCaption)
             line hiddenMid = array.get(zoneMidLines, i)
             if not na(hiddenMid)
                 line.delete(hiddenMid)
@@ -1948,9 +1983,6 @@ int activeFVG = 0
 int activeSD = 0
 int activeBaseSD = 0
 int visibleBaseSD = 0
-int qualifiedPoiCount = 0
-int hiddenDistanceCount = 0
-int hiddenRankingCount = 0
 int activeBullOB = 0
 int activeBearOB = 0
 int visibleBullOB = 0
@@ -1958,8 +1990,6 @@ int visibleBearOB = 0
 int hiddenOBFar = 0
 int hiddenOBOverlap = 0
 int hiddenOBBudget = 0
-var int invalidatedZoneCount = 0
-var int agedZoneCount = 0
 
 if array.size(zones) > 0
     // Lifecycle pass. Analytical state survives visual suppression.
@@ -1985,8 +2015,6 @@ if array.size(zones) > 0
             bool invalid = kind == 2 ? fvgInvalid : kind == 1 ? (farClose or obMitigated) : farClose
             bool agedOut = bar_index - born > zoneMaxAge
             if invalid or agedOut
-                invalidatedZoneCount += invalid ? 1 : 0
-                agedZoneCount += agedOut and not invalid ? 1 : 0
                 if kind == 1
                     int endStat = farClose ? 5 : invalid ? 4 : 6
                     f_inc(obStats, endStat)
@@ -2226,13 +2254,9 @@ if array.size(zones) > 0
             bool auditBase = auditKind == 3 and array.get(zoneClasses, i) == 1
             activeBaseSD += auditBase ? 1 : 0
             visibleBaseSD += auditBase and array.get(zoneVisible, i) ? 1 : 0
-            qualifiedPoiCount += array.get(zonePoi, i) ? 1 : 0
             float auditMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
             float auditDistance = math.abs(close - auditMid) / math.max(atr, syminfo.mintick)
             bool withinDistance = debugMode or (auditDistance <= (auditKind == 1 ? effObDistanceATR : effZoneDistanceATR) and f_scaleOk(auditMid))
-            if not array.get(zoneVisible, i)
-                hiddenDistanceCount += withinDistance ? 0 : 1
-                hiddenRankingCount += withinDistance ? 1 : 0
             if auditKind == 1
                 int auditSide = array.get(zoneSides, i)
                 bool auditVisible = array.get(zoneVisible, i)
@@ -2256,72 +2280,6 @@ if array.size(zones) > 0
                         hiddenOBOverlap += 1
                     else
                         hiddenOBBudget += 1
-
-// ------- OPTIONAL CONFIRMED HIGHER-TIMEFRAME CONTEXT -------
-// The returned values are shifted by one HTF bar and requested with
-// lookahead_on. This exposes only the last completed HTF bar on every chart bar
-// and prevents an open HTF candle from changing chart-timeframe decisions.
-f_confirmedHtfStructure() =>
-    float pivotHigh = ta.pivothigh(high, htfSwingLength, htfSwingLength)
-    float pivotLow = ta.pivotlow(low, htfSwingLength, htfSwingLength)
-    var float confirmedHigh = na
-    var float confirmedLow = na
-    var int confirmedBias = 0
-    if barstate.isconfirmed and not na(pivotHigh)
-        confirmedHigh := pivotHigh
-    if barstate.isconfirmed and not na(pivotLow)
-        confirmedLow := pivotLow
-    if barstate.isconfirmed and not na(confirmedHigh) and close > confirmedHigh
-        confirmedBias := 1
-    else if barstate.isconfirmed and not na(confirmedLow) and close < confirmedLow
-        confirmedBias := -1
-    [confirmedHigh[1], confirmedLow[1], confirmedBias[1]]
-
-int selectedHtfSecs = timeframe.in_seconds(htfTimeframe)
-bool validHtfSelection = selectedHtfSecs > chartSecs
-[confirmedHtfHigh, confirmedHtfLow, confirmedHtfBias] = request.security(syminfo.tickerid, htfTimeframe, f_confirmedHtfStructure(), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_on)
-string confirmedHtfText = not showHTFContext ? "Off" : not validHtfSelection ? "Select higher TF" : confirmedHtfBias == 1 ? "Bull" : confirmedHtfBias == -1 ? "Bear" : "Neutral"
-
-var line htfHighLine = na
-var line htfLowLine = na
-var label htfHighTag = na
-var label htfLowTag = na
-if barstate.islast
-    bool renderHtfLevels = showHTFContext and drawHTFLevels and validHtfSelection
-    if renderHtfLevels and not na(confirmedHtfHigh)
-        int htfLeft = math.max(0, bar_index - htfSwingLength * 2)
-        if na(htfHighLine)
-            htfHighLine := line.new(htfLeft, confirmedHtfHigh, bar_index + 5, confirmedHtfHigh, xloc = xloc.bar_index, color = color.new(bearColor, 64), style = line.style_dashed, width = 1)
-            htfHighTag := label.new(bar_index + 5, confirmedHtfHigh, "HTF H · " + htfTimeframe, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 45), textcolor = color.new(bearColor, 15), size = contextTextSize)
-        else
-            line.set_xy1(htfHighLine, htfLeft, confirmedHtfHigh)
-            line.set_xy2(htfHighLine, bar_index + 5, confirmedHtfHigh)
-            label.set_xy(htfHighTag, bar_index + 5, confirmedHtfHigh)
-            label.set_text(htfHighTag, "HTF H · " + htfTimeframe)
-    else
-        if not na(htfHighLine)
-            line.delete(htfHighLine)
-            htfHighLine := na
-        if not na(htfHighTag)
-            label.delete(htfHighTag)
-            htfHighTag := na
-    if renderHtfLevels and not na(confirmedHtfLow)
-        int htfLeft = math.max(0, bar_index - htfSwingLength * 2)
-        if na(htfLowLine)
-            htfLowLine := line.new(htfLeft, confirmedHtfLow, bar_index + 5, confirmedHtfLow, xloc = xloc.bar_index, color = color.new(bullColor, 64), style = line.style_dashed, width = 1)
-            htfLowTag := label.new(bar_index + 5, confirmedHtfLow, "HTF L · " + htfTimeframe, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 45), textcolor = color.new(bullColor, 15), size = contextTextSize)
-        else
-            line.set_xy1(htfLowLine, htfLeft, confirmedHtfLow)
-            line.set_xy2(htfLowLine, bar_index + 5, confirmedHtfLow)
-            label.set_xy(htfLowTag, bar_index + 5, confirmedHtfLow)
-            label.set_text(htfLowTag, "HTF L · " + htfTimeframe)
-    else
-        if not na(htfLowLine)
-            line.delete(htfLowLine)
-            htfLowLine := na
-        if not na(htfLowTag)
-            label.delete(htfLowTag)
-            htfLowTag := na
 
 // ------- ASIAN HIGH/LOW -------
 // Session state is evaluated natively on <=5m, and inside a 5m security context
@@ -2400,11 +2358,11 @@ if showAsia and array.size(asiaHighLines) > 0
     line.set_x2(array.get(asiaHighLines, array.size(asiaHighLines) - 1), currentEnd)
     line.set_x2(array.get(asiaLowLines, array.size(asiaLowLines) - 1), currentEnd)
     if barstate.islast
-        f_regLabel(asiaHigh, liveAsiaOn ? "Prev Asia H" : "Asia H", asiaColor, 50, "Asian high " + f_px(asiaHigh) + " (last completed session)")
-        f_regLabel(asiaLow, liveAsiaOn ? "Prev Asia L" : "Asia L", asiaColor, 50, "Asian low " + f_px(asiaLow) + " (last completed session)")
+        f_regLabel(asiaHigh, liveAsiaOn ? "pAsia H" : "Asia H", asiaColor, 50, "Asian high " + f_px(asiaHigh) + " (last completed session)", 2, 3)
+        f_regLabel(asiaLow, liveAsiaOn ? "pAsia L" : "Asia L", asiaColor, 50, "Asian low " + f_px(asiaLow) + " (last completed session)", 2, 3)
 if barstate.islast and liveAsiaOn
-    f_regLabel(asiaLiveHigh, "Asia H · live", asiaColor, 52, "Asian high so far " + f_px(asiaLiveHigh) + " (session in progress)")
-    f_regLabel(asiaLiveLow, "Asia L · live", asiaColor, 52, "Asian low so far " + f_px(asiaLiveLow) + " (session in progress)")
+    f_regLabel(asiaLiveHigh, "Asia H", asiaColor, 52, "Asian high so far " + f_px(asiaLiveHigh) + " (session in progress)", 2, 3)
+    f_regLabel(asiaLiveLow, "Asia L", asiaColor, 52, "Asian low so far " + f_px(asiaLiveLow) + " (session in progress)", 2, 3)
 
 // ------- SESSION RANGE BOXES (ASIA, LONDON, NEW YORK) -------
 // One box per session from its first to its last bar, spanning the session's high and low. It grows
@@ -2452,8 +2410,10 @@ f_updateSessionBox(box[] store, bool inside, int startT, float hi, float lo, int
             box.set_bottom(lastBox, lo)
             box.set_right(lastBox, endT)
         else
-            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, math.max(30, sessionBoxTransparency - 45)), border_width = 1, border_style = line.style_dashed, bgcolor = color.new(tone, sessionBoxTransparency), text = name, text_color = color.new(tone, 15), text_size = size.small, text_halign = text.align_left, text_valign = text.align_top)
+            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, math.max(30, sessionBoxTransparency - 45)), border_width = 1, border_style = line.style_dashed, bgcolor = color.new(tone, sessionBoxTransparency), text = showSessionTitles ? name : "", text_color = color.new(tone, 20), text_size = tier3Size, text_halign = text.align_left, text_valign = text.align_bottom)
             array.push(store, newBox)
+            if array.size(store) > 2
+                box.set_text(array.get(store, array.size(store) - 3), "")
             while array.size(store) > sessionBoxHistory
                 box.delete(array.shift(store))
     0
@@ -2489,16 +2449,12 @@ var float tradeTarget = na
 var int tradeEntryBar = na
 var string tradeZoneName = ""
 var string tradeTargetName = ""
-var box[] tradeProfitBoxes = array.new_box()
-var box[] tradeRiskBoxes = array.new_box()
-var line[] tradeEntryLines = array.new_line()
-var label[] tradeResultLabels = array.new_label()
 var float[] tradeResults = array.new_float()
 var string[] tradeLog = array.new_string()
 // Trigger bars that opened nothing, by the first failing check: 0 not a POI, 1 wrong premium/discount side, 2 entry too far from the zone, 3 stop outside the ATR
 // limits, 4 stop over the pip cap, 5 no target room, 6 no zone touched.
 var int[] tradeRefusals = array.new_int(7, 0)
-float tradePipPrice = tradePipSizeInput > 0 ? tradePipSizeInput : (str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")) ? 0.1 : syminfo.mintick * 10.0
+float tradePipPrice = tradePipSizeInput > 0 ? tradePipSizeInput : isGold ? 0.1 : syminfo.mintick * 10.0
 var int[] tradeStats = array.new_int(6, 0)   // 0 opened, 1 target, 2 stop, 3 timeout, 4 skipped: no key-level target, 5 skipped: stop outside limits
 var float tradeEquityR = 0.0
 var float tradePeakR = 0.0
@@ -2594,57 +2550,6 @@ f_zoneUsable(int z) =>
 f_tradeResultText(float r) =>
     (r >= 0 ? "+" : "−") + str.tostring(math.abs(r), "0.0") + "R"
 
-// Planned RR box: the long/short position tool for the nearest qualified POI on the bias side,
-// drawn before any trigger so the box is always visible. Entry = the zone's near edge, stop beyond
-// the far edge, take-profit at the next key level (shown even when its R:R is below the trade
-// minimum). It disappears while a real trade is open and is redrawn on the last bar only.
-var box[] tradePreviewBoxes = array.new_box()
-var line[] tradePreviewLines = array.new_line()
-
-f_renderTradePreview() =>
-    while array.size(tradePreviewBoxes) > 0
-        box.delete(array.pop(tradePreviewBoxes))
-    while array.size(tradePreviewLines) > 0
-        line.delete(array.pop(tradePreviewLines))
-    if showTradePlan and showTradePreview and tradeDir == 0 and bias != 0 and not na(atr) and array.size(zones) > 0
-        bool isLong = bias == 1
-        float eqLevel = dealingMid
-        int pickZone = -1
-        float bestGap = 1.0e10
-        for z = 0 to array.size(zones) - 1
-            if f_zoneUsable(z) and array.get(zoneSides, z) == bias
-                float zTop = array.get(zoneTops, z)
-                float zBottom = array.get(zoneBottoms, z)
-                float zMid = (zTop + zBottom) / 2.0
-                float edge = isLong ? zTop : zBottom
-                float gap = math.abs(close - edge)
-                bool rightSide = isLong ? zMid <= close : zMid >= close
-                bool pdOk = not tradeRequirePD or na(eqLevel) or (isLong ? zMid <= eqLevel : zMid >= eqLevel)
-                if rightSide and pdOk and gap < bestGap and gap <= zoneDisplayDistanceATR * atr and f_scaleOk(edge) and f_poiPath(z, not array.get(zoneTouched, z)) != "Candidate"
-                    pickZone := z
-                    bestGap := gap
-        if pickZone >= 0
-            float pTop = array.get(zoneTops, pickZone)
-            float pBottom = array.get(zoneBottoms, pickZone)
-            float entryPrice = isLong ? pTop : pBottom
-            float stopPrice = isLong ? pBottom - tradeStopBufferATR * atr : pTop + tradeStopBufferATR * atr
-            float riskDistance = math.abs(entryPrice - stopPrice)
-            if riskDistance >= tradeMinStopATR * atr and riskDistance <= tradeMaxStopATR * atr and (tradeMaxStopPips <= 0 or riskDistance / tradePipPrice <= tradeMaxStopPips + 1.0e-9)
-                float targetPrice = f_keyTarget(isLong, entryPrice, riskDistance, false)
-                if not na(targetPrice)
-                    float rr = math.abs(targetPrice - entryPrice) / riskDistance
-                    // A plan below the minimum reward:risk is shown for context only: dimmed and labelled so it is never mistaken for a tradable one.
-                    bool belowMinimum = rr < tradeMinRR
-                    int leftBar = bar_index
-                    int rightBar = bar_index + 14
-                    box profitBox = box.new(left = leftBar, top = isLong ? targetPrice : entryPrice, right = rightBar, bottom = isLong ? entryPrice : targetPrice, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, belowMinimum ? 80 : 55), border_style = line.style_dashed, bgcolor = color.new(tradeProfitColor, belowMinimum ? 94 : 86), text = math.abs(targetPrice - entryPrice) >= math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 48.0) * 1.4 ? "plan " + str.tostring(rr, "0.0") + "R" + (belowMinimum ? " · below " + str.tostring(tradeMinRR, "0.0") : "") : "", text_color = color.new(color.white, belowMinimum ? 45 : 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
-                    box riskBox = box.new(left = leftBar, top = isLong ? entryPrice : stopPrice, right = rightBar, bottom = isLong ? stopPrice : entryPrice, xloc = xloc.bar_index, border_color = color.new(tradeRiskColor, belowMinimum ? 80 : 55), border_style = line.style_dashed, bgcolor = color.new(tradeRiskColor, belowMinimum ? 94 : 86))
-                    line entryLine = line.new(leftBar, entryPrice, rightBar, entryPrice, xloc = xloc.bar_index, color = color.new(color.white, belowMinimum ? 70 : 45), style = line.style_dashed, width = 1)
-                    array.push(tradePreviewBoxes, profitBox)
-                    array.push(tradePreviewBoxes, riskBox)
-                    array.push(tradePreviewLines, entryLine)
-    0
-
 if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
     bool closedNow = false
     // 1) Follow the open trade.
@@ -2665,12 +2570,7 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
         else if timedOut
             outcome := "TIME"
             exitPrice := close
-        int lastBox = array.size(tradeProfitBoxes) - 1
-        if outcome == ""
-            box.set_right(array.get(tradeProfitBoxes, lastBox), bar_index)
-            box.set_right(array.get(tradeRiskBoxes, lastBox), bar_index)
-            line.set_x2(array.get(tradeEntryLines, lastBox), bar_index)
-        else
+        if outcome != ""
             float resultR = (isLongOpen ? exitPrice - tradeEntry : tradeEntry - exitPrice) / riskOpen - tradeCost / riskOpen
             closedNow := true
             tradeTargetHit := outcome == "TP"
@@ -2685,17 +2585,6 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
             array.push(tradeLog, f_time(bar_index - tradeEntryBar <= 790 ? time[bar_index - tradeEntryBar] : time) + " " + (isLongOpen ? "LONG " : "SHORT ") + f_px(tradeEntry) + " → " + outcome + " " + f_tradeResultText(resultR) + " · " + tradeZoneName + " → " + tradeTargetName)
             if array.size(tradeLog) > 12
                 array.shift(tradeLog)
-            box finishedProfit = array.get(tradeProfitBoxes, lastBox)
-            box finishedRisk = array.get(tradeRiskBoxes, lastBox)
-            box.set_right(finishedProfit, bar_index)
-            box.set_right(finishedRisk, bar_index)
-            box.set_bgcolor(finishedProfit, color.new(tradeProfitColor, 90))
-            box.set_bgcolor(finishedRisk, color.new(tradeRiskColor, 90))
-            line.set_x2(array.get(tradeEntryLines, lastBox), bar_index)
-            float labelPrice = outcome == "TIME" ? exitPrice : outcome == "TP" ? tradeTarget : tradeStop
-            bool labelAbove = (outcome == "TP" and isLongOpen) or (outcome == "SL" and not isLongOpen)
-            label resultLabel = label.new(bar_index, labelPrice, f_tradeResultText(resultR) + (outcome == "TIME" ? " time" : ""), xloc = xloc.bar_index, yloc = yloc.price, style = outcome == "TIME" ? label.style_label_center : labelAbove ? label.style_label_down : label.style_label_up, color = color.new(#090D18, 15), textcolor = resultR > 0 ? tradeProfitColor : tradeRiskColor, size = contextTextSize)
-            array.set(tradeResultLabels, lastBox, resultLabel)
             tradeDir := 0
     // 2) Look for a new setup.
     if tradeDir == 0 and not closedNow and bias != 0 and array.size(zones) > 0
@@ -2778,33 +2667,6 @@ if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
                 tradeLongOpened := isLong
                 tradeShortOpened := not isLong
                 f_inc(tradeStats, 0)
-                string planText = str.tostring(bestRR, "0.0") + "R"
-                box profitBox = box.new(left = bar_index, top = isLong ? tradeTarget : tradeEntry, right = bar_index + 1, bottom = isLong ? tradeEntry : tradeTarget, xloc = xloc.bar_index, border_color = color.new(tradeProfitColor, 100), bgcolor = color.new(tradeProfitColor, 80), text = planText, text_color = color.new(color.white, 15), text_size = size.small, text_halign = text.align_left, text_valign = isLong ? text.align_top : text.align_bottom)
-                box riskBox = box.new(left = bar_index, top = isLong ? tradeEntry : tradeStop, right = bar_index + 1, bottom = isLong ? tradeStop : tradeEntry, xloc = xloc.bar_index, border_color = color.new(tradeRiskColor, 100), bgcolor = color.new(tradeRiskColor, 80))
-                line entryLine = line.new(bar_index, tradeEntry, bar_index + 1, tradeEntry, xloc = xloc.bar_index, color = color.new(color.white, 35), style = line.style_solid, width = 1)
-                label emptyResult = na
-                array.push(tradeProfitBoxes, profitBox)
-                array.push(tradeRiskBoxes, riskBox)
-                array.push(tradeEntryLines, entryLine)
-                array.push(tradeResultLabels, emptyResult)
-                // Only the most recent trades stay on the chart; statistics keep counting all of them.
-                while array.size(tradeProfitBoxes) > tradeHistory
-                    box.delete(array.shift(tradeProfitBoxes))
-                    box.delete(array.shift(tradeRiskBoxes))
-                    line.delete(array.shift(tradeEntryLines))
-                    label oldResult = array.shift(tradeResultLabels)
-                    if not na(oldResult)
-                        label.delete(oldResult)
-
-if barstate.islast
-    f_renderTradePreview()
-
-if barstate.islast and tradeDir != 0
-    string tradeSide = tradeDir == 1 ? "LONG" : "SHORT"
-    f_regLabel(tradeTarget, "TP", tradeProfitColor, 95, tradeSide + " target " + f_px(tradeTarget) + " · " + tradeTargetName)
-    f_regLabel(tradeEntry, "ENTRY", color.new(color.white, 10), 90, tradeSide + " entry " + f_px(tradeEntry) + " · " + tradeZoneName)
-    f_regLabel(tradeStop, "SL", tradeRiskColor, 95, tradeSide + " stop " + f_px(tradeStop))
-
 // ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------
 // A confirmed pool needs an external swing or two independent tests, so in a clean trend
 // the obvious recent highs/lows are not pools. These two lines mark only the nearest
@@ -2847,11 +2709,11 @@ if barstate.islast
         float bslPrice = array.get(ringPrices, pickBsl)
         int bslLeft = math.max(array.get(ringBars, pickBsl), bar_index - maxDrawBars)
         if na(nearIntBslLine)
-            nearIntBslLine := line.new(bslLeft, bslPrice, bar_index + 5, bslPrice, xloc = xloc.bar_index, color = color.new(liquidityColor, 55), style = line.style_dashed, width = 1)
+            nearIntBslLine := line.new(bslLeft, bslPrice, bar_index + gutter, bslPrice, xloc = xloc.bar_index, color = color.new(liquidityColor, 55), style = line.style_dashed, width = 1)
         else
             line.set_xy1(nearIntBslLine, bslLeft, bslPrice)
-            line.set_xy2(nearIntBslLine, bar_index + 5, bslPrice)
-        f_regLabel(bslPrice, "iBSL", liquidityColor, 40, "iBSL " + f_px(bslPrice) + " · nearest unswept internal swing high above price (" + str.tostring(gapBsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.")
+            line.set_xy2(nearIntBslLine, bar_index + gutter, bslPrice)
+        f_regLabel(bslPrice, "iBSL", liquidityColor, 40, "iBSL " + f_px(bslPrice) + " · nearest unswept internal swing high above price (" + str.tostring(gapBsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.", 1, 3)
     else if not na(nearIntBslLine)
         line.delete(nearIntBslLine)
         nearIntBslLine := na
@@ -2859,11 +2721,11 @@ if barstate.islast
         float sslPrice = array.get(ringPrices, pickSsl)
         int sslLeft = math.max(array.get(ringBars, pickSsl), bar_index - maxDrawBars)
         if na(nearIntSslLine)
-            nearIntSslLine := line.new(sslLeft, sslPrice, bar_index + 5, sslPrice, xloc = xloc.bar_index, color = color.new(liquidityColor, 55), style = line.style_dashed, width = 1)
+            nearIntSslLine := line.new(sslLeft, sslPrice, bar_index + gutter, sslPrice, xloc = xloc.bar_index, color = color.new(liquidityColor, 55), style = line.style_dashed, width = 1)
         else
             line.set_xy1(nearIntSslLine, sslLeft, sslPrice)
-            line.set_xy2(nearIntSslLine, bar_index + 5, sslPrice)
-        f_regLabel(sslPrice, "iSSL", liquidityColor, 40, "iSSL " + f_px(sslPrice) + " · nearest unswept internal swing low below price (" + str.tostring(gapSsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.")
+            line.set_xy2(nearIntSslLine, bar_index + gutter, sslPrice)
+        f_regLabel(sslPrice, "iSSL", liquidityColor, 40, "iSSL " + f_px(sslPrice) + " · nearest unswept internal swing low below price (" + str.tostring(gapSsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.", 1, 3)
     else if not na(nearIntSslLine)
         line.delete(nearIntSslLine)
         nearIntSslLine := na
@@ -2888,34 +2750,32 @@ if barstate.islast
     bool premiumShown = pdValid and pdTop > premiumLow
     bool discountShown = pdValid and discountHigh > pdBottom
     bool eqShown = pdValid and pdMid >= pdBottom and pdMid <= pdTop
-    int gaugeLeft = bar_index - 4
+    int gaugeLeft = bar_index + gutter + 1   // v2.16: the gauge sits beyond the zone boxes (which end at the gutter), so it never overprints a caption
     if premiumShown
         if na(pdPremiumBox)
-            pdPremiumBox := box.new(left = gaugeLeft, top = pdTop, right = bar_index + 5, bottom = premiumLow, xloc = xloc.bar_index, border_color = color.new(supplyColor, 100), bgcolor = color.new(supplyColor, 90))
+            pdPremiumBox := box.new(left = gaugeLeft, top = pdTop, right = bar_index + gutter + 3, bottom = premiumLow, xloc = xloc.bar_index, border_color = color.new(supplyColor, 100), bgcolor = color.new(supplyColor, 90))
         else
             box.set_lefttop(pdPremiumBox, gaugeLeft, pdTop)
-            box.set_rightbottom(pdPremiumBox, bar_index + 5, premiumLow)
-        f_regLabel(premiumLow + (pdTop - premiumLow) * 0.8, "PREMIUM", supplyColor, 15, "Upper half of the dealing range (confirmed swing to the live extreme of the leg): supply side")
+            box.set_rightbottom(pdPremiumBox, bar_index + gutter + 3, premiumLow)
     else if not na(pdPremiumBox)
         box.delete(pdPremiumBox)
         pdPremiumBox := na
     if discountShown
         if na(pdDiscountBox)
-            pdDiscountBox := box.new(left = gaugeLeft, top = discountHigh, right = bar_index + 5, bottom = pdBottom, xloc = xloc.bar_index, border_color = color.new(demandColor, 100), bgcolor = color.new(demandColor, 90))
+            pdDiscountBox := box.new(left = gaugeLeft, top = discountHigh, right = bar_index + gutter + 3, bottom = pdBottom, xloc = xloc.bar_index, border_color = color.new(demandColor, 100), bgcolor = color.new(demandColor, 90))
         else
             box.set_lefttop(pdDiscountBox, gaugeLeft, discountHigh)
-            box.set_rightbottom(pdDiscountBox, bar_index + 5, pdBottom)
-        f_regLabel(pdBottom + (discountHigh - pdBottom) * 0.2, "DISCOUNT", demandColor, 15, "Lower half of the dealing range (confirmed swing to the live extreme of the leg): demand side")
+            box.set_rightbottom(pdDiscountBox, bar_index + gutter + 3, pdBottom)
     else if not na(pdDiscountBox)
         box.delete(pdDiscountBox)
         pdDiscountBox := na
     if eqShown
         if na(pdEqLine)
-            pdEqLine := line.new(pdLeft, pdMid, bar_index + 5, pdMid, xloc = xloc.bar_index, color = color.new(liquidityColor, 62), style = line.style_dashed, width = 1)
+            pdEqLine := line.new(pdLeft, pdMid, bar_index + gutter, pdMid, xloc = xloc.bar_index, color = color.new(liquidityColor, 62), style = line.style_dashed, width = 1)
         else
             line.set_xy1(pdEqLine, pdLeft, pdMid)
-            line.set_xy2(pdEqLine, bar_index + 5, pdMid)
-        f_regLabel(pdMid, "EQ " + f_px(pdMid), liquidityColor, 35, "Equilibrium: 50% of the dealing range")
+            line.set_xy2(pdEqLine, bar_index + gutter, pdMid)
+        f_regLabel(pdMid, "EQ " + f_px(pdMid), liquidityColor, 35, "Equilibrium: 50% of the dealing range", 0, 1)
     else if not na(pdEqLine)
         line.delete(pdEqLine)
         pdEqLine := na
@@ -2923,51 +2783,198 @@ if barstate.islast
 // ------- RIGHT-EDGE LABEL COLUMN (ONE LABEL PER PRICE CLUSTER) -------
 var label[] colLabels = array.new_label()
 
-// Merge the registered labels of one cluster into a single label in column slot `slot`.
+// Merge the registered labels of one cluster into a single label in column slot `slot`. The best member (lowest tier, then priority) sets the colour, size and
+// weight and only members of its own category add words; every other member goes to the tooltip and shows as a `+n`.
 f_emitCluster(int[] members, int slot) =>
     int m = array.size(members)
     float[] prio = array.new_float()
     for q = 0 to m - 1
-        array.push(prio, array.get(rlPriority, array.get(members, q)) * 1.0)
+        array.push(prio, array.get(rlPriority, array.get(members, q)) - array.get(rlTier, array.get(members, q)) * 1000.0)
     int[] ranking = array.sort_indices(prio, order.descending)
     int top = array.get(members, array.get(ranking, 0))
-    int shown = math.min(m, 3)
+    int topCat = array.get(rlCat, top)
+    int topTier = array.get(rlTier, top)
+    int shown = 0
     string caption = ""
     string tip = ""
     for q = 0 to m - 1
         int idx = array.get(members, array.get(ranking, q))
-        if q < shown
-            caption += (q > 0 ? " · " : "") + array.get(rlText, idx)
+        if array.get(rlCat, idx) == topCat and shown < 3
+            caption += (shown > 0 ? " · " : "") + array.get(rlText, idx)
+            shown += 1
         tip += (q > 0 ? "\n" : "") + array.get(rlTip, idx)
     if m > shown
         caption += " +" + str.tostring(m - shown)
     float y = array.get(rlY, top)
-    color tone = array.get(rlTone, top)
+    color tone = topTier == 1 ? array.get(rlTone, top) : color.new(array.get(rlTone, top), topTier == 2 ? 25 : 20)
+    string labelSize = topTier == 1 ? tier1Size : topTier == 2 ? tier2Size : tier3Size
     if slot >= array.size(colLabels)
-        label made = label.new(bar_index + 7, y, caption, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 35), textcolor = tone, size = contextTextSize, tooltip = tip)
+        label made = label.new(bar_index + gutter + 4, y, caption, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#090D18, 60), textcolor = tone, size = labelSize, tooltip = tip)
         array.push(colLabels, made)
     else
         label existing = array.get(colLabels, slot)
-        label.set_xy(existing, bar_index + 7, y)
+        label.set_xy(existing, bar_index + gutter + 4, y)
         label.set_text(existing, caption)
         label.set_textcolor(existing, tone)
+        label.set_size(existing, labelSize)
         label.set_tooltip(existing, tip)
     slot + 1
+
+// ------- KEY LEVELS (LegacyFrame.SwingLevels of the key_level strategy, dimmed) -------
+// Computed on the last bar from the last keyWindow CLOSED bars: the window's own ATR series (mean of up to 14 true ranges), fractal candidates (2 bars each side) through the
+// zigzag filter (a move of at least the ATR at the swing), clusters within 0.5 x the median ATR of the window (joined while within tol of the lowest member, which implies the
+// span <= 2 tol test), round levels (2+ swings within max(tol, 0.25 ATR at the swing)), levels within tol merged. Levels are [price, touches, round] strides, swings
+// [window index, price, +1 high / -1 low] strides.
+f_keyAdd(float[] lv, float[] pr, float price, int touches, float kind) =>
+    array.push(pr, price)
+    array.push(lv, price)
+    array.push(lv, touches * 1.0)
+    array.push(lv, kind)
+    0
+
+f_zig(float[] sw, float[] av, int c, float p, float k) =>
+    int n = array.size(sw)
+    if n > 0 and array.get(sw, n - 1) == k
+        if (k > 0 ? p > array.get(sw, n - 2) : p < array.get(sw, n - 2))
+            array.set(sw, n - 3, c * 1.0)
+            array.set(sw, n - 2, p)
+    else if n == 0 or math.abs(p - array.get(sw, n - 2)) >= array.get(av, c)
+        array.push(sw, c * 1.0)
+        array.push(sw, p)
+        array.push(sw, k)
+    0
+
+f_keyLevels() =>
+    while array.size(keyLines) > 0
+        line.delete(array.pop(keyLines))
+    while array.size(keyBoxes) > 0
+        box.delete(array.pop(keyBoxes))
+    int lastOff = barstate.isconfirmed ? 0 : 1
+    int w = math.min(keyWindow, bar_index + 1 - lastOff)
+    float[] ranges = array.new_float()
+    float[] av = array.new_float()
+    float[] sw = array.new_float()
+    if showKeyLevels and w >= 5
+        for i = 0 to w - 1
+            int o = lastOff + w - 1 - i
+            array.push(ranges, i == 0 ? high[o] - low[o] : math.max(high[o] - low[o], math.max(math.abs(high[o] - close[o + 1]), math.abs(low[o] - close[o + 1]))))
+            int lo = math.max(0, i - 13)
+            float s14 = 0.0
+            for j = lo to i
+                s14 += array.get(ranges, j)
+            array.push(av, s14 / (i - lo + 1))
+            if i >= 4
+                if high[o + 2] >= high[o + 1] and high[o + 2] >= high[o] and high[o + 2] > high[o + 3] and high[o + 2] > high[o + 4]
+                    f_zig(sw, av, i - 2, high[o + 2], 1.0)
+                if low[o + 2] <= low[o + 1] and low[o + 2] <= low[o] and low[o + 2] < low[o + 3] and low[o + 2] < low[o + 4]
+                    f_zig(sw, av, i - 2, low[o + 2], -1.0)
+    int ns = int(array.size(sw) / 3)
+    if ns > 0
+        float tol = array.median(av) * 0.5
+        float[] px = array.new_float()
+        for k = 0 to ns - 1
+            array.push(px, array.get(sw, k * 3 + 1))
+        float[] lv = array.new_float()
+        float[] pr = array.new_float()
+        int[] ord = array.sort_indices(px, order.ascending)
+        int q = 0
+        while q < ns
+            float start = array.get(px, array.get(ord, q))
+            float sum = 0.0
+            int cnt = 0
+            while q < ns and array.get(px, array.get(ord, q)) - start <= tol
+                sum += array.get(px, array.get(ord, q))
+                cnt += 1
+                q += 1
+            if cnt >= 2
+                f_keyAdd(lv, pr, sum / cnt, cnt, 0.0)
+        if keyStep > 0
+            float lowStep = math.floor(array.get(px, array.get(ord, 0)) / keyStep) * keyStep
+            for s = 0 to int((math.ceil(array.get(px, array.get(ord, ns - 1)) / keyStep) * keyStep - lowStep) / keyStep)
+                float rp = lowStep + s * keyStep
+                int rt = 0
+                for k = 0 to ns - 1
+                    rt += math.abs(array.get(px, k) - rp) <= math.max(tol, array.get(av, int(array.get(sw, k * 3))) * 0.25) ? 1 : 0
+                if rt >= 2
+                    f_keyAdd(lv, pr, rp, rt, 1.0)
+        float[] fin = array.new_float()
+        float[] gap = array.new_float()
+        float lastClose = close[lastOff]
+        if array.size(pr) > 0
+            int[] ord2 = array.sort_indices(pr, order.ascending)
+            for k = 0 to array.size(pr) - 1
+                int i = array.get(ord2, k) * 3
+                int d = array.size(fin) - 3
+                if d >= 0 and math.abs(array.get(fin, d) - array.get(lv, i)) <= tol
+                    if array.get(lv, i + 1) > array.get(fin, d + 1)
+                        array.set(fin, d + 2, array.get(lv, i + 2))
+                    array.set(fin, d, (array.get(fin, d) + array.get(lv, i)) / 2.0)
+                    array.set(fin, d + 1, math.max(array.get(fin, d + 1), array.get(lv, i + 1)))
+                else
+                    for z = 0 to 2
+                        array.push(fin, array.get(lv, i + z))
+            for k = 0 to int(array.size(fin) / 3) - 1
+                array.push(gap, math.abs(array.get(fin, k * 3) - lastClose))
+        // nearest first, at most keyPerSide per side inside the candle-scale window; no level is hidden for being broken
+        int up = 0
+        int down = 0
+        float clusterRange = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 36.0)
+        if array.size(gap) > 0
+            int[] near = array.sort_indices(gap, order.ascending)
+            for k = 0 to array.size(gap) - 1
+                int j = array.get(near, k)
+                float p = array.get(fin, j * 3)
+                float touches = array.get(fin, j * 3 + 1)
+                bool isRound = array.get(fin, j * 3 + 2) > 0
+                bool above = p > lastClose
+                if f_scaleOk(p) and (above ? up : down) < keyPerSide
+                    up += above ? 1 : 0
+                    down += above ? 0 : 1
+                    int run = 0
+                    while run < w and (above ? close[lastOff + run] < p - tol : close[lastOff + run] > p + tol)
+                        run += 1
+                    int nh = 0
+                    int nl = 0
+                    int first = w
+                    for m = 0 to ns - 1
+                        if math.abs(array.get(px, m) - p) <= tol
+                            nh += array.get(sw, m * 3 + 2) > 0 ? 1 : 0
+                            nl += array.get(sw, m * 3 + 2) > 0 ? 0 : 1
+                            first := math.min(first, int(array.get(sw, m * 3)))
+                    bool inPlay = run < 2
+                    bool flipped = (nh > nl and not above) or (nl > nh and above)
+                    string tip = "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(touches, "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · flipped (formed as " + (above ? "support" : "resistance") + ")" : "") + (inPlay ? " · key_level can trade this level now" : "") + " · key_level definition (SwingLevels), window " + str.tostring(w)
+                    int leftBar = math.max(bar_index - lastOff - w + 1 + (first < w ? first : 0), bar_index - maxDrawBars)
+                    array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, inPlay ? 45 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
+                    if showKeyBand
+                        array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
+                    // only the caption yields: a stronger right-column label within a label height carries the note, else the level gets its own caption
+                    bool carried = false
+                    if array.size(rlY) > 0
+                        for r = 0 to array.size(rlY) - 1
+                            if math.abs(array.get(rlY, r) - p) <= clusterRange and str.contains("|80|35|60|62|45|", "|" + str.tostring(array.get(rlPriority, r)) + "|")
+                                carried := true
+                                array.set(rlText, r, str.replace_all(array.get(rlText, r), " ·KL", "") + " ·KL")
+                                array.set(rlTip, r, array.get(rlTip, r) + "\n" + tip)
+                    if not carried
+                        f_regLabel(p, (isRound ? "KL " + str.tostring(math.round(p / keyStep) * keyStep, "#.##") : "KL×" + str.tostring(touches, "0")) + (inPlay ? " ●" : ""), keyColor, 30, tip, 4, inPlay ? 2 : 3)
+    0
 
 if barstate.islast
     // Levels that are not owned by another block are registered here.
     if showMajorLevels and not na(activeProtected)
-        f_regLabel(activeProtected, "PROTECTED", protectedTone, 80, "Protected level " + f_px(activeProtected) + ": the external level whose break flips the bias")
+        f_regLabel(activeProtected, "PROT", protectedTone, 80, "Protected level " + f_px(activeProtected) + ": the external level whose break flips the bias", 0, 1)
     if showMajorLevels and developingDirection != 0
         float devPrice = developingDirection == 1 ? developingHigh : developingLow
-        f_regLabel(devPrice, developingDirection == 1 ? "DEV HIGH" : "DEV LOW", developingDirection == 1 ? bullColor : bearColor, 70, "Live extreme of the current directional leg " + f_px(devPrice) + "; not yet a confirmed major swing")
+        f_regLabel(devPrice, developingDirection == 1 ? "DEV▲" : "DEV▼", developingDirection == 1 ? bullColor : bearColor, 70, "Live extreme of the current directional leg " + f_px(devPrice) + "; not yet a confirmed major swing", 0, 2)
+    f_keyLevels()
     int slotsUsed = 0
     int regCount = array.size(rlY)
     if regCount > 0
         int[] byPrice = array.sort_indices(rlY, order.descending)
         // Labels closer than this merge: at least the annotation spacing, and about one label
-        // height (~1/48 of the candle range the chart already shows) so the merge rule follows the zoom.
-        float clusterGap = math.max(annotationATRSpacing * nz(atr, syminfo.mintick), (scaleBandHigh - scaleBandLow) / 48.0)
+        // height (~1/36 of the candle range the chart already shows) so the merge rule follows the zoom.
+        float clusterGap = math.max(annotationATRSpacing * nz(atr, syminfo.mintick), (scaleBandHigh - scaleBandLow) / 36.0)
         int[] members = array.new_int()
         float previousY = na
         for r = 0 to regCount - 1
@@ -3038,11 +3045,7 @@ f_renderPanel() =>
         string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
         string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + f_cnt(sdStats, 0) + " · duplicate " + f_cnt(sdStats, 5) + " · retired by cap " + f_cnt(sdStats, 6) + "\nRejected: weak departure " + f_cnt(sdStats, 1) + " · no impulse " + f_cnt(sdStats, 2) + " · closed back " + f_cnt(sdStats, 3) + " · pattern filter " + f_cnt(sdStats, 4) + "\n" + sdLastText
         string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + f_px(nearestBslPrice) + (nearestBslShown ? "" : "*")) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + f_px(nearestSslPrice) + (nearestSslShown ? "" : "*"))
-        string auditText = "POI " + str.tostring(qualifiedPoiCount) + " · far " + str.tostring(hiddenDistanceCount) + " · ranked " + str.tostring(hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount) + " · filter O/F/S " + f_cnt(obStats, 1) + "/" + str.tostring(rejectedFVGCount) + "/" + f_cnt(sdCounters, 0)
-        string auditShort = "POI " + str.tostring(qualifiedPoiCount) + " · hidden " + str.tostring(hiddenDistanceCount + hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount)
         bool compactPanel = dashboardDensity == "Compact"
-        bool expandedPanel = dashboardDensity == "Expanded"
-        string htfBiasSuffix = showHTFContext ? " · HTF " + confirmedHtfText : ""
         bool nearestBullIsActionable = actionableBullPoi and math.abs(nearestBullPoi - nearestActionableBullPoi) <= syminfo.mintick
         bool nearestBearIsActionable = actionableBearPoi and math.abs(nearestBearPoi - nearestActionableBearPoi) <= syminfo.mintick
         string bullPoiDisplay = na(nearestBullPoi) ? "—" : compactPanel ? f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D") : nearestBullPoiText
@@ -3071,18 +3074,18 @@ f_renderPanel() =>
                 tradeWins += array.get(tradeResults, t) > 0 ? 1 : 0
         float tradeProfitFactor = tradeGrossLossR > 0 ? tradeGrossWinR / tradeGrossLossR : na
         float openRR = tradeDir != 0 ? math.abs(tradeTarget - tradeEntry) / math.max(math.abs(tradeEntry - tradeStop), syminfo.mintick) : na
-        string tradeSummary = tradeDir != 0 ? (tradeDir == 1 ? "LONG" : "SHORT") + " open · " + str.tostring(openRR, "0.0") + "R → " + tradeTargetName : not showTradePlan ? "Off" : closedTrades == 0 ? "No trades yet" : str.tostring(closedTrades) + " · " + str.tostring(tradeWins * 100.0 / closedTrades, "0") + "% · " + f_tradeResultText(tradeEquityR)
+        string tradeSummary = tradeDir != 0 ? (tradeDir == 1 ? "LONG" : "SHORT") + " open · " + str.tostring(openRR, "0.0") + "R → " + tradeTargetName : not showTradePlan ? "Off" : tradeMaxStopPips > 0 and tradeMaxStopPips * tradePipPrice < (tradeMinStopATR + tradeStopBufferATR) * atr ? "Plan off: " + str.tostring(tradeMaxStopPips, "0") + "-pip cap < min stop on this frame (use M5/M15)" : closedTrades == 0 ? "No trades yet" : str.tostring(closedTrades) + " · " + str.tostring(tradeWins * 100.0 / closedTrades, "0") + "% · " + f_tradeResultText(tradeEquityR)
         string tradeTip = "Paper results of the trade plan on closed bars of the loaded history. No orders are sent; this is not a performance claim.\n" + "Closed " + str.tostring(closedTrades) + " · target " + f_cnt(tradeStats, 1) + " · stop " + f_cnt(tradeStats, 2) + " · timeout " + f_cnt(tradeStats, 3) + "\n" + "Total " + f_tradeResultText(tradeEquityR) + " · profit factor " + (na(tradeProfitFactor) ? "n/a" : str.tostring(tradeProfitFactor, "0.00")) + " · max drawdown " + str.tostring(tradeMaxDrawdownR, "0.0") + "R\n" + "Skipped: no key-level target " + f_cnt(tradeStats, 4) + " · stop outside limits " + f_cnt(tradeStats, 5)
         // Refusal histogram: every trigger bar that opened nothing, counted once under the first check that failed.
         tradeTip += "\nTrigger bars that opened nothing: not a POI " + f_cnt(tradeRefusals, 0) + " · wrong premium/discount side " + f_cnt(tradeRefusals, 1) + " · entry too far " + f_cnt(tradeRefusals, 2) + " · stop outside limits " + f_cnt(tradeRefusals, 3) + " · stop over pip cap " + f_cnt(tradeRefusals, 4) + " · no target room " + f_cnt(tradeRefusals, 5) + " · no zone touched " + f_cnt(tradeRefusals, 6)
         if array.size(tradeLog) > 0
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.13", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.16.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         if compactPanel
             f_key(2, "Bias")
-            f_val(2, biasText + htfBiasSuffix, valueColor, "Directional leg: " + legText)
+            f_val(2, biasText, valueColor, "Directional leg: " + legText)
             f_key(3, "Phase")
             f_val(3, phaseText, valueColor, "Directional leg: " + legText)
             f_key(4, "Range")
@@ -3106,7 +3109,7 @@ f_renderPanel() =>
         else
             f_head(1, "MARKET STATE")
             f_key(2, "External Bias")
-            f_val(2, biasText + htfBiasSuffix, valueColor, "")
+            f_val(2, biasText, valueColor, "")
             f_key(3, "Market Phase")
             f_val(3, phaseText, valueColor, "")
             f_key(4, "Directional Leg")
@@ -3130,9 +3133,6 @@ f_renderPanel() =>
             color internalTone = str.startswith(lastInternalBreak, "Bull") ? bullColor : str.startswith(lastInternalBreak, "Bear") ? bearColor : color.silver
             f_key(11, "Last Internal Break")
             f_val(11, lastInternalBreak + internalAge, internalTone, na(lastInternalBreakTime) ? "No internal break yet" : "Internal break at " + f_time(lastInternalBreakTime) + " (chart time zone). Internal structure never changes the external bias.")
-            if expandedPanel
-                f_key(25, "Invalidated Level")
-                f_val(25, invalidatedText, color.new(color.silver, 18), "")
             f_head(12, "PRICE ACTION")
             f_key(13, "Nearest Bullish POI")
             f_val(13, bullPoiDisplay, bullColor, nearestBullPoiText)
@@ -3151,9 +3151,6 @@ f_renderPanel() =>
             f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)
             f_key(24, "Supply / Demand")
             f_val(24, sdSummary, color.white, sdTooltip)
-            if expandedPanel
-                f_key(26, "Zone Audit")
-                f_val(26, auditShort, color.new(color.white, 12), auditText)
     0
 
 if barstate.islast

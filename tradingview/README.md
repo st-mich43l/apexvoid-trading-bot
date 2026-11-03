@@ -16,8 +16,8 @@ supply/demand, liquidity pools and session levels, then summarises them in a sma
 "Market Intelligence" panel. Every structural event and every zone state change
 needs a **closed** chart bar, so nothing repaints once a bar has closed. A zone,
 pool or sweep is an analytical reference, not an entry signal. Since v2.8 the
-indicator can also draw a rule-based **trade plan** as long/short position boxes (last 5
-trades) with paper-tracked results; it sends no orders and the rules have not shown an edge
+indicator also tracks a rule-based **trade plan** with paper results in the panel (nothing
+is drawn on the chart: no position boxes, entry lines, R labels or TP / ENTRY / SL tags); it sends no orders and the rules have not shown an edge
 
 ### Install
 
@@ -25,9 +25,22 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
    add it to a chart.
 2. Suggested start: XAUUSD on M5 or M15, default settings (`Balanced — Recommended`
    profile, `Compact` panel). Tune per symbol afterwards.
-3. TradingView is the only authoritative compiler. After any edit, compile there and
+3. Set the chart's right margin to at least `Annotation gutter` + 15 bars (default 27): Chart settings → Appearance (older versions: Canvas) → Margins → Right (bars). The gutter is where captions and the label column live; without the margin TradingView clips them. The menu names are from memory of the TradingView UI and were not checked in this repository.
+4. TradingView is the only authoritative compiler. After any edit, compile there and
    check on a long history that object limits (250 boxes, 350 lines, 500 labels) are
    not hit.
+
+**Upgrading from an earlier version.** TradingView keeps the old script's settings on a
+chart that already holds the indicator, including its price-scale pin, so a source change
+does not reach it. Up to v2.14 the script declared `scale = scale.none`; a chart that still
+carries that pin draws zones, lines and labels on their own hidden scale and they drift off
+the candles when the price axis is dragged or zoomed.
+
+1. Remove the indicator from the chart and add it again. Alternatively, on the indicator
+   open ⋯ → Pin to scale → Pin to right scale.
+2. With auto-scale on, right-click the price axis → **Scale price chart only**. Auto-scale
+   then fits the candles, so zones, pools and session boxes that lie outside the visible
+   candles cannot squash them; drawings stay at their true prices.
 
 ### What is drawn
 
@@ -35,24 +48,24 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
 | --- | --- | --- |
 | BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. The line ends on the candle that first closed beyond the swing, the caption sits next to the break, and one candle that closes beyond several swings is drawn as one BOS (the most recent swing). A swing is confirmed late (pivot lag plus a displaced leg), so the BOS alert and the bias change can arrive a few bars after that candle; v2.6 draws the line on the real break candle (before v2.6 it ended on the later confirmation bar, up to 38 bars late on XAUUSD M15). |
 | `MAJOR HIGH` / `MAJOR LOW` | tag plus a line extending from the swing | The latest confirmed external swing. Retired (dotted, faded) once broken. |
-| `DEV HIGH` / `DEV LOW` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
-| `PROTECTED` | dashed line | The external level whose break would flip bias. Since v2.13 it **trails**: each internal break in the bias direction moves it toward price (never away), and a close beyond it is the CHoCH. |
+| `DEV▲` / `DEV▼` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
+| `PROT` | dashed line | The external level whose break would flip bias. Since v2.13 it **trails**: each internal break in the bias direction moves it toward price (never away), and a close beyond it is the CHoCH. |
 | `OB` / `iOB` | box with thin border, midpoint dotted line, right-aligned label | Swing / internal order block. Dashed border and `· T` when Tested. |
 | FVG | blue (bullish) / orange (bearish) box | Three-candle fair value gap. |
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
-| `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
-| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
+| `◆ OB+FVG`, `◆ D+OB`, `◆ S+FVG`, `◆ D·RBR` … | thicker border | A zone that passed a named qualification path (below). `◆` plus the border mark a POI; the colour carries the side, so the caption is only the kind: `OB`, `iOB`, `FVG`, `D` (demand), `S` (supply), base patterns `D·RBR` / `S·RBD`, composites joined with `+` (supply/demand, then OB, then FVG). `·T` = tested. Zones of one side that overlap or sit closer than a label height share **one** caption on the best member (`◆ OB+FVG ×3` = three boxes); hover for every member. |
+| `EQ` and the premium / discount gauge | a slim rose / green gauge at the very right edge, just beyond the zone boxes (no text; the panel `Range` row says Premium / Discount) and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
 | `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
-| `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms. Since v2.13 Asia is the engine's session: 07:00 Tokyo (22:00 UTC) until London open, so the range is the one `asia_range` trades. When the session ends it becomes the completed range below. |
+| `Asia H` / `Asia L` (live) | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms. Since v2.13 Asia is the engine's session: 07:00 Tokyo (22:00 UTC) until London open, so the range is the one `asia_range` trades. When the session ends it becomes the completed range below. |
+| `KL×3`, `R 3950` (key levels) | faint dotted line (dashed for a round level), neutral grey, fainter with fewer touches | What the engine's `key_level` strategy reads as a level (see Key levels below). Behind everything else; the caption is one muted label in the right column. |
 | `Asia` / `London` / `New York` boxes | faint fill with a clearer dashed outline and title per session, so the session reads at a glance without tinting the technical zones (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
-| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`Prev Asia H/L` while a session is live). |
-| `HTF H · 240` / `HTF L · 240` | dashed | Optional confirmed higher-timeframe swing levels. |
+| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`pAsia H/L` while a session is live). |
 
 Colours are inputs. Liquidity uses a neutral grey on purpose so it cannot be
 confused with BOS/CHoCH (teal/rose) or Asian levels (purple).
@@ -83,6 +96,14 @@ CHoCH alert and sets the new protected level to the leg's extreme since the old 
 break of the last confirmed swing in an agreeing bias stays a BOS. `Last confirmed swing
 (v2.12)` reproduces the old assignment. A trailing level flips the bias more often than a
 confirmed swing does: on the committed XAU captures CHoCH counts roughly double.
+
+**Protected level, v2.14.** Two changes in the trailing mode (the v2.12 option is untouched). (1) *The higher low that made a higher high is promoted.* When a major high is
+confirmed in a bull bias, the protected low becomes the most recent **internal** pivot low between the protected bar and that high, if it is higher (bear mirrors with the
+lower high). (2) *A protected-level CHoCH takes the last internal pivot, not the start of the move.* The new protected low is the most recent internal pivot low between the
+broken protected high and the break; only without one does it fall back to the lowest low since the protected high (the v2.13 rule, which could reach two days back and
+left a flip level about 3.7 ATR from price on M30). The script keeps the last 8 internal pivot lows and highs for this; a pivot is used only after its right bars have closed.
+A protected level that moves toward price in the bias direction (an internal BOS, or the promotion) also puts the **developing leg** on the bias side: DEV, the directional
+leg, the phase and the dealing range now describe the same leg (v2.13 could print "Counter-trend rebound" with DEV HIGH sitting on the protected high).
 
 **Order blocks (v2.1).** Built when an internal or external BOS/CHoCH closes (v2.13: searched from the
 bar that really broke, not from the later publication bar). The
@@ -145,9 +166,28 @@ Tokyo ended early at London open (a bar inside London is never Asia, so the end 
 drawn on the chart only, live while the session runs and then as the completed range (configurable); the panel does not show it. The live
 and completed Asian high/low are also key levels for the trade-plan take-profit. On charts above 5m the session is evaluated on a 5-minute request.
 
-**Higher-timeframe context.** Off by default. Uses only the last completed HTF bar
-(shifted by one, `lookahead_on`), so an open HTF candle cannot change chart-timeframe
-decisions.
+**Multi-timeframe structure (not in this script).** v2.14 first shipped a panel row that requested the chart's own `bias` / `activeProtected` on two other frames
+(`request.security` of a global series). TradingView rejected it: **104,204 compiled tokens against the 100,256 limit (CE10117)** at 33,514 source tokens. A
+`request.security` of a global series compiles that series' whole dependency chain once per call (the structure state machine here), about 3,000 compiled tokens per
+frame, and this script has no room for even one. The row, its inputs and the `chart against M15+H1` tag are therefore removed; the old optional HTF context stays removed
+(it used a different algorithm and could contradict the HTF chart). The aligned multi-frame view is specified and verified in the model (`reference/mtf.py`,
+`reference/test_mtf_v214.py`, `reference/report_v214.py`) for a small companion indicator that carries only the structure algorithm.
+
+### Key levels (v2.16.1)
+
+The layer shows the levels the engine's `key_level` strategy trades, dimmed and behind every other object. v2.16 ported `keylevel.Cluster`, which is **not** what the strategy reads;
+v2.16.1 computes `LegacyFrame.SwingLevels` (the `profit_week` contract): `legacyread.Stage` -> `techniquezone.FindSwings` -> `techniquezone.KeyLevels`
+(`analysis.legacy_read`: window M5 150 / M15 250 / otherwise 400, `fractal_n` 2, `zigzag_atr_mult` 1.0; `level`: cluster 0.5 ATR, round step 5, 2 touches, span 2 x tolerance).
+
+- **When:** on the last bar, from the last `Key level window` CLOSED bars (the forming bar is left out in real time), so levels do not flicker; only the chart's last bar recomputes and nothing is stored per bar.
+- **ATR:** the window's own series: the mean of the last (up to) 14 true ranges, the first bar's true range being high - low; the cluster tolerance is 0.5 x the **median** of that series. This is the engine's plain mean, not Wilder's `ta.atr`.
+- **Swings:** fractal candidates (2 bars each side; the left bars strictly lower, the right bars not higher) through the **zigzag filter**: a candidate of the same kind as the last kept swing replaces it when more extreme; an opposite one is kept only if the move is at least the ATR at its own bar.
+- **Levels:** swings sorted by price join a cluster while within the tolerance of the lowest member (equal to "within tolerance of every member", and it implies the 2 x tolerance span cap); clusters of 2+ become reaction levels (price = mean). Round levels: every multiple of `Round step` (auto 5.0 on XAU, off elsewhere) with 2+ swings within max(tolerance, 0.25 x the ATR at the swing). Levels within the tolerance merge (price averaged, touches = max, kind of the one with strictly more touches). No wick re-count (the strategy has none).
+- **Side and origin, not "broken":** above price = resistance, below = support. The swings within the tolerance say where the level formed (majority highs = as resistance, majority lows = as support). A level whose origin is opposite to its side is **flipped** (`flipped (formed as support)`) and is still drawn. v2.16 hid the "broken" levels of the engine's `Role`; that is a decision-time test (a level price is not touching is always "broken"), so it was the wrong display filter: it hid 10 of 11 levels on the 3 Nov capture.
+- **In play:** the engine's `Role` is not broken (the last 2 closes are not both beyond the band): `key_level` can trade the level now. Drawn at transparency 45, caption `KL×3 ●` in the larger tier-2 size (Pine cannot switch bold at run time), tooltip `key_level can trade this level now`.
+- **Look:** width-1 dotted line (dashed for a round level), `Key level colour`; transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; from the earliest swing within the tolerance (capped by `Maximum drawn length`) to the end of the gutter; optional band at transparency 95.
+- **Anti-crowding:** inside the candle-scale window, at most `Key levels per side` (3) nearest levels each side, each **always drawn**. Only the caption yields: when a stronger right-column label (`PROT`, `BSL` / `SSL` / `EQH` / `EQL`, `EQ`, a zone caption) sits within one label height, that label gets a ` ·KL` suffix and a tooltip line and the key level gets no caption of its own. Captions of key levels merge only with each other. Captions: `KL×3` (reaction), `KL 3945` (round, the step price). Nothing is drawn on the candles.
+- **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count, frame minimum touches), which it does not trade. Python reference: `reference/keylevel_model.py` (`swing_levels`), checked against the Go golden `analysis-engine/test/keylevelgolden` with zero differences; the v2.16 `keylevel.Cluster` port is kept as a second reference.
 
 ### Display profiles
 
@@ -156,7 +196,7 @@ decisions.
 | Minimal | up to 4 | none | 3 external structure events, 1 Asian range |
 | Balanced — Recommended | up to 8 (+ OB budget) | up to 8 (nearest BSL above and SSL below first) | 6 external events |
 | Detailed | at least 12 | at least 12 | internal structure available |
-| Debug | up to 20, distance limits off | all retained | `xEH` / `xEL` raw-pivot labels, OB and pool distance limits off |
+| Debug | up to 20, distance limits off | all retained | OB and pool distance limits off |
 
 ### Keeping candles readable
 
@@ -174,21 +214,24 @@ hide them, so:
   and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
   chart.
 - **Lighter zones:** default `Zone transparency` 92, fainter borders; POI keeps a stronger border.
-- **One label column:** `PROTECTED`, `DEV HIGH/LOW`, `BSL/SSL`, `EQ`, `Asia H/L`, `iBSL/iSSL` and `PREMIUM/DISCOUNT` are drawn as one column at the right edge. Labels at nearly the same price merge into one (`PROTECTED · BSL · PREMIUM`); hover for every member and its price.
+- **Right gutter (v2.15):** every object that used to end 5 bars right of the last candle now ends `Annotation gutter` bars (default 12) right of it, and zone captions are right-aligned inside it, so no caption covers a live candle. The premium / discount gauge is 3 bars wide just beyond it, and the label column starts 4 bars beyond the gutter.
+- **Three label tiers:** 1 decision (`PROT`, the nearest active `BSL` / `SSL`, `EQ`, `MAJOR HIGH/LOW`, POI captions), 2 structure (swing `BOS` / `CHoCH`, non-POI captions, `DEV`; swing `BOS` / `CHoCH` at full colour, other tier-2 text at 25 % transparency), 3 context (internal `BOS` / `CHoCH`, `iBSL` / `iSSL`, Asia, other pools, session titles; muted at 20 % transparency). `Global text scale` picks the sizes (v2.15.1, one step up from v2.15): Compact = small / small / tiny, Standard = normal / normal / small, Large = large / normal / normal. Zone captions inside boxes use the tier-1 size (POI) or tier-2 size (non-POI), so Standard prints them at `normal`. Only `MAJOR HIGH/LOW` is bold (see Limits).
+- **One label column, one category per label:** `PROT`, `DEV▲`, `BSL`, `EQ`, `Asia H`, `iBSL` … are drawn as one column. Labels at nearly the same price merge only within a category (structure, liquidity, session, zone). When categories collide, the higher tier keeps the label and its colour; the others move into its tooltip and show as `+n`. Column labels are 60 % transparent.
+- **No opaque boxes over candles:** BOS / CHoCH captions and event labels are outlined text. Session titles are off by default (`Show session titles`; the box colour already names the session); when on they appear only on the live session and the latest completed one of each kind, in the tier-3 size at the bottom of the box.
 - **Zone captions:** text inside a box needs a box tall enough (zoom-aware) and a free slot;
-  otherwise the caption joins the label column.
+  otherwise the caption joins the label column (zone category).
 
-Not covered: Asian levels, optional HTF lines and the current major/protected lines are not
+Not covered: Asian levels and session boxes and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
 
 ### Market Intelligence panel
 
 Default `Compact` shows **major information only**, one line each; hover a cell for the
-detail. `Standard` and `Expanded` show the full panel described further down.
+detail. `Standard` shows the full panel described further down.
 
 | Compact row | Shows |
 | --- | --- |
-| Bias / Phase | External bias (and HTF bias when enabled); market phase |
+| Bias / Phase | External bias; market phase |
 | Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the dealing range (tooltip shows its low and high) |
 | Range H / L | The dealing range high / low (same range as the premium/discount gauge; tooltip: the confirmed swings with times and the developing extreme) |
 | Protected | The external level whose break flips the bias |
@@ -198,12 +241,12 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 | Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
 | Trades | Open plan (`LONG open · 1.8R → Swing high`) or paper stats (`11 · 27% · −1.6R`); tooltip has profit factor, drawdown and the last 8 trades |
 
-Full panel (`Standard` / `Expanded`):
+Full panel (`Standard`):
 
 | Section | Rows |
 | --- | --- |
-| Market state | External bias (and HTF bias when enabled), market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
-| Structure | Confirmed major high/low (tooltip: when each was confirmed), developing extreme, protected level, last external BOS/CHoCH with its age, **last internal break** with its age, invalidated level (Expanded) |
+| Market state | External bias, market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
+| Structure | Confirmed major high/low (tooltip: when each was confirmed), developing extreme, protected level, last external BOS/CHoCH with its age, **last internal break** with its age, |
 | Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
 | Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** (a trailing `*` means that pool is active but not drawn, e.g. beyond the candle-scale window; `LQ n/m` in the barrier row is drawn / active pools) |
 
@@ -217,7 +260,7 @@ Inputs are grouped as in the indicator's settings dialog.
 
 **01 Market Structure** — `External swing publication` (on displacement / next opposite pivot), `Protected level` (trailing / last confirmed swing), `Swing sensitivity` (Auto/Manual), manual pivot bars,
 `Minimum external leg displacement` (1.50 ATR), `External confirmation threshold`
-(0.15), `BOS/CHOCH close buffer`, historical major classifications, extended
+(0.15), `BOS/CHOCH close buffer`, extended
 major high/low, internal structure, draw BOS/CHoCH, external event history (6).
 
 **02 Liquidity** — show pools, nearest unswept internal swing marker (`iBSL` / `iSSL`), highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
@@ -244,15 +287,16 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
-switch / density / position, global text scale, annotation spacing.
+switch / density / position, global text scale, annotation spacing, `Annotation gutter` (12); `Show session titles` is in 05 Sessions.
 
-**07 Higher-Timeframe Context** — show, timeframe (240), swing bars, draw levels.
 
-**08 Trade Plan** — show, planned RR box before the trigger (on), entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise), trades drawn (5), box colours.
+**07 Key Levels** — `Show key levels` (on), `Key levels per side` (3), `Key level window` (0 = auto), `Round step` (0 = auto), `Show key level band` (off), `Key level colour`.
+
+**08 Trade Plan** — show, entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise).
 
 **Trade-plan room (v2.13).** The target search also treats every unswept internal swing ahead as an obstacle (the `iBSL` / `iSSL` test): the nearest level still decides, so an
 obstacle that pays less than the minimum reward : risk refuses the trade instead of being skipped. A stop over `Maximum stop (pips)` refuses and is never tightened (structure sets the stop;
-the ATR limits stay). The planned box is labelled `plan 1.2R · below 1.5` and dimmed when it is below the minimum, so it is never mistaken for a tradable plan. The `Trades` tooltip lists the trigger bars that
+the ATR limits stay). The `Trades` tooltip lists the trigger bars that
 opened nothing, each counted once by the first failing check: not a POI, wrong premium/discount side, entry too far from the zone, stop outside the ATR limits, stop over the pip cap, no target room, or no zone touched.
 
 ### Alerts
@@ -300,11 +344,19 @@ All fire on bar close. Create them from the indicator's alert dialog.
 - The trade plan sends no orders. On about two weeks of XAUUSD its paper results showed no edge;
   treat the in-chart tracker as a way to collect evidence on your own history.
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
+- Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
+- The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
 
 ### Version history
 
 | Version | Change |
 | --- | --- |
+| 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.16.1 | Key levels = what the strategy reads (`LegacyFrame.SwingLevels`: zigzag-filtered fractals, median window ATR, ATR at each swing for the round band), computed from the last closed bars on the last bar; no level is hidden for being "broken" (side, origin, flipped, in play instead); lines always drawn, only the caption yields to a stronger label; captions `KL×3` / `KL 3945`; the pivot ring and `Show broken key levels` are gone. To fit the token budget: the Debug `xEH` / `xEL` labels, the `Show historical major classifications` option (and its `M HH` / `M HL` / `M LH` / `M LL` labels) and the `Expanded` panel density (its `Invalidated Level` and `Zone Audit` rows) are removed. |
+| 2.16 | Key levels layer (display only): the engine's `keylevel.Cluster` / `Role` ported (reaction clusters, round levels, dedupe, broken after 2 closes), computed on the last bar from a fractal-pivot ring, dotted and faint behind everything else, nearest 3 per side, yielding to stronger objects; own input group `07 Key Levels`. The premium / discount gauge moves to the very right edge, beyond the zone boxes; the label column starts 4 bars beyond the gutter. The `Label vocabulary` option is removed (long wording is gone). Python port `reference/keylevel_model.py` and Go golden `analysis-engine/test/keylevelgolden`. |
+| 2.15.1 | Readable sizes and stronger contrast (display only): every tier one step larger (Standard normal / normal / small), muted text at 20 % transparency and swing BOS / CHoCH at full colour, session titles off by default, prices of 100 or more print at most 2 decimals on symbols with a tick below 0.01 (`3935.16`, not `3935.158`), label merge distance 1/36 of the candle range instead of 1/48. |
+| 2.15 | Label design (display only): right gutter (`Annotation gutter`) so captions no longer cover live candles; three tiers with `Global text scale` mapping; short vocabulary (`◆ OB+FVG`, `PROT`, `DEV▲`, `pAsia H`, …, `Label vocabulary` = `Long (v2.14)` restores the old words); one caption per overlapping zone cluster; right column merges only within a category; outlined BOS / CHoCH and event labels; session titles on the live and latest completed session only (`Show session titles`); `PREMIUM` / `DISCOUNT` words removed (gauge and panel stay). No detection, qualification, trade or alert change. |
+| 2.14.1 | Pullback leg kept after a confirmed swing; scale.none removal reaches existing charts (upgrade note). A confirmed higher high (lower low) still promotes the higher low (lower high), but only an internal BOS in the bias direction moves the developing leg to the bias side, so the pullback the swing was published after stays visible (14 / 17 / 4 / 17 of 98 / 77 / 26 / 55 swings on M5 / M15 / M30 / H1 had hidden it in v2.14). All RR drawings are removed: the planned preview box (`plan 2.6R`), the position boxes, entry lines and R result labels of real trades, the TP / ENTRY / SL tags, and the inputs `Show a planned RR box`, `Trades drawn on the chart`, `Target box color`, `Stop box color`. The tracker, the `Trades` panel row and its tooltip, and the alerts are unchanged. `scale = scale.none` is gone (zones follow the candles' scale); existing charts keep the old pin until the indicator is re-added or re-pinned, see Install → Upgrading. |
 | 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram. Removed to fit TradingView's 100,256-token limit: the temporary OB debug table (`Debug: OB candidate log and rejection reasons`) and the v2.12 swing-publication option |
 | 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
 | 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
