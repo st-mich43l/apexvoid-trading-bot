@@ -70,6 +70,24 @@ def test_shared_invalid_plan_rejected(case):
     TradePlan.from_dict(payload)
 
 
+def test_exposure_lane_round_trips_and_absent_stays_absent():
+  plans = _valid_plans()
+  for name, lane in (("market_buy_scalp_lane", "scalp"), ("market_buy_standard_lane", "standard")):
+    plan = TradePlan.from_dict(plans[name])
+    assert plan.exposure_lane == lane
+    assert plan.to_dict()["exposure_lane"] == lane
+  legacy = TradePlan.from_dict(plans["market_buy_scalp_chase"])
+  assert legacy.exposure_lane is None
+  assert "exposure_lane" not in legacy.to_dict()
+
+
+def test_builder_sets_the_lane_from_the_catalog():
+  from app.autotrade.strategy_catalog import exposure_lane
+
+  assert exposure_lane("Impulse Pullback Scalp") == "scalp"
+  assert exposure_lane("Key Level") == "standard"
+
+
 def test_market_watch_entry_prices_are_the_zone_edges():
   plan = TradePlan.from_dict(_valid_plans()["market_watch_buy"])
   assert plan.entry.entry_prices() == (plan.entry.zone_low, plan.entry.zone_high)

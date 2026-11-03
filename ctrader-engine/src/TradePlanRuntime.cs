@@ -2316,7 +2316,8 @@ public sealed partial class TradePlanRuntime(
         ? (plan.Analysis.Direction == "BUY" ? quote.Ask : quote.Bid)
         : IntendedEntryPriceFrom(plan) ?? 0m;
     return OppositeExposureFence.Evaluate(
-      plan.Symbol, plan.Analysis.Direction, entryReference, groups, policy
+      plan.Symbol, plan.Analysis.Direction, entryReference, groups, policy,
+      plan.ExposureLane
     );
   }
 

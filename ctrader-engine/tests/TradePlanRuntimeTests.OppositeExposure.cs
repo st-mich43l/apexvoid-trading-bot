@@ -16,7 +16,7 @@ public sealed partial class TradePlanRuntimeTests
   );
 
   private static readonly OppositePositionPolicy FxPolicy = new(false, null, 0.0001m);
-  private static readonly OppositePositionPolicy XauPolicy = new(true, 150m, 0.1m);
+  private static readonly OppositePositionPolicy XauPolicy = new(true, 150m, 0.1m, 80m);
 
   private static TradePlanRuntime OppositeRuntime(
     FakeTradePlanStore store,
@@ -187,6 +187,45 @@ public sealed partial class TradePlanRuntimeTests
       Assert.Contains(logs, line => line.Contains(
         "reason_code=xau_opposite_position_too_close", StringComparison.Ordinal));
       Assert.Equal("rejected", store.Value("execution:plan_state:v8:xau-in"));
+    }
+  }
+
+  private static string WithLane(string planJson, string lane)
+  {
+    var node = System.Text.Json.Nodes.JsonNode.Parse(planJson)!.AsObject();
+    node["exposure_lane"] = lane;
+    return node.ToJsonString();
+  }
+
+  [Theory]
+  [InlineData("scalp", 4097.10, true)]     // exactly 80.0 pips from the 4089.10 ask
+  [InlineData("scalp", 4097.11, true)]
+  [InlineData("scalp", 4097.09, false)]    // 79.9 pips
+  [InlineData("standard", 4097.10, false)] // a standard plan keeps 150
+  [InlineData("standard", 4104.10, true)]
+  public async Task XauScalpLanePlanUsesTheEightyPipSeparation(
+    string lane, double existingEntry, bool allowed
+  )
+  {
+    var store = new FakeTradePlanStore();
+    store.EnqueuePlan(WithLane(PlanJson(planId: "v8:xau-lane", direction: "BUY"), lane));
+    var client = new FakeTradePlanTradingClient();
+    client.SeedPosition(
+      700, TradeDirection.Sell, 100, comment: "", entryPrice: (decimal)existingEntry,
+      label: "manual"
+    );
+    var logs = new List<string>();
+    var runtime = OppositeRuntime(store, XauPolicy, logs);
+
+    await runtime.PollAsync(
+      client, Symbol, new SpotPrice("XAU", 4089.05m, 4089.10m, 1), CancellationToken.None
+    );
+
+    Assert.Equal(allowed ? 1 : 0, client.MarketOrders.Count);
+    if (!allowed)
+    {
+      var code = lane == "scalp" ? "xau_scalp_opposite_too_close" : "xau_opposite_position_too_close";
+      Assert.Contains(logs, line => line.Contains($"reason_code={code}", StringComparison.Ordinal));
     }
   }
 

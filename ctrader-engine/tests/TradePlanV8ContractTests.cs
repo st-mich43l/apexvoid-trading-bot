@@ -134,6 +134,22 @@ public sealed class TradePlanV8ContractTests
   }
 
   [Theory]
+  [InlineData("market_buy_scalp_chase", null)]
+  [InlineData("market_buy_scalp_lane", "scalp")]
+  [InlineData("market_buy_standard_lane", "standard")]
+  public void ExposureLaneRoundTripsAndAbsentMeansStandard(string name, string? lane)
+  {
+    var plan = JsonSerializer.Deserialize(
+      ValidPlan(name).ToJsonString(),
+      AutoTradeJsonContext.Default.TradePlan
+    );
+
+    Assert.NotNull(plan);
+    Assert.Equal(lane, plan!.ExposureLane);
+    TradePlanValidator.Validate(plan);
+  }
+
+  [Theory]
   [MemberData(nameof(ValidPlanNames))]
   public void SharedValidPlanUsesProductionSourceGeneratedMetadata(string name)
   {
