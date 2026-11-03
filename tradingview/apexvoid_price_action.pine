@@ -869,7 +869,6 @@ if downBreak and not na(downLevelBar)
 if upBreak
     bool initialBreak = bias == 0
     bool choch = protectedUpBreak or (bias == -1 and not na(protectedHigh))
-    if choch
     upCHOCH := choch
     upBOS := not choch
     if showBreaks
@@ -900,7 +899,6 @@ if upBreak
 else if downBreak
     bool initialBreak = bias == 0
     bool choch = protectedDownBreak or (bias == 1 and not na(protectedLow))
-    if choch
     downCHOCH := choch
     downBOS := not choch
     if showBreaks
