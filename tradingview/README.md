@@ -6,7 +6,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.9.1). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.13). |
 | `reference/` | Python models of the indicator's order-block, liquidity, supply/demand and trade-plan logic with rule checks on real XAUUSD closed bars (`python tradingview/reference/test_<name>.py`). They validate the algorithm only; they do not compile or draw the Pine file. |
 
 ## ApexVoid Price Action
@@ -36,20 +36,20 @@ trades) with paper-tracked results; it sends no orders and the rules have not sh
 | BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. The line ends on the candle that first closed beyond the swing, the caption sits next to the break, and one candle that closes beyond several swings is drawn as one BOS (the most recent swing). A swing is confirmed late (pivot lag plus a displaced leg), so the BOS alert and the bias change can arrive a few bars after that candle; v2.6 draws the line on the real break candle (before v2.6 it ended on the later confirmation bar, up to 38 bars late on XAUUSD M15). |
 | `MAJOR HIGH` / `MAJOR LOW` | tag plus a line extending from the swing | The latest confirmed external swing. Retired (dotted, faded) once broken. |
 | `DEV HIGH` / `DEV LOW` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
-| `PROTECTED` | dashed line | The external level whose break would flip bias. |
+| `PROTECTED` | dashed line | The external level whose break would flip bias. Since v2.13 it **trails**: each internal break in the bias direction moves it toward price (never away), and a close beyond it is the CHoCH. |
 | `OB` / `iOB` | box with thin border, midpoint dotted line, right-aligned label | Swing / internal order block. Dashed border and `· T` when Tested. |
 | FVG | blue (bullish) / orange (bearish) box | Three-candle fair value gap. |
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
 | `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
-| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. The dealing range is the confirmed swing range extended to the live extreme of the current leg, so after a break it follows price instead of a days-old swing. Clipped to the candle-scale window. |
+| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
 | `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
-| `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms (00:00-08:00 UTC by default). When the session ends it becomes the completed range below. |
+| `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms. Since v2.13 Asia is the engine's session: 07:00 Tokyo (22:00 UTC) until London open, so the range is the one `asia_range` trades. When the session ends it becomes the completed range below. |
 | `Asia` / `London` / `New York` boxes | faint fill with a clearer dashed outline and title per session, so the session reads at a glance without tinting the technical zones (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
 | `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`Prev Asia H/L` while a session is live). |
 | `HTF H · 240` / `HTF L · 240` | dashed | Optional confirmed higher-timeframe swing levels. |
@@ -62,13 +62,30 @@ confused with BOS/CHoCH (teal/rose) or Asian levels (purple).
 **Structure.** Internal swings use short pivots, external swings long ones; both
 scale with the chart timeframe (internal 3 / 4 / 5 / 6 / 8 bars and external
 12 / 16 / 20 / 24 / 30 bars for charts up to 5m / 15m / 1h / 4h / above; `Manual`
-overrides them). An external swing is published only after an alternating-leg state
-machine sees the next leg move at least `Minimum external leg displacement` plus the
-confirmation threshold (1.65 ATR by default), so small wiggles never become major
-swings. Bias comes from external breaks only; internal breaks never change it. All
-distances are ATR(14)-normalised.
+overrides them). **External swing publication (v2.13):** the candidate is the running
+extreme since the last published swing (a zigzag extreme, not a pivot); it is published
+on the first closed bar where `externalLength` bars have passed without a further
+extreme **and** the counter-leg has reached `Minimum external leg displacement` plus the
+confirmation threshold (1.65 ATR of the candidate bar by default). v2.12 waited for the
+next opposite pivot to confirm, a median of 27 / 34 / 54 bars after the swing on M5 / M15 /
+H1; v2.13 publishes at `externalLength` bars (12 / 16 / 20) when the leg is already
+displaced (`External swing publication`: `Next opposite pivot (v2.12)` restores the old
+rule). Small wiggles still never become major swings. Bias comes from external breaks
+only; internal breaks never change it. All distances are ATR(14)-normalised.
 
-**Order blocks (v2.1).** Built when an internal or external BOS/CHoCH closes. The
+**Protected level and CHoCH (v2.13).** With `Protected level` = `Trailing (internal BOS)`
+(default) the protected high (bear bias) is the pullback high the latest internal bearish
+break came from, and it only ratchets toward price; a newly published swing replaces it
+only when it is nearer. A **confirmed close beyond the protected level is the CHoCH**, even
+when the last confirmed swing is further away: it flips the bias, draws the line from the
+protected bar to the first close beyond it, builds the order block on that event, fires the
+CHoCH alert and sets the new protected level to the leg's extreme since the old one. A
+break of the last confirmed swing in an agreeing bias stays a BOS. `Last confirmed swing
+(v2.12)` reproduces the old assignment. A trailing level flips the bias more often than a
+confirmed swing does: on the committed XAU captures CHoCH counts roughly double.
+
+**Order blocks (v2.1).** Built when an internal or external BOS/CHoCH closes (v2.13: searched from the
+bar that really broke, not from the later publication bar). The
 origin is the opposite-colour candle at the extreme of the leg between the broken
 pivot and the break, and it must pass gates for base position, range, net
 displacement and an impulse candle. Fresh → Tested (price entered) → Mitigated
@@ -83,17 +100,27 @@ through it. Patterns: `DBR` / `RBD` reversals, `RBR` / `DBD` continuations (filt
 Invalidated by a close beyond the far edge; a touch only marks it Tested. A fresh base
 zone on the bias side qualifies as a `Base-impulse zone` POI.
 
-**FVG.** A three-candle gap whose size is at least `Minimum gap size` and whose
-middle candle has a real body. Invalidation follows `Wick`, `Close` or `Midpoint`.
+**FVG.** A three-candle gap. `FVG definition` = `Engine (fvg v9)` (default, `docs/strategies/fvg.md`):
+the gap and the middle candle's body are at least 0.5 ATR, the body at least half of its
+own range, and the middle candle closed in the gap's direction. `Loose (v2.12 keys)` uses
+`Minimum gap size` and `Middle-candle body` plus, new in v2.13, the body-direction test (v2.12
+could print a bullish gap from a bearish middle candle). Invalidation follows `Wick`, `Close` or `Midpoint`.
 
 **Supply / demand.** Created at a confirmed external swing that was followed by a
 departure of at least `Supply/demand departure`; width is capped. Invalidated by a
-close beyond the far edge.
+close beyond the far edge. **Freshness (v2.13):** before a swing zone is drawn the bars
+after its departure (`externalLength + 1` bars after the swing up to now) are scanned: a
+close beyond the far edge means it is not drawn; a touch means it is drawn already
+`Tested` (first touch and measured depth), never Fresh, never actionable and never a
+trade trigger. On the captures, a third to a half of the zones v2.12 drew as Fresh had been
+retested or closed through before they were drawn.
 
 **POI.** A zone is a *qualified* POI only through a named path: `Composite`
-(two different zone kinds overlap), `Structure-origin OB` (a swing OB on the bias
+(two different zone kinds overlap, and since v2.13 their origins differ by more than 3 bars: an
+OB and the FVG its own impulse printed are one event), `Structure-origin OB` (a swing OB on the bias
 side near the last break), `Displaced swing zone` (supply/demand on the bias side)
-or `Swept imbalance` (an FVG on the side of the latest liquidity sweep). Proximity
+or `Swept imbalance` (an FVG on the bias side whose impulse followed a sweep: a pool or external sweep in
+the 6 bars up to the gap's first candle; v2.12 also accepted a sweep after the gap). Proximity
 and display rank never qualify a zone. A POI is *actionable* only if it is fresh,
 on the correct side of price, within `Actionable POI distance` and has at least
 1 ATR of room before the nearest opposing barrier.
@@ -112,8 +139,10 @@ the previous-day high/low. Lone internal pivots are never drawn.
 A pool leaves the active state once, so each pool alerts once. A grab never
 changes bias and never creates an entry.
 
-**Asian session.** The range is drawn on the chart only, live while the session runs and then as
-the completed range (default 00:00–08:00 UTC, configurable); the panel does not show it. The live
+**Sessions.** Defaults follow the engine's session calendar (`analysis.sessions.calendar`): Asia 07:00-17:00
+Tokyo ended early at London open (a bar inside London is never Asia, so the end follows London daylight saving: 07:00 UTC on
+23 Oct 2026, 08:00 UTC on 27 Oct), London 08:00-16:30 London, New York 09:00-17:00 New York. The Asian range is
+drawn on the chart only, live while the session runs and then as the completed range (configurable); the panel does not show it. The live
 and completed Asian high/low are also key levels for the trade-plan take-profit. On charts above 5m the session is evaluated on a 5-minute request.
 
 **Higher-timeframe context.** Off by default. Uses only the last completed HTF bar
@@ -186,7 +215,7 @@ invalidated, aged, evicted).
 
 Inputs are grouped as in the indicator's settings dialog.
 
-**01 Market Structure** — `Swing sensitivity` (Auto/Manual), manual pivot bars,
+**01 Market Structure** — `External swing publication` (on displacement / next opposite pivot), `Protected level` (trailing / last confirmed swing), `Swing sensitivity` (Auto/Manual), manual pivot bars,
 `Minimum external leg displacement` (1.50 ATR), `External confirmation threshold`
 (0.15), `BOS/CHOCH close buffer`, historical major classifications, extended
 major high/low, internal structure, draw BOS/CHoCH, external event history (6).
@@ -207,8 +236,8 @@ major high/low, internal structure, draw BOS/CHoCH, external event history (6).
 distance` (25 ATR), midpoint line, **`Debug: OB candidate log and rejection
 reasons`**, supply/demand switch, departure (0.8) and width (1.0).
 
-**04 Fair Value Gaps** — show FVG, minimum gap (0.10 ATR), middle-candle body
-(0.5 ATR), invalidation method.
+**04 Fair Value Gaps** — show FVG, `FVG definition` (Engine / Loose), minimum gap (0.10 ATR) and middle-candle body
+(0.5 ATR) for Loose, invalidation method.
 
 **05 Sessions** — Asian show/hours/timezone/retained ranges, `Draw a range box for each session`, London and New York hours and timezones (defined in local time, so daylight saving is handled), retained boxes per session (3), box fill transparency (93; higher is fainter).
 
@@ -220,7 +249,12 @@ switch / density / position, global text scale, annotation spacing.
 
 **07 Higher-Timeframe Context** — show, timeframe (240), swing bars, draw levels.
 
-**08 Trade Plan** — show, planned RR box before the trigger (on), entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, trades drawn (5), box colours.
+**08 Trade Plan** — show, planned RR box before the trigger (on), entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise), trades drawn (5), box colours.
+
+**Trade-plan room (v2.13).** The target search also treats every unswept internal swing ahead as an obstacle (the `iBSL` / `iSSL` test): the nearest level still decides, so an
+obstacle that pays less than the minimum reward : risk refuses the trade instead of being skipped. A stop over `Maximum stop (pips)` refuses and is never tightened (structure sets the stop;
+the ATR limits stay). The planned box is labelled `plan 1.2R · below 1.5` and dimmed when it is below the minimum, so it is never mistaken for a tradable plan. The `Trades` tooltip lists the trigger bars that
+opened nothing, each counted once by the first failing check: not a POI, wrong premium/discount side, entry too far from the zone, stop outside the ATR limits, stop over the pip cap, no target room, or no zone touched.
 
 ### Debug view for order blocks
 
@@ -241,7 +275,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | Alert | Fires when |
 | --- | --- |
 | `ApexVoid Bullish / Bearish BOS` | External close-confirmed break in the bias direction |
-| `ApexVoid Bullish / Bearish CHOCH` | External close-confirmed break against the bias |
+| `ApexVoid Bullish / Bearish CHOCH` | External close-confirmed break against the bias (v2.13: a close beyond the trailing protected level) |
 | `ApexVoid Buy-Side / Sell-Side Sweep` | A liquidity pool is swept (once per pool) |
 | `ApexVoid External Buy-Side / Sell-Side Sweep` | The current external swing is swept |
 | `ApexVoid Buy-Side / Sell-Side Liquidity Consumed` | A pool is accepted through or broken by structure (once per pool) |
@@ -284,6 +318,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
+| 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram |
 | 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
 | 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
 | 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
