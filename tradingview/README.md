@@ -25,7 +25,8 @@ is drawn on the chart: no position boxes, entry lines, R labels or TP / ENTRY / 
    add it to a chart.
 2. Suggested start: XAUUSD on M5 or M15, default settings (`Balanced — Recommended`
    profile, `Compact` panel). Tune per symbol afterwards.
-3. TradingView is the only authoritative compiler. After any edit, compile there and
+3. Set the chart's right margin to at least `Annotation gutter` + 15 bars (default 27): Chart settings → Appearance (older versions: Canvas) → Margins → Right (bars). The gutter is where captions and the label column live; without the margin TradingView clips them. The menu names are from memory of the TradingView UI and were not checked in this repository.
+4. TradingView is the only authoritative compiler. After any edit, compile there and
    check on a long history that object limits (250 boxes, 350 lines, 500 labels) are
    not hit.
 
@@ -47,23 +48,23 @@ the candles when the price axis is dragged or zoomed.
 | --- | --- | --- |
 | BOS / CHoCH | solid (BOS), dashed (CHoCH) line with a centred caption, teal bullish / rose bearish | A **close** beyond a confirmed swing. CHoCH is a break against the current external bias. The line ends on the candle that first closed beyond the swing, the caption sits next to the break, and one candle that closes beyond several swings is drawn as one BOS (the most recent swing). A swing is confirmed late (pivot lag plus a displaced leg), so the BOS alert and the bias change can arrive a few bars after that candle; v2.6 draws the line on the real break candle (before v2.6 it ended on the later confirmation bar, up to 38 bars late on XAUUSD M15). |
 | `MAJOR HIGH` / `MAJOR LOW` | tag plus a line extending from the swing | The latest confirmed external swing. Retired (dotted, faded) once broken. |
-| `DEV HIGH` / `DEV LOW` | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
-| `PROTECTED` | dashed line | The external level whose break would flip bias. Since v2.13 it **trails**: each internal break in the bias direction moves it toward price (never away), and a close beyond it is the CHoCH. |
+| `DEV▲` / `DEV▼` (`DEV HIGH` / `DEV LOW` in the long vocabulary) | dashed line plus a live leg | The unconfirmed extreme of the current leg. Never labelled HH/LL. |
+| `PROT` (`PROTECTED` in the long vocabulary) | dashed line | The external level whose break would flip bias. Since v2.13 it **trails**: each internal break in the bias direction moves it toward price (never away), and a close beyond it is the CHoCH. |
 | `OB` / `iOB` | box with thin border, midpoint dotted line, right-aligned label | Swing / internal order block. Dashed border and `· T` when Tested. |
 | FVG | blue (bullish) / orange (bearish) box | Three-candle fair value gap. |
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
-| `POI · Supply`, `POI · Bear OB + FVG`, … | thicker border | A zone that passed a named qualification path (below); the caption names the zone kind (`Supply`, `Demand`, `Bull/Bear OB`, `Bull/Bear FVG`, or a combination such as `Supply + OB`). |
-| `PREMIUM` / `DISCOUNT` / `EQ` | a slim rose / green gauge at the right edge and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
+| `◆ OB+FVG`, `◆ D+OB`, `◆ S+FVG`, `◆ D·RBR` … | thicker border | A zone that passed a named qualification path (below). `◆` plus the border mark a POI; the colour carries the side, so the caption is only the kind: `OB`, `iOB`, `FVG`, `D` (demand), `S` (supply), base patterns `D·RBR` / `S·RBD`, composites joined with `+` (supply/demand, then OB, then FVG). `·T` = tested. Zones of one side that overlap or sit closer than a label height share **one** caption on the best member (`◆ OB+FVG ×3` = three boxes); hover for every member. Long vocabulary: `POI · Bear OB + FVG`. |
+| `EQ` and the premium / discount gauge | a slim rose / green gauge in the right gutter (no text; the panel `Range` row says Premium / Discount) and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
 | `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
-| `Asia H · live` / `Asia L · live` | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms. Since v2.13 Asia is the engine's session: 07:00 Tokyo (22:00 UTC) until London open, so the range is the one `asia_range` trades. When the session ends it becomes the completed range below. |
+| `Asia H` / `Asia L` (live; `Asia H · live` in the long vocabulary) | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms. Since v2.13 Asia is the engine's session: 07:00 Tokyo (22:00 UTC) until London open, so the range is the one `asia_range` trades. When the session ends it becomes the completed range below. |
 | `Asia` / `London` / `New York` boxes | faint fill with a clearer dashed outline and title per session, so the session reads at a glance without tinting the technical zones (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
-| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`Prev Asia H/L` while a session is live). |
+| `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`pAsia H/L`, long `Prev Asia H/L`, while a session is live). |
 
 Colours are inputs. Liquidity uses a neutral grey on purpose so it cannot be
 confused with BOS/CHoCH (teal/rose) or Asian levels (purple).
@@ -196,9 +197,12 @@ hide them, so:
   and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
   chart.
 - **Lighter zones:** default `Zone transparency` 92, fainter borders; POI keeps a stronger border.
-- **One label column:** `PROTECTED`, `DEV HIGH/LOW`, `BSL/SSL`, `EQ`, `Asia H/L`, `iBSL/iSSL` and `PREMIUM/DISCOUNT` are drawn as one column at the right edge. Labels at nearly the same price merge into one (`PROTECTED · BSL · PREMIUM`); hover for every member and its price.
+- **Right gutter (v2.15):** every object that used to end 5 bars right of the last candle now ends `Annotation gutter` bars (default 12) right of it, and zone captions are right-aligned inside it, so no caption covers a live candle. The label column starts 2 bars beyond the gutter.
+- **Three label tiers:** 1 decision (`PROT`, the nearest active `BSL` / `SSL`, `EQ`, `MAJOR HIGH/LOW`, POI captions), 2 structure (swing `BOS` / `CHoCH`, non-POI captions, `DEV`; colour at 25 % transparency), 3 context (internal `BOS` / `CHoCH`, `iBSL` / `iSSL`, Asia, other pools, session titles; muted). `Global text scale` picks the sizes: Compact = tiny / tiny / tiny, Standard = small / small / tiny, Large = normal / small / small. Only `MAJOR HIGH/LOW` is bold (see Limits).
+- **One label column, one category per label:** `PROT`, `DEV▲`, `BSL`, `EQ`, `Asia H`, `iBSL` … are drawn as one column. Labels at nearly the same price merge only within a category (structure, liquidity, session, zone). When categories collide, the higher tier keeps the label and its colour; the others move into its tooltip and show as `+n`. Column labels are 60 % transparent.
+- **No opaque boxes over candles:** BOS / CHoCH captions and event labels are outlined text. Session titles (`Show session titles`) appear only on the live session and the latest completed one of each kind, in the tier-3 size at the bottom of the box.
 - **Zone captions:** text inside a box needs a box tall enough (zoom-aware) and a free slot;
-  otherwise the caption joins the label column.
+  otherwise the caption joins the label column (zone category).
 
 Not covered: Asian levels and session boxes and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
@@ -266,7 +270,7 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
 structure window, label and event limits, zone maximum age (600 bars), panel
-switch / density / position, global text scale, annotation spacing.
+switch / density / position, global text scale, annotation spacing, `Annotation gutter` (12), `Label vocabulary` (`Short` / `Long (v2.14)`); `Show session titles` is in 05 Sessions.
 
 
 **08 Trade Plan** — show, entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise).
@@ -321,6 +325,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 - The trade plan sends no orders. On about two weeks of XAUUSD its paper results showed no edge;
   treat the in-chart tracker as a way to collect evidence on your own history.
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
+- Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
 - The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
 
 ### Version history
@@ -328,6 +333,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | Version | Change |
 | --- | --- |
 | 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.15 | Label design (display only): right gutter (`Annotation gutter`) so captions no longer cover live candles; three tiers with `Global text scale` mapping; short vocabulary (`◆ OB+FVG`, `PROT`, `DEV▲`, `pAsia H`, …, `Label vocabulary` = `Long (v2.14)` restores the old words); one caption per overlapping zone cluster; right column merges only within a category; outlined BOS / CHoCH and event labels; session titles on the live and latest completed session only (`Show session titles`); `PREMIUM` / `DISCOUNT` words removed (gauge and panel stay). No detection, qualification, trade or alert change. |
 | 2.14.1 | Pullback leg kept after a confirmed swing; scale.none removal reaches existing charts (upgrade note). A confirmed higher high (lower low) still promotes the higher low (lower high), but only an internal BOS in the bias direction moves the developing leg to the bias side, so the pullback the swing was published after stays visible (14 / 17 / 4 / 17 of 98 / 77 / 26 / 55 swings on M5 / M15 / M30 / H1 had hidden it in v2.14). All RR drawings are removed: the planned preview box (`plan 2.6R`), the position boxes, entry lines and R result labels of real trades, the TP / ENTRY / SL tags, and the inputs `Show a planned RR box`, `Trades drawn on the chart`, `Target box color`, `Stop box color`. The tracker, the `Trades` panel row and its tooltip, and the alerts are unchanged. `scale = scale.none` is gone (zones follow the candles' scale); existing charts keep the old pin until the indicator is re-added or re-pinned, see Install → Upgrading. |
 | 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram. Removed to fit TradingView's 100,256-token limit: the temporary OB debug table (`Debug: OB candidate log and rejection reasons`) and the v2.12 swing-publication option |
 | 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
