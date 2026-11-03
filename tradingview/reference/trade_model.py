@@ -30,6 +30,11 @@ class TradeParams:
   timeout_bars: int = 96
   cost: float = 0.0
   base_zones: bool = True
+  # v2.13
+  ring_obstacles: bool = False   # unswept internal swings count as key levels / room obstacles
+  max_stop_pips: float = 0.0     # 0 = off; a stop over the cap refuses, it is never tightened
+  pip_size: float = 0.1          # price per pip (XAU 0.1; the indicator derives 10 x mintick elsewhere)
+  asia_mode: str = "v212"        # "v212" (00:00-08:00 UTC) | "engine" (07:00 Tokyo to London open)
 
 
 @dataclass
@@ -49,10 +54,38 @@ class Trade:
   r: float = 0.0
   raw_level: float = 0.0
   nearest_ahead: float = 0.0
+  zone_born: int = -1
+  zone_first_touch: int = -1
 
 
-def asia_ranges(t, h, l):
-  """Completed Asian (00:00-08:00 UTC) high/low as known at each bar (mirrors the Pine snapshot)."""
+# The engine session calendar (analysis-engine/internal/session, config analysis.sessions.calendar): Asia opens at 07:00 Tokyo and runs to
+# London open; London opens at 08:00 London; New York at 09:00 New York. Session hours are wall-clock in their own zone, so they follow
+# daylight saving (London open is 07:00 UTC in BST, 08:00 in GMT).
+ENGINE_ASIA = (7.0, 17.0, "Asia/Tokyo")
+ENGINE_LONDON = (8.0, 16.5, "Europe/London")
+ENGINE_NY = (9.0, 17.0, "America/New_York")
+
+
+def in_session(ts, window):
+  """True when Unix second `ts` is inside (start_hour, end_hour, tz) in that zone's wall clock."""
+  import datetime
+  import zoneinfo
+  start, end, tz = window
+  local = datetime.datetime.fromtimestamp(ts, datetime.UTC).astimezone(zoneinfo.ZoneInfo(tz))
+  minutes = local.hour * 60 + local.minute
+  return start * 60 <= minutes < end * 60
+
+
+def engine_asia(ts):
+  """Asia as the engine draws it: the Tokyo morning, ended early by London open (a bar inside London is never Asia)."""
+  return in_session(ts, ENGINE_ASIA) and not in_session(ts, ENGINE_LONDON)
+
+
+REFUSALS = ("not a POI", "wrong premium/discount side", "entry too far from zone", "stop outside limits", "stop over pip cap", "no target room")
+
+
+def asia_ranges(t, h, l, engine=False):
+  """Completed and live Asian high/low as known at each bar (mirrors the Pine snapshot). engine=False is v2.12 (00:00-08:00 UTC)."""
   n = len(t)
   hi, lo = [m.NAN] * n, [m.NAN] * n
   live_hi, live_lo = [m.NAN] * n, [m.NAN] * n
@@ -61,8 +94,10 @@ def asia_ranges(t, h, l):
   inside_prev = False
   import datetime
   for i in range(n):
-    hour = datetime.datetime.fromtimestamp(t[i], datetime.UTC).hour
-    inside = 0 <= hour < 8
+    if engine:
+      inside = engine_asia(t[i])
+    else:
+      inside = 0 <= datetime.datetime.fromtimestamp(t[i], datetime.UTC).hour < 8
     if inside and not inside_prev:
       cur_h, cur_l = h[i], l[i]
     elif inside:
@@ -76,8 +111,9 @@ def asia_ranges(t, h, l):
   return hi, lo, live_hi, live_lo
 
 
-def session_boxes(t, h, l, start_hour, end_hour, tz="UTC"):
-  """Session range boxes as the indicator draws them: (first_bar_time, high, low, last_bar_time)."""
+def session_boxes(t, h, l, start_hour, end_hour, tz="UTC", exclude=None):
+  """Session range boxes as the indicator draws them: (first_bar_time, high, low, last_bar_time). `exclude` is an optional
+  (start, end, tz) window whose bars never belong to the session (Asia ends early at London open)."""
   import datetime
   import zoneinfo
   zone = zoneinfo.ZoneInfo(tz)
@@ -86,7 +122,7 @@ def session_boxes(t, h, l, start_hour, end_hour, tz="UTC"):
   for i in range(len(t)):
     local = datetime.datetime.fromtimestamp(t[i], datetime.UTC).astimezone(zone)
     minutes = local.hour * 60 + local.minute
-    inside = start_hour * 60 <= minutes < end_hour * 60
+    inside = start_hour * 60 <= minutes < end_hour * 60 and not (exclude is not None and in_session(t[i], exclude))
     if inside and current is None:
       current = [t[i], h[i], l[i], t[i]]
     elif inside:
@@ -105,7 +141,9 @@ class TradePlanSim(m.V21Pipeline):
     self.tp = tp or TradeParams()
     self.sdp = sdp or sdb.Params()
     self.lm = m.LiquidityModel(self.s, p)
-    self.asia_h, self.asia_l, self.asia_live_h, self.asia_live_l = asia_ranges(self.s.t, self.s.h, self.s.l)
+    self.asia_h, self.asia_l, self.asia_live_h, self.asia_live_l = asia_ranges(self.s.t, self.s.h, self.s.l, engine=self.tp.asia_mode == "engine")
+    self.refusals = {}
+    self.trigger_bars = 0
     self.open = None
     self.trades = []
     self.skipped = dict(no_target=0, bad_stop=0)
@@ -115,13 +153,7 @@ class TradePlanSim(m.V21Pipeline):
   # ---- zone qualification (mirror of f_poiPath) --------------------------
   def poi_path(self, z, fresh):
     s, p = self.s, self.p
-    has = {1: z.kind == 1, 2: z.kind == 2, 3: z.kind == 3}
-    for o in self.zones:
-      if o is not z and o.side == z.side:
-        ov = min(z.top, o.top) - max(z.bottom, o.bottom)
-        sm = min(z.top - z.bottom, o.top - o.bottom)
-        if ov > 0 and sm > 0 and ov / sm >= 0.25:
-          has[o.kind] = True
+    has = self.components(z)
     if (has[1] and has[2]) or (has[1] and has[3]) or (has[2] and has[3]):
       return "Composite"
     related = s.last_break_bar is not None and z.born >= s.last_break_bar - p.ob_lookback and z.born - s.last_break_bar <= p.poi_structure_window
@@ -131,7 +163,7 @@ class TradePlanSim(m.V21Pipeline):
       return "Displaced swing zone"
     if z.kind == 3 and z.cls == 1 and z.side == s.bias and fresh:
       return "Base-impulse zone"
-    if z.kind == 2 and z.side == s.bias and s.last_sweep_side == z.side and s.last_sweep_bar is not None and abs(z.born - s.last_sweep_bar) <= p.poi_structure_window:
+    if self.swept_imbalance(z):
       return "Swept imbalance"
     return "Candidate"
 
@@ -153,6 +185,12 @@ class TradePlanSim(m.V21Pipeline):
     for z in self.zones:
       if z.kind != 2 and z.side == -pool_side:
         levels.append((z.bottom if is_long else z.top, z.title))
+    if tp.ring_obstacles:
+      # v2.13: every unswept internal swing ahead is a room obstacle (the iBSL / iSSL intact test: no later bar traded through it)
+      for price, bar, side in self.lm.ring:
+        if side == pool_side and ((price > entry) if is_long else (price < entry)) and bar < i:
+          if all((s.h[k] <= price) if is_long else (s.l[k] >= price) for k in range(bar + 1, i + 1)):
+            levels.append((price, "iBSL" if is_long else "iSSL"))
     buffer = tp.target_buffer_atr * atr
     min_d, max_d = tp.min_rr * risk, tp.max_target_atr * atr
     next_only = tp.target_mode == "Next key level" or not enforce_min
@@ -171,6 +209,11 @@ class TradePlanSim(m.V21Pipeline):
     if enforce_min and next_only and best is not None and best_adj < min_d:
       best = None
     return best, best_name, best_level, nearest_ahead
+
+  def can_trigger(self, z, i):
+    """A zone can start a trade when it was first touched after it existed, within the trigger window. A swing zone drawn already tested
+    (first touch before its publication) is never a trigger: it was retested before the indicator showed it."""
+    return i > z.born and z.first_touch >= z.born and z.first_touch >= 0 and i - z.first_touch <= self.tp.trigger_bars
 
   # ---- per bar -----------------------------------------------------------
   def run(self):
@@ -241,37 +284,51 @@ class TradePlanSim(m.V21Pipeline):
     triggered = rejection if tp.trigger == "Rejection wick" else engulf if tp.trigger == "Engulfing" else (rejection or engulf)
     if not triggered:
       return
+    self.trigger_bars += 1
     eq = s.dealing_range()[2]
     best_rr, pick = 0.0, None
     saw_no_target = saw_bad_stop = False
+    deepest, deepest_reason = -1, None   # refusal histogram: the zone that got furthest through the checks decides the bar's reason
     for z in self.zones:
       allowed = tp.zone_kinds == "All qualified POIs" or (tp.zone_kinds == "Order blocks and supply/demand" and z.kind != 2) or (tp.zone_kinds == "Order blocks only" and z.kind == 1)
       if (z.born, z.top) in self.spent:
         continue
-      if not (allowed and z.side == s.bias and i > z.born and z.first_touch >= 0 and i - z.first_touch <= tp.trigger_bars):
+      if not (allowed and z.side == s.bias and self.can_trigger(z, i)):
         continue
       near = (c[i] - z.top <= tp.chase_atr * atr) if is_long else (z.bottom - c[i] <= tp.chase_atr * atr)
       on_side = c[i] > z.bottom if is_long else c[i] < z.top
       mid = (z.top + z.bottom) / 2.0
       pd_ok = (not tp.require_pd) or m.isna(eq) or (mid <= eq if is_long else mid >= eq)
-      if not (near and on_side and pd_ok):
-        continue
       path = self.poi_path(z, True)
+      # checks in the order of the histogram: not a POI, wrong premium/discount side, entry too far, stop limits, pip cap, no room
       if path == "Candidate":
-        continue
+        stage = 0
+      elif not pd_ok:
+        stage = 1
+      elif not (near and on_side):
+        stage = 2
+      else:
+        stage = -1
       stop = z.bottom - tp.stop_buffer_atr * atr if is_long else z.top + tp.stop_buffer_atr * atr
       risk = abs(c[i] - stop)
-      if not (tp.min_stop_atr * atr <= risk <= tp.max_stop_atr * atr):
-        saw_bad_stop = True
-        continue
-      target, name, level, nearest = self.key_target(i, is_long, c[i], risk)
-      if target is None:
-        saw_no_target = True
+      if stage < 0 and not (tp.min_stop_atr * atr <= risk <= tp.max_stop_atr * atr):
+        stage, saw_bad_stop = 3, True
+      if stage < 0 and tp.max_stop_pips > 0 and risk / tp.pip_size > tp.max_stop_pips + 1e-9:
+        stage = 4
+      if stage < 0:
+        target, name, level, nearest = self.key_target(i, is_long, c[i], risk)
+        if target is None:
+          stage, saw_no_target = 5, True
+      if stage >= 0:
+        if stage > deepest:
+          deepest, deepest_reason = stage, REFUSALS[stage]
         continue
       rr = abs(target - c[i]) / risk
       if rr > best_rr:
         best_rr, pick = rr, (z, stop, target, name, path, level, nearest)
     if pick is None:
+      reason = deepest_reason or "no zone touched"
+      self.refusals[reason] = self.refusals.get(reason, 0) + 1
       if saw_no_target:
         self.skipped["no_target"] += 1
       elif saw_bad_stop:
@@ -279,7 +336,7 @@ class TradePlanSim(m.V21Pipeline):
       return
     z, stop, target, name, path, level, nearest = pick
     self.spent.add((z.born, z.top))
-    self.open = Trade(s.bias, i, c[i], stop, target, z.title, (z.bottom, z.top), name, best_rr, path, raw_level=level, nearest_ahead=nearest)
+    self.open = Trade(s.bias, i, c[i], stop, target, z.title, (z.bottom, z.top), name, best_rr, path, raw_level=level, nearest_ahead=nearest, zone_born=z.born, zone_first_touch=z.first_touch)
 
   # ---- statistics --------------------------------------------------------
   def stats(self):
@@ -328,7 +385,17 @@ def preview(sim, i=None):
   risk = abs(entry - stop)
   if not (tp.min_stop_atr * atr <= risk <= tp.max_stop_atr * atr):
     return None
+  if tp.max_stop_pips > 0 and risk / tp.pip_size > tp.max_stop_pips + 1e-9:
+    return None
   target, name, level, nearest = sim.key_target(i, is_long, entry, risk, enforce_min=False)
   if target is None:
     return None
-  return dict(dir=s.bias, entry=entry, stop=stop, target=target, rr=abs(target - entry) / risk, zone=pick.title, target_name=name, edges=(pick.bottom, pick.top), nearest_ahead=nearest, raw_level=level)
+  rr = abs(target - entry) / risk
+  return dict(dir=s.bias, entry=entry, stop=stop, target=target, rr=rr, below_min=rr < tp.min_rr, zone=pick.title, target_name=name, edges=(pick.bottom, pick.top), nearest_ahead=nearest, raw_level=level)
+
+
+def v213_trade(**overrides):
+  """TradeParams of the v2.13 indicator (the Pine defaults)."""
+  kw = dict(ring_obstacles=True, max_stop_pips=70.0, asia_mode="engine")
+  kw.update(overrides)
+  return TradeParams(**kw)
