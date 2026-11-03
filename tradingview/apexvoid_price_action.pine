@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.16", "AV PA v2.16", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.16.1", "AV PA v2.16.1", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -27,7 +27,6 @@ float minLegATR = input.float(1.50, "Minimum external leg displacement (ATR)", m
 float confirmATR = input.float(0.15, "External confirmation threshold (ATR)", minval = 0, maxval = 1, step = 0.01, group = G1)
 float breakBuffer = input.float(0.00, "BOS/CHOCH close buffer (ATR)", minval = 0, maxval = 1, step = 0.01, group = G1)
 string protectedMode = input.string("Trailing (internal BOS)", "Protected level", options = ["Trailing (internal BOS)", "Last confirmed swing (v2.12)"], group = G1)
-bool showHistoricalMajor = input.bool(false, "Show historical major classifications", group = G1)
 bool showMajorLevels = input.bool(true, "Extend current major high / low", group = G1)
 bool showInternalSwing = input.bool(false, "Show internal structure", group = G1)
 bool showBreaks = input.bool(true, "Draw BOS / CHOCH", group = G1)
@@ -129,7 +128,7 @@ int maxStructureEvents = input.int(60, "Maximum BOS/CHoCH events", minval = 10, 
 int zoneMaxAge = input.int(600, "Zone maximum age (bars)", minval = 50, maxval = 5000, group = G6)
 bool showDashboard = input.bool(true, "Show Market Intelligence panel", group = G6)
 string textScaleInput = input.string("Standard", "Global text scale", options = ["Compact", "Standard", "Large"], group = G6)
-string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard", "Expanded"], group = G6)
+string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard"], group = G6)
 string dashboardPositionInput = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right"], group = G6)
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
@@ -140,7 +139,6 @@ int keyPerSide = input.int(3, "Key levels per side", minval = 1, maxval = 10, gr
 int keyWindowInput = input.int(0, "Key level window (bars, 0 = auto by timeframe)", minval = 0, maxval = 780, group = G7)
 float keyRoundInput = input.float(0.0, "Round step (price, 0 = auto: 5.0 on XAU, off otherwise)", minval = 0, step = 0.5, group = G7)
 bool showKeyBand = input.bool(false, "Show key level band", group = G7)
-bool showBrokenKeys = input.bool(false, "Show broken key levels", group = G7)
 color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
 
 bool showTradePlan = input.bool(true, "Track the trade plan (paper results in the panel; nothing is drawn on the chart)", group = G8)
@@ -166,7 +164,6 @@ int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
 int externalLength = sensitivity == "Manual" ? manualExternal : chartSecs <= 300 ? 12 : chartSecs <= 900 ? 16 : chartSecs <= 3600 ? 20 : chartSecs <= 14400 ? 24 : 30
 float atr = ta.atr(14)
-float keyAtr = ta.sma(ta.tr, 14)   // the engine's canonical ATR is the plain mean of 14 true ranges, not Wilder's
 int keyWindow = keyWindowInput > 0 ? keyWindowInput : chartSecs <= 300 ? 150 : chartSecs <= 900 ? 250 : 400
 bool isGold = str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")
 float keyStep = keyRoundInput > 0 ? keyRoundInput : isGold ? 5.0 : 0.0
@@ -182,10 +179,6 @@ float internalHigh = ta.pivothigh(high, internalLength, internalLength)
 float internalLow = ta.pivotlow(low, internalLength, internalLength)
 bool newInternalHigh = barstate.isconfirmed and not na(internalHigh)
 bool newInternalLow = barstate.isconfirmed and not na(internalLow)
-float externalHigh = ta.pivothigh(high, externalLength, externalLength)
-float externalLow = ta.pivotlow(low, externalLength, externalLength)
-bool newExternalHigh = barstate.isconfirmed and not na(externalHigh)
-bool newExternalLow = barstate.isconfirmed and not na(externalLow)
 bool minimalMode = displayProfile == "Minimal"
 bool balancedMode = displayProfile == "Balanced — Recommended"
 bool detailedMode = displayProfile == "Detailed"
@@ -209,13 +202,13 @@ string tier2Size = compactText ? size.small : size.normal
 string tier3Size = compactText ? size.tiny : largeText ? size.normal : size.small
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.
-string dashboardTitleSize = dashboardDensity == "Expanded" ? size.large : dashboardDensity == "Compact" ? size.small : size.normal
-string dashboardValueSize = dashboardDensity == "Expanded" ? size.normal : size.small
+string dashboardTitleSize = dashboardDensity == "Compact" ? size.small : size.normal
+string dashboardValueSize = size.small
 string dashboardSectionSize = size.small
 float primaryLabelOffsetATR = compactText ? 0.16 : largeText ? 0.30 : 0.22
 float structureLabelOffsetATR = compactText ? 0.14 : largeText ? 0.26 : 0.19
-float dashboardKeyWidth = dashboardDensity == "Compact" ? 6.0 : dashboardDensity == "Expanded" ? 9.0 : 7.0
-float dashboardValueWidth = dashboardDensity == "Compact" ? 9.0 : dashboardDensity == "Expanded" ? 14.0 : 11.0
+float dashboardKeyWidth = dashboardDensity == "Compact" ? 6.0 : 7.0
+float dashboardValueWidth = dashboardDensity == "Compact" ? 9.0 : 11.0
 // Zero delegates row height to TradingView's text-fit sizing.
 float dashboardRowHeight = 0.0
 string dashboardPosition = dashboardPositionInput == "Top Left" ? position.top_left : dashboardPositionInput == "Bottom Right" ? position.bottom_right : position.top_right
@@ -457,7 +450,6 @@ var int developingLowBar = na
 var line developingLine = na
 var line activeLegLine = na
 var line protectedLine = na
-var string invalidatedText = "—"
 
 var float lastInternalHigh = na
 var float previousInternalHigh = na
@@ -579,10 +571,10 @@ f_extremeSince(int fromBar, bool wantHigh, bool inclusive) =>
                 array.set(extOut, 1, (bar_index - k) * 1.0)
     0
 
-f_ringPush(float[] ring, int bar, float price, int cap) =>
+f_ringPush(float[] ring, int bar, float price) =>
     array.push(ring, bar * 1.0)
     array.push(ring, price)
-    if array.size(ring) > cap
+    if array.size(ring) > 16
         array.shift(ring)
         array.shift(ring)
     0
@@ -601,14 +593,6 @@ f_ringPick(float[] ring, int afterBar, int uptoBar) =>
         k -= 2
     0
 
-// v2.16 key levels: every fractal pivot (2 bars each side) as [bar, price]; nothing else is stored per bar.
-float keyPivotHigh = ta.pivothigh(high, 2, 2)
-float keyPivotLow = ta.pivotlow(low, 2, 2)
-var float[] keyRing = array.new_float(0)
-if barstate.isconfirmed and not na(keyPivotHigh)
-    f_ringPush(keyRing, bar_index - 2, keyPivotHigh, 320)
-if barstate.isconfirmed and not na(keyPivotLow)
-    f_ringPush(keyRing, bar_index - 2, keyPivotLow, 320)
 var line[] keyLines = array.new_line()
 var box[] keyBoxes = array.new_box()
 
@@ -634,7 +618,7 @@ if newInternalHigh
     previousInternalHigh := lastInternalHigh
     lastInternalHigh := internalHigh
     lastInternalHighBar := bar_index - internalLength
-    f_ringPush(ihRing, lastInternalHighBar, internalHigh, 16)
+    f_ringPush(ihRing, lastInternalHighBar, internalHigh)
     internalHighBroken := false
     if showInternal
         float tolerance = nz(atr[internalLength], atr) * equalTolerance
@@ -645,7 +629,7 @@ if newInternalLow
     previousInternalLow := lastInternalLow
     lastInternalLow := internalLow
     lastInternalLowBar := bar_index - internalLength
-    f_ringPush(ilRing, lastInternalLowBar, internalLow, 16)
+    f_ringPush(ilRing, lastInternalLowBar, internalLow)
     internalLowBroken := false
     if showInternal
         float tolerance = nz(atr[internalLength], atr) * equalTolerance
@@ -705,10 +689,6 @@ float pubHighPrice = na
 int pubHighBar = na
 float pubHighCounter = na
 int pubHighCounterBar = na
-if debugMode and newExternalHigh
-    f_eventLabel(bar_index - externalLength, externalHigh, "xEH", bearColor, true)
-if debugMode and newExternalLow
-    f_eventLabel(bar_index - externalLength, externalLow, "xEL", bullColor, false)
 if barstate.isconfirmed and not na(atr)
     f_dispStep(externalCandidateType)
     int dispKind = int(array.get(dispOut, 0))
@@ -745,12 +725,7 @@ if pubLow
     developingLow := na
     developingLowBar := na
     currentMajorLowLine := f_majorLine(currentMajorLowLine, pubLowBar, pubLowPrice, bullColor)
-    if minimalMode or not showHistoricalMajor
-        currentMajorLowTag := f_majorTag(currentMajorLowTag, pubLowBar, pubLowPrice, true, bullColor)
-    else if showHistoricalMajor
-        float tolerance = nz(atr[externalLength], atr) * equalTolerance
-        string swingText = f_swingText(pubLowPrice, previousSwingLow, tolerance, "M SL", "M EQL", "M HL", "M LL")
-        f_eventLabel(pubLowBar, pubLowPrice, swingText, bullColor, false)
+    currentMajorLowTag := f_majorTag(currentMajorLowTag, pubLowBar, pubLowPrice, true, bullColor)
 
 if pubHigh
     previousSwingHigh := lastSwingHigh
@@ -770,12 +745,7 @@ if pubHigh
     developingHigh := na
     developingHighBar := na
     currentMajorHighLine := f_majorLine(currentMajorHighLine, pubHighBar, pubHighPrice, bearColor)
-    if minimalMode or not showHistoricalMajor
-        currentMajorHighTag := f_majorTag(currentMajorHighTag, pubHighBar, pubHighPrice, false, bearColor)
-    else if showHistoricalMajor
-        float tolerance = nz(atr[externalLength], atr) * equalTolerance
-        string swingText = f_swingText(pubHighPrice, previousSwingHigh, tolerance, "M SH", "M EQH", "M HH", "M LH")
-        f_eventLabel(pubHighBar, pubHighPrice, swingText, bearColor, true)
+    currentMajorHighTag := f_majorTag(currentMajorHighTag, pubHighBar, pubHighPrice, false, bearColor)
 
 if showMajorLevels
     if not na(currentMajorHighLine)
@@ -900,7 +870,6 @@ if upBreak
     bool initialBreak = bias == 0
     bool choch = protectedUpBreak or (bias == -1 and not na(protectedHigh))
     if choch
-        invalidatedText := "High · " + f_px(protectedHigh)
     upCHOCH := choch
     upBOS := not choch
     if showBreaks
@@ -932,7 +901,6 @@ else if downBreak
     bool initialBreak = bias == 0
     bool choch = protectedDownBreak or (bias == 1 and not na(protectedLow))
     if choch
-        invalidatedText := "Low · " + f_px(protectedLow)
     downCHOCH := choch
     downBOS := not choch
     if showBreaks
@@ -1643,7 +1611,6 @@ if showOB and barstate.isconfirmed and not na(atr)
 // edge means the zone is dead: it is not added. A touch means it is drawn already Tested (first touch, measured depth): never Fresh, never actionable and
 // never a trade trigger, because it was retested before the indicator showed it.
 var float[] scanOut = array.new_float(3, 0.0)   // [closed through (0/1), first touching bar or -1, deepest penetration 0..1]
-var int[] sdCounters = array.new_int(1, 0)      // [swing supply/demand candidates refused]
 
 f_swingScan(int side, float top, float bottom, int majorBar) =>
     array.set(scanOut, 0, 0.0)
@@ -1668,9 +1635,7 @@ f_swingScan(int side, float top, float bottom, int majorBar) =>
 f_addSwingZone(int side, float top, float bottom, int majorBar, string title, color tone) =>
     int drawn = 0
     f_swingScan(side, top, bottom, majorBar)
-    if array.get(scanOut, 0) == 1.0
-        array.set(sdCounters, 0, array.get(sdCounters, 0) + 1)
-    else
+    if array.get(scanOut, 0) != 1.0
         drawn := f_addZone(majorBar, top, bottom, side, 3, title, tone, 0, "")
         if drawn == 1 and array.get(scanOut, 1) >= 0
             int newest = array.size(zones) - 1
@@ -1698,9 +1663,6 @@ if showSD and newMajorHigh
         if majorHighPrice - majorHighCounter >= atrAtSwing * sdDepartureATR
             f_addSwingZone(-1, majorHighPrice, lower, majorHighBar, "Supply", supplyColor)
             bearSD := true
-
-if showSD and (newMajorLow or newMajorHigh) and not bullSD and not bearSD
-    array.set(sdCounters, 0, array.get(sdCounters, 0) + 1)
 
 // ------- BASE-AND-IMPULSE SUPPLY / DEMAND (DBR / RBR / RBD / DBD) -------
 // A base is 1..N consecutive small candles. A zone exists once price leaves the base
@@ -1839,13 +1801,10 @@ bool rawBullFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and low > 
 bool rawBearFVG = barstate.isconfirmed and showFVG and bar_index >= 2 and high < low[2]
 bool bullFVG = rawBullFVG and close[1] > open[1] and low - high[2] >= atr * (engineFvg ? fvgEngineATR : minGapATR) and fvgBodyOk
 bool bearFVG = rawBearFVG and close[1] < open[1] and low[2] - high >= atr * (engineFvg ? fvgEngineATR : minGapATR) and fvgBodyOk
-var int rejectedFVGCount = 0
 if bullFVG
     f_addZone(bar_index - 2, low, high[2], 1, 2, "Bull FVG", bullFvgColor, 0, "")
 if bearFVG
     f_addZone(bar_index - 2, low[2], high, -1, 2, "Bear FVG", bearFvgColor, 0, "")
-if (rawBullFVG and not bullFVG) or (rawBearFVG and not bearFVG)
-    rejectedFVGCount += 1
 
 // Named POI qualification path of zone i ("Candidate" = not qualified). Used by the display
 // pass and by the trade plan so a trade can only start from a zone that is marked as a POI.
@@ -2026,9 +1985,6 @@ int activeFVG = 0
 int activeSD = 0
 int activeBaseSD = 0
 int visibleBaseSD = 0
-int qualifiedPoiCount = 0
-int hiddenDistanceCount = 0
-int hiddenRankingCount = 0
 int activeBullOB = 0
 int activeBearOB = 0
 int visibleBullOB = 0
@@ -2036,8 +1992,6 @@ int visibleBearOB = 0
 int hiddenOBFar = 0
 int hiddenOBOverlap = 0
 int hiddenOBBudget = 0
-var int invalidatedZoneCount = 0
-var int agedZoneCount = 0
 
 if array.size(zones) > 0
     // Lifecycle pass. Analytical state survives visual suppression.
@@ -2063,8 +2017,6 @@ if array.size(zones) > 0
             bool invalid = kind == 2 ? fvgInvalid : kind == 1 ? (farClose or obMitigated) : farClose
             bool agedOut = bar_index - born > zoneMaxAge
             if invalid or agedOut
-                invalidatedZoneCount += invalid ? 1 : 0
-                agedZoneCount += agedOut and not invalid ? 1 : 0
                 if kind == 1
                     int endStat = farClose ? 5 : invalid ? 4 : 6
                     f_inc(obStats, endStat)
@@ -2304,13 +2256,9 @@ if array.size(zones) > 0
             bool auditBase = auditKind == 3 and array.get(zoneClasses, i) == 1
             activeBaseSD += auditBase ? 1 : 0
             visibleBaseSD += auditBase and array.get(zoneVisible, i) ? 1 : 0
-            qualifiedPoiCount += array.get(zonePoi, i) ? 1 : 0
             float auditMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
             float auditDistance = math.abs(close - auditMid) / math.max(atr, syminfo.mintick)
             bool withinDistance = debugMode or (auditDistance <= (auditKind == 1 ? effObDistanceATR : effZoneDistanceATR) and f_scaleOk(auditMid))
-            if not array.get(zoneVisible, i)
-                hiddenDistanceCount += withinDistance ? 0 : 1
-                hiddenRankingCount += withinDistance ? 1 : 0
             if auditKind == 1
                 int auditSide = array.get(zoneSides, i)
                 bool auditVisible = array.get(zoneVisible, i)
@@ -2874,9 +2822,11 @@ f_emitCluster(int[] members, int slot) =>
         label.set_tooltip(existing, tip)
     slot + 1
 
-// ------- KEY LEVELS (analysis-engine keylevel.Cluster / Role, dimmed) -------
-// Levels are [price, touches, round] strides. Reaction clusters: sorted swings join while within tol of the cluster's lowest member (that is every member, and
-// the span <= 2 tol test is implied); round levels need 2 swings within max(tol, 0.25 ATR); levels within tol merge. A level is broken after 2 closes beyond its band.
+// ------- KEY LEVELS (LegacyFrame.SwingLevels of the key_level strategy, dimmed) -------
+// Computed on the last bar from the last keyWindow CLOSED bars: the window's own ATR series (mean of up to 14 true ranges), fractal candidates (2 bars each side) through the
+// zigzag filter (a move of at least the ATR at the swing), clusters within 0.5 x the median ATR of the window (joined while within tol of the lowest member, which implies the
+// span <= 2 tol test), round levels (2+ swings within max(tol, 0.25 ATR at the swing)), levels within tol merged. Levels are [price, touches, round] strides, swings
+// [window index, price, +1 high / -1 low] strides.
 f_keyAdd(float[] lv, float[] pr, float price, int touches, float kind) =>
     array.push(pr, price)
     array.push(lv, price)
@@ -2884,28 +2834,57 @@ f_keyAdd(float[] lv, float[] pr, float price, int touches, float kind) =>
     array.push(lv, kind)
     0
 
+f_zig(float[] sw, float[] av, int c, float p, float k) =>
+    int n = array.size(sw)
+    if n > 0 and array.get(sw, n - 1) == k
+        if (k > 0 ? p > array.get(sw, n - 2) : p < array.get(sw, n - 2))
+            array.set(sw, n - 3, c * 1.0)
+            array.set(sw, n - 2, p)
+    else if n == 0 or math.abs(p - array.get(sw, n - 2)) >= array.get(av, c)
+        array.push(sw, c * 1.0)
+        array.push(sw, p)
+        array.push(sw, k)
+    0
+
 f_keyLevels() =>
     while array.size(keyLines) > 0
         line.delete(array.pop(keyLines))
     while array.size(keyBoxes) > 0
         box.delete(array.pop(keyBoxes))
-    float[] px = array.new_float()
-    float tol = keyAtr * 0.5
-    if showKeyLevels and not na(keyAtr) and array.size(keyRing) > 0
-        for k = 0 to int(array.size(keyRing) / 2) - 1
-            if array.get(keyRing, k * 2) >= bar_index - keyWindow + 3
-                array.push(px, array.get(keyRing, k * 2 + 1))
-    int n = array.size(px)
-    if n > 0
+    int lastOff = barstate.isconfirmed ? 0 : 1
+    int w = math.min(keyWindow, bar_index + 1 - lastOff)
+    float[] ranges = array.new_float()
+    float[] av = array.new_float()
+    float[] sw = array.new_float()
+    if showKeyLevels and w >= 5
+        for i = 0 to w - 1
+            int o = lastOff + w - 1 - i
+            array.push(ranges, i == 0 ? high[o] - low[o] : math.max(high[o] - low[o], math.max(math.abs(high[o] - close[o + 1]), math.abs(low[o] - close[o + 1]))))
+            int lo = math.max(0, i - 13)
+            float s14 = 0.0
+            for j = lo to i
+                s14 += array.get(ranges, j)
+            array.push(av, s14 / (i - lo + 1))
+            if i >= 4
+                if high[o + 2] >= high[o + 1] and high[o + 2] >= high[o] and high[o + 2] > high[o + 3] and high[o + 2] > high[o + 4]
+                    f_zig(sw, av, i - 2, high[o + 2], 1.0)
+                if low[o + 2] <= low[o + 1] and low[o + 2] <= low[o] and low[o + 2] < low[o + 3] and low[o + 2] < low[o + 4]
+                    f_zig(sw, av, i - 2, low[o + 2], -1.0)
+    int ns = int(array.size(sw) / 3)
+    if ns > 0
+        float tol = array.median(av) * 0.5
+        float[] px = array.new_float()
+        for k = 0 to ns - 1
+            array.push(px, array.get(sw, k * 3 + 1))
         float[] lv = array.new_float()
         float[] pr = array.new_float()
         int[] ord = array.sort_indices(px, order.ascending)
         int q = 0
-        while q < n
+        while q < ns
             float start = array.get(px, array.get(ord, q))
             float sum = 0.0
             int cnt = 0
-            while q < n and array.get(px, array.get(ord, q)) - start <= tol
+            while q < ns and array.get(px, array.get(ord, q)) - start <= tol
                 sum += array.get(px, array.get(ord, q))
                 cnt += 1
                 q += 1
@@ -2913,33 +2892,35 @@ f_keyLevels() =>
                 f_keyAdd(lv, pr, sum / cnt, cnt, 0.0)
         if keyStep > 0
             float lowStep = math.floor(array.get(px, array.get(ord, 0)) / keyStep) * keyStep
-            for s = 0 to int((math.ceil(array.get(px, array.get(ord, n - 1)) / keyStep) * keyStep - lowStep) / keyStep)
+            for s = 0 to int((math.ceil(array.get(px, array.get(ord, ns - 1)) / keyStep) * keyStep - lowStep) / keyStep)
                 float rp = lowStep + s * keyStep
                 int rt = 0
-                for k = 0 to n - 1
-                    rt += math.abs(array.get(px, k) - rp) <= math.max(tol, keyAtr * 0.25) ? 1 : 0
+                for k = 0 to ns - 1
+                    rt += math.abs(array.get(px, k) - rp) <= math.max(tol, array.get(av, int(array.get(sw, k * 3))) * 0.25) ? 1 : 0
                 if rt >= 2
                     f_keyAdd(lv, pr, rp, rt, 1.0)
         float[] fin = array.new_float()
         float[] gap = array.new_float()
+        float lastClose = close[lastOff]
         if array.size(pr) > 0
             int[] ord2 = array.sort_indices(pr, order.ascending)
             for k = 0 to array.size(pr) - 1
                 int i = array.get(ord2, k) * 3
-                int w = array.size(fin) - 3
-                if w >= 0 and math.abs(array.get(fin, w) - array.get(lv, i)) <= tol
-                    if array.get(lv, i + 1) > array.get(fin, w + 1)
-                        array.set(fin, w + 2, array.get(lv, i + 2))
-                    array.set(fin, w, (array.get(fin, w) + array.get(lv, i)) / 2.0)
-                    array.set(fin, w + 1, math.max(array.get(fin, w + 1), array.get(lv, i + 1)))
+                int d = array.size(fin) - 3
+                if d >= 0 and math.abs(array.get(fin, d) - array.get(lv, i)) <= tol
+                    if array.get(lv, i + 1) > array.get(fin, d + 1)
+                        array.set(fin, d + 2, array.get(lv, i + 2))
+                    array.set(fin, d, (array.get(fin, d) + array.get(lv, i)) / 2.0)
+                    array.set(fin, d + 1, math.max(array.get(fin, d + 1), array.get(lv, i + 1)))
                 else
                     for z = 0 to 2
                         array.push(fin, array.get(lv, i + z))
             for k = 0 to int(array.size(fin) / 3) - 1
-                array.push(gap, math.abs(array.get(fin, k * 3) - close))
-        // nearest first; a level is eligible unless broken (2 closes beyond its band) or outside the candle-scale window; at most keyPerSide per side
+                array.push(gap, math.abs(array.get(fin, k * 3) - lastClose))
+        // nearest first, at most keyPerSide per side inside the candle-scale window; no level is hidden for being broken
         int up = 0
         int down = 0
+        float clusterRange = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 36.0)
         if array.size(gap) > 0
             int[] near = array.sort_indices(gap, order.ascending)
             for k = 0 to array.size(gap) - 1
@@ -2947,31 +2928,38 @@ f_keyLevels() =>
                 float p = array.get(fin, j * 3)
                 float touches = array.get(fin, j * 3 + 1)
                 bool isRound = array.get(fin, j * 3 + 2) > 0
-                int run = 0
-                while run < keyWindow and (p > close ? close[run] < p - tol : close[run] > p + tol)
-                    run += 1
-                if (showBrokenKeys or run < 2) and f_scaleOk(p) and (p > close ? up : down) < keyPerSide
-                    up += p > close ? 1 : 0
-                    down += p > close ? 0 : 1
-                    string role = run >= 2 ? (p > close ? "broken support" : "broken resistance") : p > close ? "resistance (price below)" : "support (price above)"
-                    string tip = "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(touches, "0") + " touches · " + role
-                    // a stronger object within the band wins: the level is not drawn, and a right-column object carries its note
-                    bool solid = math.abs(lastSwingHigh - p) <= tol or math.abs(lastSwingLow - p) <= tol
-                    if array.size(zones) > 0
-                        for i = 0 to array.size(zones) - 1
-                            solid := solid or (array.get(zoneVisible, i) and (math.abs(array.get(zoneTops, i) - p) <= tol or math.abs(array.get(zoneBottoms, i) - p) <= tol))
+                bool above = p > lastClose
+                if f_scaleOk(p) and (above ? up : down) < keyPerSide
+                    up += above ? 1 : 0
+                    down += above ? 0 : 1
+                    int run = 0
+                    while run < w and (above ? close[lastOff + run] < p - tol : close[lastOff + run] > p + tol)
+                        run += 1
+                    int nh = 0
+                    int nl = 0
+                    int first = w
+                    for m = 0 to ns - 1
+                        if math.abs(array.get(px, m) - p) <= tol
+                            nh += array.get(sw, m * 3 + 2) > 0 ? 1 : 0
+                            nl += array.get(sw, m * 3 + 2) > 0 ? 0 : 1
+                            first := math.min(first, int(array.get(sw, m * 3)))
+                    bool inPlay = run < 2
+                    bool flipped = (nh > nl and not above) or (nl > nh and above)
+                    string tip = "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(touches, "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · flipped (formed as " + (above ? "support" : "resistance") + ")" : "") + (inPlay ? " · key_level can trade this level now" : "") + " · key_level definition (SwingLevels), window " + str.tostring(w)
+                    int leftBar = math.max(bar_index - lastOff - w + 1 + (first < w ? first : 0), bar_index - maxDrawBars)
+                    array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, inPlay ? 45 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
+                    if showKeyBand
+                        array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
+                    // only the caption yields: a stronger right-column label within a label height carries the note, else the level gets its own caption
+                    bool carried = false
                     if array.size(rlY) > 0
-                        for i = 0 to array.size(rlY) - 1
-                            if math.abs(array.get(rlY, i) - p) <= tol and str.contains("|80|35|60|62|45|", "|" + str.tostring(array.get(rlPriority, i)) + "|")
-                                solid := true
-                                array.set(rlText, i, str.replace_all(array.get(rlText, i), " ·KL", "") + " ·KL")
-                                array.set(rlTip, i, array.get(rlTip, i) + "\n" + tip)
-                    if not solid
-                        int leftBar = bar_index - math.min(keyWindow, maxDrawBars)
-                        array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, run >= 2 ? 88 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
-                        if showKeyBand
-                            array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
-                        f_regLabel(p, isRound ? "R " + f_px(p) : "KL×" + str.tostring(touches, "0"), keyColor, 30, tip, 4, 3)
+                        for r = 0 to array.size(rlY) - 1
+                            if math.abs(array.get(rlY, r) - p) <= clusterRange and str.contains("|80|35|60|62|45|", "|" + str.tostring(array.get(rlPriority, r)) + "|")
+                                carried := true
+                                array.set(rlText, r, str.replace_all(array.get(rlText, r), " ·KL", "") + " ·KL")
+                                array.set(rlTip, r, array.get(rlTip, r) + "\n" + tip)
+                    if not carried
+                        f_regLabel(p, (isRound ? "KL " + str.tostring(math.round(p / keyStep) * keyStep, "#.##") : "KL×" + str.tostring(touches, "0")) + (inPlay ? " ●" : ""), keyColor, 30, tip, 4, inPlay ? 2 : 3)
     0
 
 if barstate.islast
@@ -3059,10 +3047,7 @@ f_renderPanel() =>
         string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
         string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + f_cnt(sdStats, 0) + " · duplicate " + f_cnt(sdStats, 5) + " · retired by cap " + f_cnt(sdStats, 6) + "\nRejected: weak departure " + f_cnt(sdStats, 1) + " · no impulse " + f_cnt(sdStats, 2) + " · closed back " + f_cnt(sdStats, 3) + " · pattern filter " + f_cnt(sdStats, 4) + "\n" + sdLastText
         string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + f_px(nearestBslPrice) + (nearestBslShown ? "" : "*")) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + f_px(nearestSslPrice) + (nearestSslShown ? "" : "*"))
-        string auditText = "POI " + str.tostring(qualifiedPoiCount) + " · far " + str.tostring(hiddenDistanceCount) + " · ranked " + str.tostring(hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount) + " · filter O/F/S " + f_cnt(obStats, 1) + "/" + str.tostring(rejectedFVGCount) + "/" + f_cnt(sdCounters, 0)
-        string auditShort = "POI " + str.tostring(qualifiedPoiCount) + " · hidden " + str.tostring(hiddenDistanceCount + hiddenRankingCount) + " · retired " + str.tostring(invalidatedZoneCount + agedZoneCount)
         bool compactPanel = dashboardDensity == "Compact"
-        bool expandedPanel = dashboardDensity == "Expanded"
         bool nearestBullIsActionable = actionableBullPoi and math.abs(nearestBullPoi - nearestActionableBullPoi) <= syminfo.mintick
         bool nearestBearIsActionable = actionableBearPoi and math.abs(nearestBearPoi - nearestActionableBearPoi) <= syminfo.mintick
         string bullPoiDisplay = na(nearestBullPoi) ? "—" : compactPanel ? f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D") : nearestBullPoiText
@@ -3098,7 +3083,7 @@ f_renderPanel() =>
         if array.size(tradeLog) > 0
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.16", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.16.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         if compactPanel
             f_key(2, "Bias")
@@ -3150,9 +3135,6 @@ f_renderPanel() =>
             color internalTone = str.startswith(lastInternalBreak, "Bull") ? bullColor : str.startswith(lastInternalBreak, "Bear") ? bearColor : color.silver
             f_key(11, "Last Internal Break")
             f_val(11, lastInternalBreak + internalAge, internalTone, na(lastInternalBreakTime) ? "No internal break yet" : "Internal break at " + f_time(lastInternalBreakTime) + " (chart time zone). Internal structure never changes the external bias.")
-            if expandedPanel
-                f_key(25, "Invalidated Level")
-                f_val(25, invalidatedText, color.new(color.silver, 18), "")
             f_head(12, "PRICE ACTION")
             f_key(13, "Nearest Bullish POI")
             f_val(13, bullPoiDisplay, bullColor, nearestBullPoiText)
@@ -3171,9 +3153,6 @@ f_renderPanel() =>
             f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)
             f_key(24, "Supply / Demand")
             f_val(24, sdSummary, color.white, sdTooltip)
-            if expandedPanel
-                f_key(26, "Zone Audit")
-                f_val(26, auditShort, color.new(color.white, 12), auditText)
     0
 
 if barstate.islast

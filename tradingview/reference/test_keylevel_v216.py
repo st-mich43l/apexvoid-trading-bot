@@ -1,4 +1,4 @@
-"""v2.16 key levels: the Python port against the Go keylevel package, and the Pine algorithm (simplified clustering, stride arrays) against the port.
+"""The v2.16 keylevel.Cluster port (a second, labelled reference since v2.16.1: the strategy reads SwingLevels, see test_keylevel_v2161.py): the Python port against the Go keylevel package, and the Pine algorithm (simplified clustering, stride arrays) against the port.
 
 The expected list comes from the committed golden tradingview/reference/fixtures/keylevel-golden-scalpwindow-m5.json, which analysis-engine/test/keylevelgolden prints
 from keylevel.Cluster / keylevel.Role on the same bars (and which that Go test keeps honest).

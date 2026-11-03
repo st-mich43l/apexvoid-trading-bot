@@ -65,6 +65,8 @@ type golden struct {
 	Levels         []levelRow `json:"levels"`
 	// StrategyLevels is what the live key_level strategy reads for the same window (legacyread: zigzag-filtered fractals, median ATR, no wick re-count).
 	StrategyLevels []levelRow `json:"strategy_levels"`
+	// StrategySwings are the zigzag-filtered fractals those levels are built from (techniquezone.FindSwings), with absolute bar indices.
+	StrategySwings []swingRow `json:"strategy_swings"`
 }
 
 // fractals mirrors techniquezone.fractalCandidates without the zigzag filter: the left bars strictly lower, the right bars not higher.
@@ -159,6 +161,9 @@ func build(t *testing.T) golden {
 	atrWindow := techniquezone.ATRSeries(bars, lr.ATRLength)
 	g.MedianATR = techniquezone.ATRScalar(atrWindow, 1)
 	legacySwings := techniquezone.FindSwings(bars, lr.FractalN, lr.ZigzagPct, lr.ZigzagATRMult, atrWindow, -1)
+	for _, sw := range legacySwings {
+		g.StrategySwings = append(g.StrategySwings, swingRow{Bar: sw.Index + offset, Time: bars[sw.Index].Time, Kind: sw.Kind, Price: sw.Price})
+	}
 	for _, l := range techniquezone.KeyLevels(legacySwings, atrWindow, lr.LevelClusterATR, lr.RoundStep, lr.LevelMinimumTouches, lr.MaximumClusterSpanMultiple, nil) {
 		tolerance := g.MedianATR * lr.LevelClusterATR
 		band := l.Band

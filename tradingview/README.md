@@ -173,18 +173,21 @@ frame, and this script has no room for even one. The row, its inputs and the `ch
 (it used a different algorithm and could contradict the HTF chart). The aligned multi-frame view is specified and verified in the model (`reference/mtf.py`,
 `reference/test_mtf_v214.py`, `reference/report_v214.py`) for a small companion indicator that carries only the structure algorithm.
 
-### Key levels (v2.16)
+### Key levels (v2.16.1)
 
-The layer shows the levels the engine's `key_level` strategy is built on, dimmed and behind every other object. It is a port of `analysis-engine/internal/keylevel` (`Cluster`, `Role`) with
-`analysis.key_levels` (cluster 0.5 ATR, round step 5, minimum 2 touches, span cap 2 x tolerance) and `analysis.strategies.key_level` (`breakout_accept_bars` 2):
+The layer shows the levels the engine's `key_level` strategy trades, dimmed and behind every other object. v2.16 ported `keylevel.Cluster`, which is **not** what the strategy reads;
+v2.16.1 computes `LegacyFrame.SwingLevels` (the `profit_week` contract): `legacyread.Stage` -> `techniquezone.FindSwings` -> `techniquezone.KeyLevels`
+(`analysis.legacy_read`: window M5 150 / M15 250 / otherwise 400, `fractal_n` 2, `zigzag_atr_mult` 1.0; `level`: cluster 0.5 ATR, round step 5, 2 touches, span 2 x tolerance).
 
-- **Swings:** raw fractal pivots (2 bars each side) of the chart frame inside the last `Key level window` bars (auto: <= 5m 150, <= 15m 250, otherwise 400 = the engine's detection windows); only the pivot ring is stored, and everything is computed on the last bar (nothing repaints, no per-bar history).
-- **Reaction levels:** swings sorted by price join a cluster while within 0.5 ATR of every member; clusters with 2+ swings become levels (price = mean, touches = members). **Round levels:** every multiple of `Round step` (auto 5.0 on XAU, off elsewhere) with 2+ swings within max(0.5, 0.25) ATR. Levels within 0.5 ATR merge (kind of the one with strictly more touches).
-- **ATR** here is the engine's: the plain mean of 14 true ranges (`ta.sma(ta.tr, 14)`), not Wilder's `ta.atr`, which is about 3 % smaller.
-- **Role:** a level is *broken* when the last 2 closes lie beyond its band (the engine's `Role`; for the engine's reaction / round kinds there is no explicit side, so a level above price whose last 2 closes are below its band is "broken support", and vice versa). Otherwise it is resistance above price, support below (the engine decides by side). Broken levels are hidden unless `Show broken key levels` is on, where they draw at transparency 88. **Because the engine's role is a closed-bar test, almost every level away from the current price is "broken"; the default view therefore shows only the levels price is at or touching.**
-- **Look:** width-1 dotted line (dashed for a round level), `Key level colour`; transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; from the window's left edge (capped by `Maximum drawn length`) to the end of the gutter; optional band at transparency 95.
-- **Anti-crowding, in this order:** inside the candle-scale window; at most `Key levels per side` (3) each side, nearest first; a level within its band of a stronger object (the protected level, an active pool edge, EQ, a visible zone edge, MAJOR HIGH/LOW) is **not drawn** and, where that object has a right-column label, the label gets a muted ` ·KL` suffix and a tooltip line; key-level captions sit in their own right-column category and merge only with each other. Nothing is drawn on the candles.
-- **Not the same as the strategy's own list:** the strategy reads `SwingLevels` (zigzag-filtered fractals, the median ATR of the window), this layer reads `keylevel.Cluster` (raw fractals, the last ATR). On the committed 3 Nov capture 8 of 11 levels coincide (see `reference/test_keylevel_v216.py`). The engine's wick-touch re-count is not shown (it needs every bar).
+- **When:** on the last bar, from the last `Key level window` CLOSED bars (the forming bar is left out in real time), so levels do not flicker; only the chart's last bar recomputes and nothing is stored per bar.
+- **ATR:** the window's own series: the mean of the last (up to) 14 true ranges, the first bar's true range being high - low; the cluster tolerance is 0.5 x the **median** of that series. This is the engine's plain mean, not Wilder's `ta.atr`.
+- **Swings:** fractal candidates (2 bars each side; the left bars strictly lower, the right bars not higher) through the **zigzag filter**: a candidate of the same kind as the last kept swing replaces it when more extreme; an opposite one is kept only if the move is at least the ATR at its own bar.
+- **Levels:** swings sorted by price join a cluster while within the tolerance of the lowest member (equal to "within tolerance of every member", and it implies the 2 x tolerance span cap); clusters of 2+ become reaction levels (price = mean). Round levels: every multiple of `Round step` (auto 5.0 on XAU, off elsewhere) with 2+ swings within max(tolerance, 0.25 x the ATR at the swing). Levels within the tolerance merge (price averaged, touches = max, kind of the one with strictly more touches). No wick re-count (the strategy has none).
+- **Side and origin, not "broken":** above price = resistance, below = support. The swings within the tolerance say where the level formed (majority highs = as resistance, majority lows = as support). A level whose origin is opposite to its side is **flipped** (`flipped (formed as support)`) and is still drawn. v2.16 hid the "broken" levels of the engine's `Role`; that is a decision-time test (a level price is not touching is always "broken"), so it was the wrong display filter: it hid 10 of 11 levels on the 3 Nov capture.
+- **In play:** the engine's `Role` is not broken (the last 2 closes are not both beyond the band): `key_level` can trade the level now. Drawn at transparency 45, caption `KL×3 ●` in the larger tier-2 size (Pine cannot switch bold at run time), tooltip `key_level can trade this level now`.
+- **Look:** width-1 dotted line (dashed for a round level), `Key level colour`; transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; from the earliest swing within the tolerance (capped by `Maximum drawn length`) to the end of the gutter; optional band at transparency 95.
+- **Anti-crowding:** inside the candle-scale window, at most `Key levels per side` (3) nearest levels each side, each **always drawn**. Only the caption yields: when a stronger right-column label (`PROT`, `BSL` / `SSL` / `EQH` / `EQL`, `EQ`, a zone caption) sits within one label height, that label gets a ` ·KL` suffix and a tooltip line and the key level gets no caption of its own. Captions of key levels merge only with each other. Captions: `KL×3` (reaction), `KL 3945` (round, the step price). Nothing is drawn on the candles.
+- **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count, frame minimum touches), which it does not trade. Python reference: `reference/keylevel_model.py` (`swing_levels`), checked against the Go golden `analysis-engine/test/keylevelgolden` with zero differences; the v2.16 `keylevel.Cluster` port is kept as a second reference.
 
 ### Display profiles
 
@@ -193,7 +196,7 @@ The layer shows the levels the engine's `key_level` strategy is built on, dimmed
 | Minimal | up to 4 | none | 3 external structure events, 1 Asian range |
 | Balanced — Recommended | up to 8 (+ OB budget) | up to 8 (nearest BSL above and SSL below first) | 6 external events |
 | Detailed | at least 12 | at least 12 | internal structure available |
-| Debug | up to 20, distance limits off | all retained | `xEH` / `xEL` raw-pivot labels, OB and pool distance limits off |
+| Debug | up to 20, distance limits off | all retained | OB and pool distance limits off |
 
 ### Keeping candles readable
 
@@ -224,7 +227,7 @@ limited by the window. If one of them squashes the candles, switch it off in its
 ### Market Intelligence panel
 
 Default `Compact` shows **major information only**, one line each; hover a cell for the
-detail. `Standard` and `Expanded` show the full panel described further down.
+detail. `Standard` shows the full panel described further down.
 
 | Compact row | Shows |
 | --- | --- |
@@ -238,12 +241,12 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 | Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
 | Trades | Open plan (`LONG open · 1.8R → Swing high`) or paper stats (`11 · 27% · −1.6R`); tooltip has profit factor, drawdown and the last 8 trades |
 
-Full panel (`Standard` / `Expanded`):
+Full panel (`Standard`):
 
 | Section | Rows |
 | --- | --- |
 | Market state | External bias, market phase (`Counter-trend rebound/pullback` when the live leg runs against the bias), directional leg |
-| Structure | Confirmed major high/low (tooltip: when each was confirmed), developing extreme, protected level, last external BOS/CHoCH with its age, **last internal break** with its age, invalidated level (Expanded) |
+| Structure | Confirmed major high/low (tooltip: when each was confirmed), developing extreme, protected level, last external BOS/CHoCH with its age, **last internal break** with its age, |
 | Price action | Nearest bullish / bearish POI (`A` actionable, `Q` qualified, `D` distant or tested), POI status, barrier / liquidity count |
 | Blocks & liquidity | **Supply / Demand** `Swing n · Base visible/active`; **Order Blocks** `Bull visible/active · Bear visible/active · hid n` (or `none active · <last reason>`), **Nearest BSL / SSL** (a trailing `*` means that pool is active but not drawn, e.g. beyond the candle-scale window; `LQ n/m` in the barrier row is drawn / active pools) |
 
@@ -257,7 +260,7 @@ Inputs are grouped as in the indicator's settings dialog.
 
 **01 Market Structure** — `External swing publication` (on displacement / next opposite pivot), `Protected level` (trailing / last confirmed swing), `Swing sensitivity` (Auto/Manual), manual pivot bars,
 `Minimum external leg displacement` (1.50 ATR), `External confirmation threshold`
-(0.15), `BOS/CHOCH close buffer`, historical major classifications, extended
+(0.15), `BOS/CHOCH close buffer`, extended
 major high/low, internal structure, draw BOS/CHoCH, external event history (6).
 
 **02 Liquidity** — show pools, nearest unswept internal swing marker (`iBSL` / `iSSL`), highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
@@ -287,7 +290,7 @@ structure window, label and event limits, zone maximum age (600 bars), panel
 switch / density / position, global text scale, annotation spacing, `Annotation gutter` (12); `Show session titles` is in 05 Sessions.
 
 
-**07 Key Levels** — `Show key levels` (on), `Key levels per side` (3), `Key level window` (0 = auto), `Round step` (0 = auto), `Show key level band` (off), `Show broken key levels` (off), `Key level colour`.
+**07 Key Levels** — `Show key levels` (on), `Key levels per side` (3), `Key level window` (0 = auto), `Round step` (0 = auto), `Show key level band` (off), `Key level colour`.
 
 **08 Trade Plan** — show, entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise).
 
@@ -349,6 +352,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | Version | Change |
 | --- | --- |
 | 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.16.1 | Key levels = what the strategy reads (`LegacyFrame.SwingLevels`: zigzag-filtered fractals, median window ATR, ATR at each swing for the round band), computed from the last closed bars on the last bar; no level is hidden for being "broken" (side, origin, flipped, in play instead); lines always drawn, only the caption yields to a stronger label; captions `KL×3` / `KL 3945`; the pivot ring and `Show broken key levels` are gone. To fit the token budget: the Debug `xEH` / `xEL` labels, the `Show historical major classifications` option (and its `M HH` / `M HL` / `M LH` / `M LL` labels) and the `Expanded` panel density (its `Invalidated Level` and `Zone Audit` rows) are removed. |
 | 2.16 | Key levels layer (display only): the engine's `keylevel.Cluster` / `Role` ported (reaction clusters, round levels, dedupe, broken after 2 closes), computed on the last bar from a fractal-pivot ring, dotted and faint behind everything else, nearest 3 per side, yielding to stronger objects; own input group `07 Key Levels`. The premium / discount gauge moves to the very right edge, beyond the zone boxes; the label column starts 4 bars beyond the gutter. The `Label vocabulary` option is removed (long wording is gone). Python port `reference/keylevel_model.py` and Go golden `analysis-engine/test/keylevelgolden`. |
 | 2.15.1 | Readable sizes and stronger contrast (display only): every tier one step larger (Standard normal / normal / small), muted text at 20 % transparency and swing BOS / CHoCH at full colour, session titles off by default, prices of 100 or more print at most 2 decimals on symbols with a tick below 0.01 (`3935.16`, not `3935.158`), label merge distance 1/36 of the candle range instead of 1/48. |
 | 2.15 | Label design (display only): right gutter (`Annotation gutter`) so captions no longer cover live candles; three tiers with `Global text scale` mapping; short vocabulary (`◆ OB+FVG`, `PROT`, `DEV▲`, `pAsia H`, …, `Label vocabulary` = `Long (v2.14)` restores the old words); one caption per overlapping zone cluster; right column merges only within a category; outlined BOS / CHoCH and event labels; session titles on the live and latest completed session only (`Show session titles`); `PREMIUM` / `DISCOUNT` words removed (gauge and panel stay). No detection, qualification, trade or alert change. |

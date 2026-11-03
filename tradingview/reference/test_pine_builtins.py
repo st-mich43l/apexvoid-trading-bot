@@ -15,6 +15,7 @@ PINE = os.path.join(os.path.dirname(__file__), "..", "apexvoid_price_action.pine
 VETTED = {
     "array.clear",
     "array.get",
+    "array.median",
     "array.new_bool",
     "array.new_box",
     "array.new_color",
@@ -92,7 +93,6 @@ VETTED = {
     "str.substring",
     "str.tostring",
     "ta.atr",
-    "ta.sma",
     "ta.highest",
     "ta.lowest",
     "ta.pivothigh",
@@ -219,7 +219,7 @@ def test_annotations_use_the_gutter_and_three_tiers():
 def test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range():
   # v2.15.1: larger text needs more room, so labels merge at range / 36 (was / 48)
   code = _code()
-  assert "/ 48.0" not in code and code.count("/ 36.0") == 2
+  assert "/ 48.0" not in code and code.count("/ 36.0") == 3  # label gap, column cluster gap, and the key-level caption yield
 
 
 def test_prices_print_two_decimals_for_gold_like_symbols_only():
@@ -245,7 +245,8 @@ def test_key_level_loops_are_guarded_against_empty_arrays():
   # a Pine `for i = 0 to n - 1` with n = 0 runs twice (0, -1): every loop over an array that can be empty needs its guard
   code = _code()
   body = code[code.index("f_keyLevels() =>"):code.index("f_keyLevels()", code.index("f_keyLevels() =>") + 20)]
-  for guard in ("array.size(keyRing) > 0", "n > 0", "array.size(pr) > 0", "array.size(gap) > 0", "array.size(zones) > 0", "array.size(rlY) > 0"):
+  assert "keyRing" not in code and "showBrokenKeys" not in code and "array.median" in body
+  for guard in ("w >= 5", "ns > 0", "array.size(pr) > 0", "array.size(gap) > 0", "array.size(rlY) > 0"):
     assert guard in body, guard
   assert "|80|35|60|62|45|" in body, "the stronger-object priorities (PROT, EQ, pools, zones) the layer yields to"
 
