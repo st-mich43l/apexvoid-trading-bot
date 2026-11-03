@@ -16,11 +16,11 @@
     "sha256": "0b687332ed4a57c08b79263596e6c69b4a2a14505d98af4cbd1e47fd158daf3e"
   },
   "replay-xau-production-capture-20260921.json": {
-    "candidates": 158,
-    "sha256": "d935de177ca575c33cb65f072a27686005ca525e0c70d7d473a04eebba6f9437"
+    "candidates": 161,
+    "sha256": "f867922bf414ed3a7a682171c56dd8a0e8ceade3285b1b8c91bd46226cbcb1e5"
   },
   "replay-xau-production-capture-20261013.json": {
-    "candidates": 380,
-    "sha256": "ee721c9b1b175d590f240d3276e6301c22c73832b66f5bd9ecc341aa67e69a2a"
+    "candidates": 389,
+    "sha256": "b9a2ddf5246f43ffa874be040182ae8645d4ec7d7a19a672960052d0d54963e2"
   }
 }

@@ -2,8 +2,12 @@ package shockretest
 
 import "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 
-// Target kind: the shock extreme is the thesis' objective.
-const TargetShockExtreme = "shock_extreme"
+// Target kinds: the shock extreme is the thesis' objective; when it leaves less than minimum_target_r of room (a short leg against the stop behind the retest) the
+// 1.272 extension of the leg is.
+const (
+	TargetShockExtreme       = "shock_extreme"
+	TargetShockExtension1272 = "shock_extension_1272"
+)
 
 // Setup is one fully confirmed Shock Retest episode with its technical geometry. Every timestamp is a candle OPEN time in Unix seconds.
 type Setup struct {
@@ -19,6 +23,7 @@ type Setup struct {
 
 	EntryLow, EntryHigh float64
 	Stop, Target        float64
+	TargetKind          string // TargetShockExtreme or TargetShockExtension1272
 	M5ATR               float64
 	RiskPips            float64
 	RewardPips          float64
@@ -29,6 +34,7 @@ type Setup struct {
 	Engulfing     bool
 	RejectionWick float64
 	Retracement   float64 // how deep the pullback went into the leg, 0 at the extreme and 1 at the origin
+	RetestExtreme float64 // the lowest low (BUY) of the retest, from the first entry into the band to the confirmation, the stop's anchor unless it sits above the band's far edge
 }
 
 // Rejection records why a real episode did not become a setup.

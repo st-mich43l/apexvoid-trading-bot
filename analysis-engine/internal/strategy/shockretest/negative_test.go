@@ -29,7 +29,7 @@ func shockPrefix() *scribe.Scribe {
 
 func expect(t *testing.T, bars []market.Candle, reason string) {
 	t.Helper()
-	got := Detect(testConfig(t, workable), Input{M5: bars})
+	got := Detect(testConfig(t, nil), Input{M5: bars})
 	if len(got.Setups) != 0 || !hasReason(got, reason) {
 		t.Fatalf("want no setup and %q, got setups %d rejections %+v", reason, len(got.Setups), got.Rejections)
 	}
@@ -69,11 +69,16 @@ func TestAConfirmationThatPriceHasAlreadyLeftIsRefused(t *testing.T) {
 	bars, _ := bullishShockRetest()
 	s := scribe.New(bars[len(bars)-1].Time+300, bars[len(bars)-1].Close)
 	s.Bars = append(s.Bars, bars...)
-	s.Bar(4103.6, 0.2, 0.5) // back under the band, above the origin
-	expect(t, s.Bars, ReasonPriceThroughEntry)
+	s.Bar(4103.6, 0.2, 0.5) // trades through the far edge 4104.12 the stop sits behind (the retest low is above it): the thesis is invalidated
+	expect(t, s.Bars, ReasonInvalidatedAfterConfirm)
+	// With a deep rejection (the stop far below the band) a close under the band that has not touched the stop's swing is only price through the entry.
+	deep := scribe.New(deepWickRetest()[len(deepWickRetest())-1].Time+300, deepWickRetest()[len(deepWickRetest())-1].Close)
+	deep.Bars = append(deep.Bars, deepWickRetest()...)
+	deep.Bar(4103.6, 0.2, 0.5)
+	expect(t, deep.Bars, ReasonPriceThroughEntry)
 	t2 := scribe.New(bars[len(bars)-1].Time+300, bars[len(bars)-1].Close)
 	t2.Bars = append(t2.Bars, bars...)
-	t2.Bar(4099.5, 0.2, 0.5) // a close under the origin
+	t2.Bar(4099.5, 0.2, 0.5) // trades through the swing the stop sits behind (the far edge 4104.12) and closes under the origin
 	expect(t, t2.Bars, ReasonInvalidatedAfterConfirm)
 }
 
@@ -84,10 +89,10 @@ func TestAStaleConfirmationIsNotPublished(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		s.Bar(4107.0+0.2*float64(i), 0.3, 0.3)
 	}
-	if got := Detect(testConfig(t, workable), Input{M5: s.Bars}); len(got.Setups) != 0 {
+	if got := Detect(testConfig(t, nil), Input{M5: s.Bars}); len(got.Setups) != 0 {
 		t.Fatalf("a confirmation 3 candles old must not publish: %+v", got.Setups)
 	}
-	if got := Detect(testConfig(t, map[string]any{"minimum_target_r": 0.8, "confirmation_max_age_bars": 3.0}), Input{M5: s.Bars}); len(got.Setups) != 1 {
+	if got := Detect(testConfig(t, map[string]any{"confirmation_max_age_bars": 3.0}), Input{M5: s.Bars}); len(got.Setups) != 1 {
 		t.Fatalf("within the age bound it must publish: %+v", got)
 	}
 }
@@ -102,10 +107,10 @@ func TestTheTargetAlreadyReachedIsRefused(t *testing.T) {
 
 func TestAStopAboveTheInstrumentCapIsRefusedAndCounted(t *testing.T) {
 	bars, _ := bullishShockRetest()
-	s := newStrategy(t, map[string]any{"minimum_target_r": 0.8, "execution_stop_max_pips": 40.0, "execution_stop_min_pips": 10.0}).(*Strategy)
+	s := newStrategy(t, map[string]any{"execution_stop_max_pips": 10.0, "execution_stop_min_pips": 5.0}).(*Strategy)
 	analysis, candidates := s.Analyze(marketContext(bars, "up"))
 	if len(candidates) != 0 || !hasReason(analysis, ReasonRiskExceedsEnvelope) {
-		t.Fatalf("a 55 pip stop against a 40 pip cap must be refused: %d, %+v", len(candidates), analysis.Rejections)
+		t.Fatalf("a 17 pip stop against a 10 pip cap must be refused: %d, %+v", len(candidates), analysis.Rejections)
 	}
 	if n := s.TakeStopBudgetRefusals(); n != 1 {
 		t.Fatalf("refusals counted = %d, want 1", n)
@@ -114,11 +119,11 @@ func TestAStopAboveTheInstrumentCapIsRefusedAndCounted(t *testing.T) {
 
 func TestAStopInsideTheEnvelopeIsMarkedStructuralAndBelowTheFloorMarkedFloor(t *testing.T) {
 	bars, _ := bullishShockRetest()
-	structural := newStrategy(t, workable).Evaluate(marketContext(bars, "up")) // 55 pips against the XAU 50-70 envelope
+	structural := newStrategy(t, map[string]any{"execution_stop_min_pips": 10.0, "execution_stop_max_pips": 70.0}).Evaluate(marketContext(bars, "up")) // 17 pips inside a 10-70 envelope
 	if len(structural) != 1 || !evidenceHas(structural[0].Evidence, strategyutil.StopBudgetStructuralEvidence) {
 		t.Fatalf("candidates %d: %+v", len(structural), structural)
 	}
-	floor := newStrategy(t, map[string]any{"minimum_target_r": 0.8, "execution_stop_min_pips": 80.0, "execution_stop_max_pips": 120.0}).Evaluate(marketContext(bars, "up"))
+	floor := newStrategy(t, map[string]any{"execution_stop_min_pips": 80.0, "execution_stop_max_pips": 120.0}).Evaluate(marketContext(bars, "up"))
 	if len(floor) != 1 || !evidenceHas(floor[0].Evidence, strategyutil.StopBudgetFloorEvidence) {
 		t.Fatalf("a stop under the floor must be published marked: %+v", floor)
 	}
@@ -128,7 +133,7 @@ func TestTheInstrumentScopeIsEnforced(t *testing.T) {
 	bars, _ := bullishShockRetest()
 	ctx := marketContext(bars, "up")
 	ctx.Symbol = "EURUSD"
-	if got := newStrategy(t, workable).Evaluate(ctx); len(got) != 0 {
+	if got := newStrategy(t, nil).Evaluate(ctx); len(got) != 0 {
 		t.Fatalf("a strategy scoped to XAU published on EURUSD: %d", len(got))
 	}
 }

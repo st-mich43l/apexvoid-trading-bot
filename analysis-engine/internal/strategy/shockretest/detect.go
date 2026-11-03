@@ -207,10 +207,12 @@ func (d *detector) confirm(c confirmed) {
 		return
 	}
 	pip := d.cfg.PipSize
-	floor := math.Min(c.retestLow, c.origin)
-	// Nothing since the confirmation may have invalidated the thesis: a close below the origin, or ANY trade through the swing the stop sits behind.
+	// v2: the stop sits behind the retest's own rejection extreme, never inside the band: when the retest's lowest low is above the band's far edge
+	// (61.8 percent) the far edge is the anchor. The leg origin is no longer used (a stop behind it made the reward:risk below 1 by construction).
+	floor := math.Min(c.retestLow, c.bandLow)
+	// Nothing since the confirmation may have invalidated the thesis: ANY trade through the swing the stop sits behind.
 	for k := c.at + 1; k <= d.asOf; k++ {
-		if d.ob[k].Low < floor || d.ob[k].Close < c.origin {
+		if d.ob[k].Low < floor {
 			d.reject(ReasonInvalidatedAfterConfirm, c.at)
 			return
 		}
@@ -224,25 +226,31 @@ func (d *detector) confirm(c confirmed) {
 		d.reject(ReasonInvalidStopGeometry, c.at)
 		return
 	}
-	risk, reward := c.bandHigh-stop, c.extreme-c.bandHigh
+	leg := c.extreme - c.origin
+	risk := c.bandHigh - stop
+	// The target is the shock extreme when it is at least minimum_target_r x risk away; otherwise the 1.272 extension of the leg when that is; else no room.
+	target, kind := c.extreme, TargetShockExtreme
+	if !(target-c.bandHigh >= d.cfg.MinimumTargetR*risk) {
+		target, kind = c.origin+ExtensionTarget*leg, TargetShockExtension1272
+	}
+	reward := target - c.bandHigh
 	if !(reward > 0) || reward < d.cfg.MinimumTargetR*risk {
 		d.reject(ReasonNoTargetRoom, c.at)
 		return
 	}
 	for k := c.at; k <= d.asOf; k++ {
-		if d.ob[k].High >= c.extreme {
+		if d.ob[k].High >= target {
 			d.reject(ReasonTargetAlreadyReached, c.at)
 			return
 		}
 	}
-	leg := c.extreme - c.origin
 	setup := Setup{
 		Direction: d.dir, OriginTime: d.m5[c.start].Time, ShockTime: d.m5[c.shockEnd].Time, Origin: c.origin, Extreme: c.extreme,
 		RetestTime: d.m5[c.first].Time, ConfirmedAt: d.m5[c.at].Time, ConfirmationAge: d.barsBetween(c.at, d.asOf),
-		EntryLow: c.bandLow, EntryHigh: c.bandHigh, Stop: stop, Target: c.extreme, M5ATR: atrC,
+		EntryLow: c.bandLow, EntryHigh: c.bandHigh, Stop: stop, Target: target, TargetKind: kind, M5ATR: atrC,
 		RiskPips: risk / pip, RewardPips: reward / pip, TechnicalRR: reward / risk,
 		WickRejection: c.wick, Engulfing: c.engulf && !c.wick, RejectionWick: d.ob[c.at].LowerWickRatio(),
-		Retracement: (c.extreme - c.retestLow) / leg,
+		Retracement: (c.extreme - c.retestLow) / leg, RetestExtreme: c.retestLow,
 	}
 	if c.atrBefore > 0 {
 		setup.LegATR = leg / c.atrBefore
@@ -258,5 +266,6 @@ func (d *detector) toOriginal(s Setup) Setup {
 	s.EntryLow, s.EntryHigh = -s.EntryHigh, -s.EntryLow
 	s.Stop, s.Target = -s.Stop, -s.Target
 	s.Origin, s.Extreme = -s.Origin, -s.Extreme
+	s.RetestExtreme = -s.RetestExtreme
 	return s
 }

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/engine"
@@ -35,6 +36,8 @@ type captureResult struct {
 	Published  map[string]int // strategy|setup -> distinct candidates
 	Refused    map[string]int // strategy|setup|reason -> distinct refused episodes
 	Violations []string
+	AsiaRanges int // distinct finalized Asia ranges the session read produced over the capture
+	Shock      []string
 }
 
 func setupKind(c opportunity.Candidate) string {
@@ -93,6 +96,7 @@ func replayOne(t *testing.T, doc *config.Document, name string, overrides map[st
 	}
 	out := captureResult{Capture: name, Published: map[string]int{}, Refused: map[string]int{}}
 	seen, refusedSeen := map[string]bool{}, map[string]bool{}
+	asiaRanges := map[int64]bool{}
 	pip := settings.Geometry.PipSize
 	refuse := func(strategyID, kind, reason string, key string) {
 		id := strategyID + "|" + kind + "|" + reason + "|" + key
@@ -104,6 +108,13 @@ func replayOne(t *testing.T, doc *config.Document, name string, overrides map[st
 	_, err = replaycapture.Replay(doc, capture, market.M5, replaycapture.Options{StrategyParameters: overrides, OnEvaluation: func(e engine.Evaluation) {
 		if e.Timeframe != market.M5 {
 			return
+		}
+		if e.Context != nil {
+			for _, level := range e.Context.Session.State.Levels {
+				if level.Name == "ASIA_H" && level.Final {
+					asiaRanges[level.AvailableAt] = true
+				}
+			}
 		}
 		for _, c := range e.Candidates {
 			if !scalps[string(c.Strategy)] || seen[c.ID] {
@@ -131,12 +142,20 @@ func replayOne(t *testing.T, doc *config.Document, name string, overrides map[st
 			if !beyond {
 				problem("invalidation %v is not beyond the entry band %v-%v", c.Invalidation.Price, c.Entry.Low, c.Entry.High)
 			}
-			if reward < risk-0.11 && c.Strategy != "shock_retest" {
+			if reward < risk-0.11 {
 				problem("target %.1f pips is below 1R (%.1f pips)", reward, risk)
 			}
 			stopBudget := false
+			budgetCode := ""
 			for _, ev := range c.Evidence {
-				stopBudget = stopBudget || ev.Code == "stop_budget_structural" || ev.Code == "stop_budget_floor"
+				if ev.Code == "stop_budget_structural" || ev.Code == "stop_budget_floor" {
+					stopBudget, budgetCode = true, ev.Code
+				}
+			}
+			if c.Strategy == "shock_retest" {
+				// The room the executor really has: the budget widens a stop under the floor, and the first target must still offer 1R of that stop.
+				widened := math.Max(risk, settings.InstrumentStopMinPips)
+				out.Shock = append(out.Shock, fmt.Sprintf("%s %s risk %.0f pips reward %.0f pips (%s, %s) -> %.2fR of the %.0f pip executed stop", c.Direction, time.Unix(c.CreatedAt, 0).UTC().Format("01-02 15:04"), risk, reward, c.Targets[0].Price.Label, budgetCode, reward/widened, widened))
 			}
 			if !stopBudget {
 				problem("no stop budget evidence code")
@@ -180,6 +199,7 @@ func replayOne(t *testing.T, doc *config.Document, name string, overrides map[st
 		t.Fatal(err)
 	}
 	sort.Strings(out.Candidates)
+	out.AsiaRanges = len(asiaRanges)
 	return out
 }
 
@@ -188,7 +208,12 @@ func TestRealCaptureSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	matches, _ := filepath.Glob(filepath.Join("..", "..", "testdata", "replay-xau-production-capture-*.json"))
+	// The committed XAU captures (some without M1) and the fresh window that follows both 2026 clock changes (25 Oct London, 1 Nov New York).
+	var matches []string
+	for _, pattern := range []string{"replay-xau-production-capture-*.json", "replay-xau-m1-production-capture-*.json", "scalpwindow-xau-*.json"} {
+		found, _ := filepath.Glob(filepath.Join("..", "..", "testdata", pattern))
+		matches = append(matches, found...)
+	}
 	sort.Strings(matches)
 	if len(matches) == 0 {
 		t.Fatal("no committed XAU captures")
@@ -222,32 +247,23 @@ func TestRealCaptureSmoke(t *testing.T) {
 	}
 	t.Logf("published per strategy and setup over %d XAU captures: %v", len(results), totals)
 
-	// Not asserted: what Shock Retest would publish if the room requirement were one the geometry can meet (see TestTheShippedRoomRequirementCannotBeMet).
-	workable, workableRefused := map[string]int{}, map[string]int{}
-	var mu sync.Mutex
-	for _, m := range matches {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			r := replayOne(t, doc, name, map[string]map[string]any{"shock_retest": {"minimum_target_r": 0.8}})
-			mu.Lock()
-			defer mu.Unlock()
-			for k, n := range r.Published {
-				if strings.HasPrefix(k, "shock_retest") {
-					workable[k] += n
-				}
-			}
-			for k, n := range r.Refused {
-				if strings.HasPrefix(k, "shock_retest") {
-					workableRefused[k] += n
-				}
-			}
-		}(filepath.Base(m))
+	// Side by side, per data set: what each strategy published and why real episodes were refused (not asserted).
+	for _, r := range results {
+		t.Logf("%s: %d Asia ranges finalized · published %v", r.Capture, r.AsiaRanges, r.Published)
+		for _, line := range r.Shock {
+			t.Logf("    shock_retest %s", line)
+		}
+		var keys []string
+		for k := range r.Refused {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			t.Logf("    refused %-60s %d", k, r.Refused[k])
+		}
 	}
-	wg.Wait()
-	t.Logf("shock_retest with minimum_target_r 0.8 (diagnostic only): published %v, refused %v", workable, workableRefused)
 	if path := os.Getenv("SCALP_SMOKE_OUT"); path != "" {
-		raw, _ := json.MarshalIndent(map[string]any{"captures": results, "published_total": totals, "refused_total": refusals, "shock_retest_with_minimum_target_r_0_8": workable, "shock_retest_refused_with_minimum_target_r_0_8": workableRefused}, "", " ")
+		raw, _ := json.MarshalIndent(map[string]any{"captures": results, "published_total": totals, "refused_total": refusals}, "", " ")
 		if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
 			t.Fatal(err)
 		}

@@ -25,11 +25,6 @@ func shockParams(override map[string]any) map[string]any {
 	return legacyfixture.Params(own)
 }
 
-// workable lowers the room requirement to what the geometry can give: entering at the 50 percent retracement with the stop behind the origin
-// leaves a reward:risk below one (0.5 L over 0.5 L plus the buffer), so the shipped 1.0 can never be met. TestTheShippedRoomRequirementCannotBeMet
-// pins that.
-var workable = map[string]any{"minimum_target_r": 0.8}
-
 func testConfig(t *testing.T, override map[string]any) Config {
 	t.Helper()
 	cfg, err := ParseConfig(shockParams(override))
