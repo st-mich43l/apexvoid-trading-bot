@@ -4,12 +4,15 @@ namespace ApexVoid.CTraderFeed;
 /// Instrument-owned autonomous opposite-direction exposure policy, read from
 /// instruments.&lt;SYM&gt;.exposure.opposite_position. Allowed=false blocks any
 /// opposite exposure at any distance; Allowed=true needs
-/// <see cref="MinimumSeparationPips"/> (inclusive) from EVERY opposite group.
+/// <see cref="MinimumSeparationPips"/> (inclusive) from EVERY opposite group, or
+/// <see cref="ScalpMinimumSeparationPips"/> (inclusive) when the INCOMING plan is
+/// in the scalp lane (TradePlan.exposure_lane).
 /// </summary>
 public sealed record OppositePositionPolicy(
   bool Allowed,
   decimal? MinimumSeparationPips,
-  decimal PipSize
+  decimal PipSize,
+  decimal? ScalpMinimumSeparationPips = null
 )
 {
   public static OppositePositionPolicy Parse(
@@ -36,6 +39,7 @@ public sealed record OppositePositionPolicy(
       );
     }
     policy.TryGetValue("minimum_separation_pips", out var minimumRaw);
+    policy.TryGetValue("scalp_minimum_separation_pips", out var scalpMinimumRaw);
     if (!allowed)
     {
       if (minimumRaw is not null)
@@ -43,6 +47,13 @@ public sealed record OppositePositionPolicy(
         throw new ConfigurationV3Error(
           $"instrument {symbol}: blocks opposite positions; "
           + "minimum_separation_pips must not be declared"
+        );
+      }
+      if (scalpMinimumRaw is not null)
+      {
+        throw new ConfigurationV3Error(
+          $"instrument {symbol}: blocks opposite positions; "
+          + "scalp_minimum_separation_pips must not be declared"
         );
       }
       return new OppositePositionPolicy(false, null, pipSize);
@@ -70,7 +81,37 @@ public sealed record OppositePositionPolicy(
         + "exposure.opposite_position.minimum_separation_pips"
       );
     }
-    return new OppositePositionPolicy(true, minimum, pipSize);
+    decimal scalpMinimum;
+    try
+    {
+      scalpMinimum = scalpMinimumRaw is null
+        ? 0m
+        : Convert.ToDecimal(scalpMinimumRaw, System.Globalization.CultureInfo.InvariantCulture);
+    }
+    catch (Exception exception) when (
+      exception is FormatException or InvalidCastException or OverflowException
+    )
+    {
+      throw new ConfigurationV3Error(
+        $"instrument {symbol}: invalid exposure.opposite_position.scalp_minimum_separation_pips",
+        exception
+      );
+    }
+    if (scalpMinimum <= 0m)
+    {
+      throw new ConfigurationV3Error(
+        $"instrument {symbol}: allows opposite positions and needs a positive "
+        + "exposure.opposite_position.scalp_minimum_separation_pips"
+      );
+    }
+    if (scalpMinimum > minimum)
+    {
+      throw new ConfigurationV3Error(
+        $"instrument {symbol}: exposure.opposite_position.scalp_minimum_separation_pips "
+        + $"({scalpMinimum}) must not exceed minimum_separation_pips ({minimum})"
+      );
+    }
+    return new OppositePositionPolicy(true, minimum, pipSize, scalpMinimum);
   }
 }
 
@@ -107,6 +148,10 @@ public static class OppositeExposureFence
 {
   public const string FxOppositeNotAllowed = "fx_opposite_position_not_allowed";
   public const string XauOppositeTooClose = "xau_opposite_position_too_close";
+  public const string XauScalpOppositeTooClose = "xau_scalp_opposite_too_close";
+  public const string OppositeLaneUnknown = "opposite_exposure_lane_unknown";
+  public const string ScalpLane = "scalp";
+  public const string StandardLane = "standard";
 
   /// <summary>
   /// Builds the opposite-direction groups: one per live tracked plan (a ladder's
@@ -194,13 +239,28 @@ public static class OppositeExposureFence
     string incomingDirection,
     decimal incomingEntryReference,
     IReadOnlyList<OppositeExposureGroup> oppositeGroups,
-    OppositePositionPolicy policy
+    OppositePositionPolicy policy,
+    string? lane = null
   )
   {
     if (oppositeGroups.Count == 0 || incomingEntryReference <= 0m)
     {
       return OppositeExposureVerdict.Clear;
     }
+    // Absent lane = standard (plans published before the field existed). Any
+    // other value than the two known lanes fails closed with a clear error.
+    var laneKey = string.IsNullOrWhiteSpace(lane) ? StandardLane : lane.Trim().ToLowerInvariant();
+    if (laneKey is not (ScalpLane or StandardLane))
+    {
+      return new OppositeExposureVerdict(
+        false,
+        OppositeLaneUnknown,
+        $"{CanonicalInstrument(incomingSymbol)} {incomingDirection} refused: unknown "
+          + $"exposure_lane '{lane}' (expected 'scalp' or 'standard')",
+        oppositeGroups[0]
+      );
+    }
+    var scalpLane = laneKey == ScalpLane;
     if (policy.PipSize <= 0m)
     {
       throw new InvalidOperationException(
@@ -224,17 +284,20 @@ public static class OppositeExposureFence
         nearest, distancePrice, distancePips
       );
     }
-    var minimum = policy.MinimumSeparationPips
+    var standardMinimum = policy.MinimumSeparationPips
       ?? throw new InvalidOperationException(
         $"opposite-exposure policy for {incomingSymbol} allows opposite positions "
         + "without minimum_separation_pips"
       );
+    var minimum = scalpLane && policy.ScalpMinimumSeparationPips is decimal scalpMinimum
+      ? Math.Min(scalpMinimum, standardMinimum)
+      : standardMinimum;
     if (distancePips < minimum)
     {
       return new OppositeExposureVerdict(
         false,
-        XauOppositeTooClose,
-        $"{canonical} {incomingDirection} entry {incomingEntryReference} is "
+        scalpLane ? XauScalpOppositeTooClose : XauOppositeTooClose,
+        $"{canonical} {incomingDirection} {(scalpLane ? "scalp " : "")}entry {incomingEntryReference} is "
           + $"{decimal.Round(distancePips, 1)} pips from active {nearest.Direction} "
           + $"@ {nearest.EntryPrice}; require >= {minimum} pips",
         nearest, distancePrice, distancePips

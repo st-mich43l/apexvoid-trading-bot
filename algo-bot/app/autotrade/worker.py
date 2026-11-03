@@ -73,6 +73,8 @@ from app.autotrade.entry_overlap import (
   reserve_entry_zone,
 )
 from app.autotrade.risk_leg import load_account_equity
+from app.autotrade import scalp_outcome
+from app.autotrade.strategy_catalog import exposure_lane
 from app.autotrade.strategy_match import (
   StrategyMatch,
 )
@@ -699,6 +701,19 @@ def _v8_plan_id(match: StrategyMatch) -> str:
   return f"v8:{match.match_id}"
 
 
+async def _scalp_outcome(
+  client: Any, match: StrategyMatch, terminal: str, reason: str | None = None,
+) -> None:
+  """One terminal outcome for a scalp-lane Go match (log line + counter; other lanes ignored)."""
+  from app.autotrade.go_opportunity_policy import opportunity_id_for_match_id
+
+  await scalp_outcome.record_scalp_outcome(
+    client, strategy=match.strategy, opportunity_id=opportunity_id_for_match_id(match.match_id),
+    terminal=terminal, reason=reason, started_at=getattr(match, "issued_at", None),
+    symbol=str(getattr(match, "symbol", "XAU") or "XAU"),
+  )
+
+
 async def _record_v8_build_rejected(
   client: Any,
   symbol: str,
@@ -708,6 +723,7 @@ async def _record_v8_build_rejected(
   measured: dict[str, Any],
 ) -> None:
   """Hard TradePlan reject: metric + terminalize setup so it does not keep watching."""
+  await _scalp_outcome(client, match, scalp_outcome.ADMISSION_REJECTED, reason_code)
   barrier_detail = (measured or {}).get("opposing_barrier")
   log.info(
     "v8 build rejected symbol=%s setup_id=%s reason=%s message=%s%s",
@@ -1202,6 +1218,7 @@ async def _publish_trade_plan_v8(
       message="setup confirmation expired before execution",
       publish_status=True,
     )
+    await _scalp_outcome(client, match, scalp_outcome.WAITING_RETEST_EXPIRED)
     return None
 
   invalidation_quote = (
@@ -1251,6 +1268,9 @@ async def _publish_trade_plan_v8(
       reason_code="structure_invalidated_before_entry",
       message="structure invalidated before an executable entry",
       publish_status=True,
+    )
+    await _scalp_outcome(
+      client, match, scalp_outcome.INVALIDATED_BEFORE_ENTRY, "structure_invalidated_before_entry",
     )
     return None
 
@@ -2021,9 +2041,10 @@ async def _publish_trade_plan_v8(
 
   exposures = await load_active_exposures(client)
   # Opposite-direction exposure is owned by the instrument policy
-  # (config/instruments.yml exposure.opposite_position), never by strategy,
-  # family or scalp status. FX: always blocked. XAU: >= 150 pips from every
-  # opposite group. A missing/invalid policy fails closed.
+  # (config/instruments.yml exposure.opposite_position), never by strategy name
+  # or family. FX: always blocked. XAU: >= 150 pips from every opposite group,
+  # or >= 80 when the incoming trade is in the scalp lane (catalog ``m1_scalp``
+  # trait, ``exposure_lane``). A missing/invalid policy fails closed.
   try:
     opposite_policy = instrument_geometry.opposite_position_policy(symbol)
   except EffectiveInstrumentError as exc:
@@ -2043,6 +2064,7 @@ async def _publish_trade_plan_v8(
     float(entry_reference),
     exposures,
     opposite_policy,
+    lane=exposure_lane(str(getattr(match_for_plan, "strategy", "") or "")),
   )
   if not opposite.allowed:
     await _release_claims()
@@ -2529,6 +2551,7 @@ async def _publish_trade_plan_v8(
     status="candidate_published",
   )
   await increment_metric(client, "v8_plan_published", symbol=symbol)
+  await _scalp_outcome(client, match, scalp_outcome.PLAN_PUBLISHED)
   if policy.level_reaction:
     await increment_metric(
       client,

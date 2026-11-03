@@ -336,7 +336,10 @@ public sealed record TradePlan(
   TradePlanManagement Management,
   TradePlanExecutionPolicy ExecutionPolicy,
   TradePlanProvenance Provenance,
-  TradePlanSizing? Sizing = null
+  TradePlanSizing? Sizing = null,
+  // "scalp" | "standard"; absent = "standard". Decides which opposite-position
+  // separation the executor fence applies (instruments.yml exposure.opposite_position).
+  string? ExposureLane = null
 );
 
 // Execution-safety shape validation only. This is deliberately the ONLY

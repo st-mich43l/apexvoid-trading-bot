@@ -4,13 +4,14 @@ namespace CTraderFeed.Tests;
 
 /// <summary>
 /// Pure tests for the engine-side opposite-exposure fence: FX never, XAU
-/// >= 150 pips (inclusive) from every opposite group, judged from tracked
-/// plan state plus actual broker positions/orders.
+/// >= 150 pips (inclusive) from every opposite group (>= 80 for an incoming
+/// scalp-lane plan), judged from tracked plan state plus actual broker
+/// positions/orders.
 /// </summary>
 public sealed class OppositeExposureFenceTests
 {
   private static readonly OppositePositionPolicy Fx = new(false, null, 0.0001m);
-  private static readonly OppositePositionPolicy Xau = new(true, 150m, 0.1m);
+  private static readonly OppositePositionPolicy Xau = new(true, 150m, 0.1m, 80m);
   private const long XauSymbolId = 7;
 
   private static OppositeExposureGroup Group(string direction, decimal entry, string id = "g1") =>
@@ -53,6 +54,92 @@ public sealed class OppositeExposureFenceTests
 
     Assert.Equal(allowed, verdict.Allowed);
     Assert.Equal(allowed ? null : "xau_opposite_position_too_close", verdict.ReasonCode);
+  }
+
+  // --- exposure lanes: scalp 80 / standard 150 / FX never ----------------------
+
+  [Theory]
+  [InlineData(79.9, false)]
+  [InlineData(80.0, true)]
+  [InlineData(149.0, true)]
+  [InlineData(151.0, true)]
+  public void XauScalpLaneNeedsEightyPipsInclusive(double pips, bool allowed)
+  {
+    var entry = 4300.00m - (decimal)pips * 0.1m;
+    var verdict = OppositeExposureFence.Evaluate(
+      "XAU", "BUY", entry, [Group("SELL", 4300.00m)], Xau, "scalp"
+    );
+
+    Assert.Equal(allowed, verdict.Allowed);
+    Assert.Equal(allowed ? null : "xau_scalp_opposite_too_close", verdict.ReasonCode);
+  }
+
+  [Theory]
+  [InlineData(149.0, false)]
+  [InlineData(149.9, false)]
+  [InlineData(150.0, true)]
+  public void XauStandardLaneKeepsOneHundredFiftyPips(double pips, bool allowed)
+  {
+    var entry = 4300.00m - (decimal)pips * 0.1m;
+    foreach (var lane in new string?[] { null, "", "standard", "STANDARD" })
+    {
+      var verdict = OppositeExposureFence.Evaluate(
+        "XAU", "BUY", entry, [Group("SELL", 4300.00m)], Xau, lane
+      );
+
+      Assert.Equal(allowed, verdict.Allowed);
+      Assert.Equal(allowed ? null : "xau_opposite_position_too_close", verdict.ReasonCode);
+    }
+  }
+
+  [Theory]
+  [InlineData("scalp", 0.0)]
+  [InlineData("scalp", 80.0)]
+  [InlineData("scalp", 5000.0)]
+  [InlineData("standard", 0.0)]
+  [InlineData("standard", 500.0)]
+  public void FxBlocksOppositeInEveryLaneAtAnyDistance(string lane, double pips)
+  {
+    var entry = 1.2500m + (decimal)pips * 0.0001m;
+    var verdict = OppositeExposureFence.Evaluate(
+      "GBPUSD", "BUY", entry, [Group("SELL", 1.2500m)], Fx, lane
+    );
+
+    Assert.False(verdict.Allowed);
+    Assert.Equal("fx_opposite_position_not_allowed", verdict.ReasonCode);
+  }
+
+  [Fact]
+  public void ScalpLaneStillMustClearEveryOppositeGroup()
+  {
+    var groups = new[] { Group("SELL", 4300.00m, "far"), Group("SELL", 4292.00m, "near") };
+    var verdict = OppositeExposureFence.Evaluate("XAU", "BUY", 4290.00m, groups, Xau, "scalp");
+
+    Assert.False(verdict.Allowed);
+    Assert.Equal("near", verdict.Nearest!.GroupId);
+  }
+
+  [Fact]
+  public void UnknownLaneFailsClosedWithAClearError()
+  {
+    var verdict = OppositeExposureFence.Evaluate(
+      "XAU", "BUY", 4200.00m, [Group("SELL", 4300.00m)], Xau, "fast"
+    );
+
+    Assert.False(verdict.Allowed);
+    Assert.Equal("opposite_exposure_lane_unknown", verdict.ReasonCode);
+    Assert.Contains("unknown exposure_lane 'fast'", verdict.Message);
+  }
+
+  [Fact]
+  public void PolicyWithoutAScalpSeparationFallsBackToTheStandardMinimum()
+  {
+    var policy = new OppositePositionPolicy(true, 150m, 0.1m);
+    var verdict = OppositeExposureFence.Evaluate(
+      "XAU", "BUY", 4290.00m, [Group("SELL", 4300.00m)], policy, "scalp"
+    );
+
+    Assert.False(verdict.Allowed);
   }
 
   [Fact]
@@ -247,14 +334,34 @@ public sealed class OppositeExposureFenceTests
         ["allowed"] = false, ["minimum_separation_pips"] = 150L,
       }),
       0.0001m));
+    // scalp separation: forbidden when blocked, required when allowed, positive, <= standard
+    Assert.Throws<ConfigurationV3Error>(() => OppositePositionPolicy.Parse(
+      "EURUSD",
+      Section(new Dictionary<string, object?>
+      {
+        ["allowed"] = false, ["scalp_minimum_separation_pips"] = 80L,
+      }),
+      0.0001m));
+    foreach (var scalp in new object?[] { null, 0L, -1L, 151L, "eighty" })
+    {
+      Assert.Throws<ConfigurationV3Error>(() => OppositePositionPolicy.Parse(
+        "XAU",
+        Section(new Dictionary<string, object?>
+        {
+          ["allowed"] = true, ["minimum_separation_pips"] = 150L,
+          ["scalp_minimum_separation_pips"] = scalp,
+        }),
+        0.1m));
+    }
 
     var xau = OppositePositionPolicy.Parse(
       "XAU",
       Section(new Dictionary<string, object?>
       {
         ["allowed"] = true, ["minimum_separation_pips"] = 150L,
+        ["scalp_minimum_separation_pips"] = 80L,
       }),
       0.1m);
-    Assert.Equal(new OppositePositionPolicy(true, 150m, 0.1m), xau);
+    Assert.Equal(new OppositePositionPolicy(true, 150m, 0.1m, 80m), xau);
   }
 }

@@ -472,6 +472,27 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     )
 
 
+async def _track_scalp_activation_rejection(client, event: dict) -> None:
+  """A published scalp-lane plan the executor refuses is its opportunity's final outcome (activation_rejected)."""
+  if str(event.get("type") or "") != "plan_rejected":
+    return
+  from app.autotrade import scalp_outcome
+  from app.autotrade.go_opportunity_policy import opportunity_id_for_match_id
+
+  strategy = event.get("setup") or event.get("strategy") or event.get("setup_type")
+  match_id = event.get("match_id") or event.get("setup_id") or event.get("candidate_id")
+  if not strategy or not match_id:
+    return
+  await scalp_outcome.record_scalp_outcome(
+    client,
+    strategy=strategy,
+    opportunity_id=opportunity_id_for_match_id(str(match_id)),
+    terminal=scalp_outcome.ACTIVATION_REJECTED,
+    reason=str(event.get("reason_code") or "executor_rejected"),
+    symbol=str(event.get("symbol") or "XAU"),
+  )
+
+
 async def process_auto_trade_stats_entries(
   client,
   entries,
@@ -500,6 +521,13 @@ async def process_auto_trade_stats_entries(
         await _maybe_reconcile_group_from_runtime(
           client,
           None if group_id is None else str(group_id),
+        )
+      try:
+        await _track_scalp_activation_rejection(client, event)
+      except Exception:
+        log.exception(
+          "scalp activation outcome failed entry_id=%s",
+          entry_id,
         )
       try:
         await _track_scalp_event(client, event)

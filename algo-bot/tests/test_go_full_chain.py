@@ -1061,3 +1061,181 @@ def test_a_retired_strategy_is_removed_everywhere_not_just_disabled():
   assert "range_sweep" not in pol.REVIEWED_SCOPES
   for raw in ("Range Sweep Scalp", "range sweep", "hfs range sweep"):
     assert strategy_names.resolve_strategy(raw) is None
+
+
+# ---- scalp lane: opposite separation, opposing-structure bypass, one terminal outcome ----------------------------------------
+
+def _invalidation_record(now: int, scope: str, reason: str, *, offset: int = 900):
+  from tests.test_analysis_client_models import _invalidated
+
+  raw = _invalidated(payload={
+    "opportunity_id": f"opp_{scope}", "symbol": "XAU", "strategy": scope,
+    "reason_code": reason, "invalidated_at": int(now),
+  })
+  return SimpleNamespace(
+    topic="analysis.opportunity.invalidated.v1", partition=0, offset=offset, timestamp=int(now) * 1000,
+    value=json.dumps(raw).encode(),
+  )
+
+
+async def _scalp_counters(prod) -> dict[str, int]:
+  from app.autotrade.scalp_outcome import read_scalp_outcome_counters
+
+  return await read_scalp_outcome_counters(prod)
+
+
+async def _impulse_match(h, prod):
+  await h.activate(scope="impulse_pullback")
+  await h._ensure()
+  await consumer_for(h).process_record(catalog_kafka_record(h.clock.now, "impulse_pullback"))
+  return deserialize_matches(await prod.get(strategy_matches_key("XAU")))[0]
+
+
+def _opposite_group(price: float):
+  from app.autotrade.active_exposure import ActiveExposure
+
+  return ActiveExposure(
+    direction="SELL", entry_price=price, source="v8_plan", symbol="XAU",
+    plan_id="v8:go_opp_other", group_id="other-sell",
+  )
+
+
+@pytest.mark.parametrize(("away_pips", "published"), [(60.0, False), (79.0, False), (81.0, True), (90.0, True)])
+@pytest.mark.asyncio
+async def test_a_scalp_opens_against_an_opposite_group_from_80_pips(h, prod, monkeypatch, away_pips, published):
+  """Owner decision 2026-11-03: an Impulse Pullback (scalp lane) BUY clears an opposite SELL group at >= 80 pips."""
+  match = await _impulse_match(h, prod)
+  entry = 4354.3  # the ask the BUY would enter at
+  monkeypatch.setattr(worker, "load_active_exposures", AsyncMock(return_value=[_opposite_group(round(entry + away_pips / 10.0, 2))]))
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={})
+  counters = await _scalp_counters(prod)
+  if published:
+    assert plan_id is not None
+    assert (await read_trade_plan(prod, plan_id)).exposure_lane == "scalp"
+    assert counters == {"impulse_pullback:plan_published": 1}
+  else:
+    assert plan_id is None
+    assert (await route(prod, match.match_id))["reason_code"] == "xau_scalp_opposite_too_close"
+    assert counters == {"impulse_pullback:admission_rejected:xau_scalp_opposite_too_close": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_standard_strategy_at_the_same_distance_is_still_refused_at_150(h, prod, monkeypatch):
+  """Same market, same opposite group 90 pips away: the scalp trades, Key Level (standard lane) does not."""
+  group = _opposite_group(round(4354.3 + 9.0, 2))
+  match = await _go_origin_key_level_match(h, prod)
+  monkeypatch.setattr(worker, "load_active_exposures", AsyncMock(return_value=[group]))
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is None
+  assert (await route(prod, match.match_id))["reason_code"] == "xau_opposite_position_too_close"
+  assert await _scalp_counters(prod) == {}, "a standard-lane strategy never writes a scalp outcome"
+
+
+async def _seed_sell_wall_over_the_entry(prod):
+  from app.autotrade.go_zone_book import go_zone_book_key
+
+  await prod.set(go_zone_book_key("XAU"), json.dumps({
+    "symbol": "XAU", "generated_at": int(time.time()), "entries": [],
+    "barriers": [{"side": "sell", "score": 0.9, "touches": 1, "source_timeframes": ["M5"], "low": 4349.0, "high": 4358.0, "tier": "zone"}],
+  }))
+
+
+@pytest.mark.asyncio
+async def test_an_impulse_pullback_is_not_rejected_by_any_opposing_structure_gate(h, prod):
+  """The scalp judges itself on native room: a published sell wall holding its entry does not stop it..."""
+  await _seed_sell_wall_over_the_entry(prod)
+  scalp = await _impulse_match(h, prod)
+  plan_id = await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), scalp, frames={})
+  assert plan_id is not None, await route(prod, scalp.match_id)
+
+
+@pytest.mark.asyncio
+async def test_the_same_sell_wall_still_blocks_a_standard_lane_strategy(h, prod):
+  """...while the identical wall blocks Key Level (control: the bypass is the lane's, not a missing wall)."""
+  await _seed_sell_wall_over_the_entry(prod)
+  standard = await _go_origin_key_level_match(h, prod)
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), standard, frames={}) is None
+  assert (await route(prod, standard.match_id))["reason_code"] in {
+    "opposing_entry_overlap", "opposing_entry_contained", "opposing_major_no_room",
+  }
+
+
+@pytest.mark.asyncio
+async def test_scalp_outcome_quote_never_in_zone_then_go_invalidation(h, prod, caplog):
+  """The ten silent production opportunities: no order attempt, then the Go engine ends it."""
+  caplog.set_level("INFO", logger="bot")
+  await _impulse_match(h, prod)
+  await consumer_for(h).process_record(_invalidation_record(h.clock.now, "impulse_pullback", "IMPULSE_REFERENCE_LOST"))
+  assert await _scalp_counters(prod) == {"impulse_pullback:invalidated_before_entry:IMPULSE_REFERENCE_LOST": 1}
+  lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("scalp_outcome ")]
+  assert len(lines) == 1
+  assert "strategy=impulse_pullback" in lines[0] and "opportunity_id=opp_impulse_pullback" in lines[0]
+  assert "terminal=invalidated_before_entry:IMPULSE_REFERENCE_LOST" in lines[0] and "reason=IMPULSE_REFERENCE_LOST" in lines[0]
+  assert "elapsed_s=" in lines[0]
+  # a redelivered terminal event never adds a second outcome
+  await consumer_for(h).process_record(_invalidation_record(h.clock.now, "impulse_pullback", "IMPULSE_REFERENCE_LOST", offset=901))
+  assert await _scalp_counters(prod) == {"impulse_pullback:invalidated_before_entry:IMPULSE_REFERENCE_LOST": 1}
+
+
+@pytest.mark.asyncio
+async def test_scalp_outcome_quote_never_in_zone_until_expiry(h, prod):
+  await _impulse_match(h, prod)
+  await consumer_for(h).process_record(_invalidation_record(h.clock.now, "impulse_pullback", "SETUP_EXPIRED"))
+  assert await _scalp_counters(prod) == {"impulse_pullback:waiting_retest_expired": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_published_scalp_keeps_plan_published_when_go_later_expires_it(h, prod):
+  match = await _impulse_match(h, prod)
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is not None
+  await consumer_for(h).process_record(_invalidation_record(h.clock.now, "impulse_pullback", "SETUP_EXPIRED"))
+  assert await _scalp_counters(prod) == {"impulse_pullback:plan_published": 1}
+
+
+@pytest.mark.asyncio
+async def test_an_executor_rejection_of_a_published_scalp_is_its_final_outcome(h, prod):
+  from app.autotrade.stats_ingestion import _track_scalp_activation_rejection
+
+  match = await _impulse_match(h, prod)
+  assert await worker._publish_trade_plan_v8(prod, "XAU", _spot(4354.1, 4354.3), match, frames={}) is not None
+  event = {"type": "plan_rejected", "symbol": "XAU", "setup": "Impulse Pullback Scalp", "match_id": match.match_id, "reason_code": "xau_scalp_opposite_too_close"}
+  await _track_scalp_activation_rejection(prod, event)
+  await _track_scalp_activation_rejection(prod, event)  # redelivery: still one
+  assert await _scalp_counters(prod) == {
+    "impulse_pullback:plan_published": 1,
+    "impulse_pullback:activation_rejected:xau_scalp_opposite_too_close": 1,
+  }
+  assert await prod.get("scalp:outcome:opp_impulse_pullback") == "activation_rejected:xau_scalp_opposite_too_close"
+  # a standard-lane rejection is not a scalp outcome
+  await _track_scalp_activation_rejection(prod, {**event, "setup": "Key Level", "match_id": "go_opp_key_level"})
+  assert "key_level" not in "".join(await _scalp_counters(prod))
+
+
+@pytest.mark.asyncio
+async def test_scalp_outcome_stale_on_arrival_and_adapter_rejected(h, prod, monkeypatch):
+  await h.activate(scope="impulse_pullback")
+  await h._ensure()
+  stale = catalog_kafka_record(h.clock.now, "impulse_pullback")
+  stale.timestamp = (int(h.clock.now) - 3 * 3600) * 1000  # published three hours before it was consumed
+  await consumer_for(h).process_record(stale)
+  assert await _scalp_counters(prod) == {"impulse_pullback:stale_on_arrival:delivery_lag_exceeded": 1}
+
+  await prod.flushdb()
+
+  def refuse(*_args, **_kwargs):
+    raise pol.AdapterRejection("degenerate_stop", "stop equals the proximal edge")
+
+  monkeypatch.setattr(pol, "build_strategy_match", refuse)
+  fresh = catalog_kafka_record(h.clock.now, "impulse_pullback", offset=2)
+  raw = json.loads(fresh.value)
+  raw["payload"]["id"] = "opp_adapter_refused"
+  raw["event_id"] = "evt-adapter-refused"
+  fresh.value = json.dumps(raw).encode()
+  await consumer_for(h).process_record(fresh)
+  assert await _scalp_counters(prod) == {"impulse_pullback:adapter_rejected:degenerate_stop": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_non_scalp_opportunity_never_writes_a_scalp_outcome(h, prod):
+  await _go_origin_key_level_match(h, prod)
+  await consumer_for(h).process_record(_invalidation_record(h.clock.now, "key_level", "ZONE_INVALIDATED"))
+  assert await _scalp_counters(prod) == {}

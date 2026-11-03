@@ -126,21 +126,40 @@ expiry (24 h for the zone strategies) or a withdrawn id does
 ## Exposure
 
 Opposite-direction exposure is decided per instrument from `instruments.yml`
-(`exposure.opposite_position`), never by strategy or scalp status:
+(`exposure.opposite_position`) and by the INCOMING trade's exposure lane. The lane is
+the Algo Bot catalog's (`strategy_catalog.exposure_lane`): `scalp` for a strategy whose
+profile carries the `m1_scalp` trait (today only Impulse Pullback Scalp), `standard` for
+everything else and for a name outside the catalog. The lane of the groups already open
+does not matter. Strategy names are never consulted.
 
-| Instrument | Rule |
-|---|---|
-| FX (EURUSD, GBPUSD, GBPJPY, USDJPY) | any opposite exposure blocks the plan at any distance (`fx_opposite_position_not_allowed`) |
-| XAU | entry must be at least 150 pips (inclusive) from every opposite group (`xau_opposite_position_too_close`) |
+| Instrument | Incoming standard trade | Incoming scalp-lane trade |
+|---|---|---|
+| FX (EURUSD, GBPUSD, GBPJPY, USDJPY) | any opposite exposure blocks the plan at any distance (`fx_opposite_position_not_allowed`) | the same: FX never allows an opposite position |
+| XAU | entry at least 150 pips (inclusive) from every opposite group (`xau_opposite_position_too_close`) | entry at least 80 pips (inclusive) from every opposite group (`xau_scalp_opposite_too_close`); owner decision 2026-11-03 |
+
+`scalp_minimum_separation_pips` is required when `allowed: true` (positive, not above
+`minimum_separation_pips`) and forbidden when `allowed: false`; both parsers (Python
+`OppositePositionPolicy`, C# `OppositePositionPolicy.Parse`) refuse a config that breaks
+this. The lane travels on the plan as the optional `exposure_lane` field of TradePlan V8
+(absent means `standard`, so plans published before the field existed parse unchanged); the
+executor fence reads it and refuses an unknown value (`opposite_exposure_lane_unknown`).
+**Deploy order: Python and cTrader together, or cTrader first** (it accepts the field
+before anyone sends it); a Python-first deploy would send a field an older executor
+ignores, which would then apply 150 pips to a plan Python admitted at 80.
 
 With XAU `pip_size` 0.1, a BUY at 4300.0 blocks a SELL at 4314.9 and allows one at
-4315.0. A missing or invalid policy fails closed: Algo Bot rejects with
+4315.0; an Impulse Pullback BUY at 4300.0 is allowed a SELL from 4308.0 (80.0 pips).
+A missing or invalid policy fails closed: Algo Bot rejects with
 `opposite_exposure_policy_unavailable` and the executor refuses the order.
 Algo Bot (`evaluate_opposite_exposure`) and the executor (`OppositeExposureFence`,
 run before the first broker mutation of a plan, against tracked plan state plus
 real broker positions and pending orders) enforce the same rule independently.
 Same-direction stacking is a separate rule: every instrument admits one group per
 direction at a time (`exposure.same_direction.max_groups: 1`; `app/autotrade/group_exposure.py`).
+The opposing-STRUCTURE gates (the Go zone book: `opposing_entry_overlap`, `opposing_entry_contained`,
+`opposing_major_no_room`) are skipped for the same lane (`strategy_taxonomy.match_bypasses_opposing_structure`);
+the scalp is judged on its own native room instead. The same-direction rule and `thesis_already_owned` are
+not lane rules and apply to scalps unchanged.
 Principle: one failing structural thesis must not silently become several correlated
 account losses. It came from the 12-13 October 2026 USDJPY incident (four same-thesis
 SELLs open together and stopped together) and the XAU record before it (groups that
