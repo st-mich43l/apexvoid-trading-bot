@@ -158,7 +158,7 @@ detail. `Standard` and `Expanded` show the full panel described further down.
 | --- | --- |
 | Bias / Phase | External bias (and HTF bias when enabled); market phase |
 | Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the dealing range (tooltip shows its low and high) |
-| High / Low | Last confirmed external swing high / low (tooltip: times and developing extreme) |
+| Range H / L | The dealing range high / low (same range as the premium/discount gauge; tooltip: the confirmed swings with times and the developing extreme) |
 | Protected | The external level whose break flips the bias |
 | Last break | Last external BOS/CHoCH with its age (tooltip: last internal break) |
 | Bull POI / Bear POI | Nearest qualified POI, distance in ATR, `A` actionable / `Q` qualified / `D` distant or tested |
