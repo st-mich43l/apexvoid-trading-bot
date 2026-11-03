@@ -55,6 +55,7 @@ def asia_ranges(t, h, l):
   """Completed Asian (00:00-08:00 UTC) high/low as known at each bar (mirrors the Pine snapshot)."""
   n = len(t)
   hi, lo = [m.NAN] * n, [m.NAN] * n
+  live_hi, live_lo = [m.NAN] * n, [m.NAN] * n
   cur_h = cur_l = None
   done_h = done_l = m.NAN
   inside_prev = False
@@ -70,7 +71,9 @@ def asia_ranges(t, h, l):
       done_h, done_l = cur_h, cur_l
     inside_prev = inside
     hi[i], lo[i] = done_h, done_l
-  return hi, lo
+    if inside:
+      live_hi[i], live_lo[i] = cur_h, cur_l
+  return hi, lo, live_hi, live_lo
 
 
 class TradePlanSim(m.V21Pipeline):
@@ -79,7 +82,7 @@ class TradePlanSim(m.V21Pipeline):
     self.tp = tp or TradeParams()
     self.sdp = sdp or sdb.Params()
     self.lm = m.LiquidityModel(self.s, p)
-    self.asia_h, self.asia_l = asia_ranges(self.s.t, self.s.h, self.s.l)
+    self.asia_h, self.asia_l, self.asia_live_h, self.asia_live_l = asia_ranges(self.s.t, self.s.h, self.s.l)
     self.open = None
     self.trades = []
     self.skipped = dict(no_target=0, bad_stop=0)
@@ -122,6 +125,7 @@ class TradePlanSim(m.V21Pipeline):
     levels.append((s.last_swing_high if is_long else s.last_swing_low, "Swing high" if is_long else "Swing low"))
     levels.append((s.previous_swing_high if is_long else s.previous_swing_low, "Prev swing high" if is_long else "Prev swing low"))
     levels.append((self.asia_h[i] if is_long else self.asia_l[i], "Asia H" if is_long else "Asia L"))
+    levels.append((self.asia_live_h[i] if is_long else self.asia_live_l[i], "Asia H live" if is_long else "Asia L live"))
     levels.append((s.dealing_range()[2], "EQ"))
     for z in self.zones:
       if z.kind != 2 and z.side == -pool_side:

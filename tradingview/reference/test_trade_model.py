@@ -121,6 +121,31 @@ def test_planned_rr_box_is_available_and_well_formed():
   assert shown >= 2, "the planned box should be available on most charts"
 
 
+def test_live_asian_range_is_the_running_extreme_and_becomes_the_completed_range():
+  import datetime
+  bars = bars_from(FIX, "M15")
+  t, o, h, l, c = bars
+  hi, lo, live_hi, live_lo = tm.asia_ranges(t, h, l)
+  run_h = run_l = None
+  last_live = None
+  checked = 0
+  for i in range(len(t)):
+    hour = datetime.datetime.fromtimestamp(t[i], datetime.UTC).hour
+    inside = 0 <= hour < 8
+    if inside:
+      start = i == 0 or not (0 <= datetime.datetime.fromtimestamp(t[i - 1], datetime.UTC).hour < 8)
+      run_h = h[i] if start else max(run_h, h[i])
+      run_l = l[i] if start else min(run_l, l[i])
+      assert live_hi[i] == run_h and live_lo[i] == run_l, "live range must be the running extreme since the session start"
+      last_live = (run_h, run_l)
+      checked += 1
+    else:
+      assert m.isna(live_hi[i]) and m.isna(live_lo[i]), "no live range outside the session"
+      if last_live is not None and i > 0 and 0 <= datetime.datetime.fromtimestamp(t[i - 1], datetime.UTC).hour < 8:
+        assert (hi[i], lo[i]) == last_live, "the completed range is the last live range"
+  assert checked > 100
+
+
 def test_costs_lower_every_result_by_cost_over_risk():
   path, tf, secs = FIX, "M15", 900
   base = run(path, tf, secs)
