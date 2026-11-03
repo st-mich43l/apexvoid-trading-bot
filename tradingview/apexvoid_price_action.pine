@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.11", "AV PA v2.11", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.12", "AV PA v2.12", overlay = true, scale = scale.none, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -92,6 +92,13 @@ bool showAsia = input.bool(true, "Draw Asian ranges (live while the session runs
 string asiaSession = input.session("0000-0800", "Asian session hours", group = G5)
 string asiaTZ = input.string("Etc/UTC", "Asian session timezone", options = ["Etc/UTC", "Asia/Tokyo", "Asia/Singapore", "Asia/Ho_Chi_Minh", "Asia/Hong_Kong", "America/New_York"], group = G5)
 int asiaHistory = input.int(3, "Retained Asian ranges", minval = 1, maxval = 12, group = G5)
+bool showSessionBoxes = input.bool(true, "Draw a range box for each session (Asia, London, New York)", group = G5)
+string londonSession = input.session("0800-1630", "London session hours (London time)", group = G5)
+string londonTZ = input.string("Europe/London", "London session timezone", options = ["Europe/London", "Etc/UTC", "Europe/Berlin"], group = G5)
+string nySession = input.session("0800-1700", "New York session hours (New York time)", group = G5)
+string nyTZ = input.string("America/New_York", "New York session timezone", options = ["America/New_York", "Etc/UTC", "America/Chicago"], group = G5)
+int sessionBoxHistory = input.int(3, "Retained session boxes per session", minval = 1, maxval = 10, group = G5)
+int sessionBoxTransparency = input.int(90, "Session box transparency", minval = 60, maxval = 98, group = G5)
 
 color bullColor = input.color(#00C7AE, "Bullish / demand color", group = G6)
 color bearColor = input.color(#F26B85, "Bearish / supply color", group = G6)
@@ -100,6 +107,8 @@ color bearFvgColor = input.color(#FFA957, "Bearish FVG color", group = G6)
 color demandColor = input.color(#36D399, "Demand color", group = G6)
 color supplyColor = input.color(#FF7892, "Supply color", group = G6)
 color asiaColor = input.color(#B48AFF, "Asian levels color", group = G6)
+color londonColor = input.color(#5AA9E6, "London session color", group = G6)
+color nyColor = input.color(#E6B84A, "New York session color", group = G6)
 color liquidityColor = input.color(#AEB8CC, "Liquidity pool color", group = G6)
 bool showPremiumDiscount = input.bool(true, "Show premium / discount range (equilibrium)", group = G6)
 bool protectCandleScale = input.bool(true, "Keep candles readable: limit objects to a window around price", group = G6)
@@ -2182,6 +2191,65 @@ if barstate.islast and liveAsiaOn
     f_regLabel(asiaLiveHigh, "Asia H · live", asiaColor, 52, "Asian high so far " + str.tostring(asiaLiveHigh, format.mintick) + " (session in progress)")
     f_regLabel(asiaLiveLow, "Asia L · live", asiaColor, 52, "Asian low so far " + str.tostring(asiaLiveLow, format.mintick) + " (session in progress)")
 
+// ------- SESSION RANGE BOXES (ASIA, LONDON, NEW YORK) -------
+// One box per session from its first to its last bar, spanning the session's high and low. It grows
+// live while the session runs, freezes when the session ends, and the last few are kept. Sessions are
+// defined in their local time zone, so daylight saving moves the UTC hours automatically; London and
+// New York overlap by design.
+f_sessionTrack(string sess, string tz) =>
+    bool inside = not na(time(timeframe.period, sess, tz))
+    bool started = inside and not inside[1]
+    var float workHigh = na
+    var float workLow = na
+    var int workStart = na
+    if started
+        workHigh := high
+        workLow := low
+        workStart := time
+    else if inside
+        workHigh := math.max(nz(workHigh, high), high)
+        workLow := math.min(nz(workLow, low), low)
+    [inside ? 1 : 0, workStart, workHigh, workLow]
+
+[nativeLdnIn, nativeLdnStart, nativeLdnHigh, nativeLdnLow] = f_sessionTrack(londonSession, londonTZ)
+[fiveLdnIn, fiveLdnStart, fiveLdnHigh, fiveLdnLow] = request.security(syminfo.tickerid, "5", f_sessionTrack(londonSession, londonTZ), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+[nativeNyIn, nativeNyStart, nativeNyHigh, nativeNyLow] = f_sessionTrack(nySession, nyTZ)
+[fiveNyIn, fiveNyStart, fiveNyHigh, fiveNyLow] = request.security(syminfo.tickerid, "5", f_sessionTrack(nySession, nyTZ), gaps = barmerge.gaps_off, lookahead = barmerge.lookahead_off)
+int ldnIn = nativeSession ? nativeLdnIn : fiveLdnIn
+int ldnStart = nativeSession ? nativeLdnStart : fiveLdnStart
+float ldnHigh = nativeSession ? nativeLdnHigh : fiveLdnHigh
+float ldnLow = nativeSession ? nativeLdnLow : fiveLdnLow
+int nyIn = nativeSession ? nativeNyIn : fiveNyIn
+int nyStart = nativeSession ? nativeNyStart : fiveNyStart
+float nyHigh = nativeSession ? nativeNyHigh : fiveNyHigh
+float nyLow = nativeSession ? nativeNyLow : fiveNyLow
+
+var box[] sessionBoxesAsia = array.new_box()
+var box[] sessionBoxesLondon = array.new_box()
+var box[] sessionBoxesNy = array.new_box()
+
+f_updateSessionBox(box[] store, bool inside, int startT, float hi, float lo, int endT, color tone, string name) =>
+    if inside and not na(startT) and not na(hi) and not na(lo)
+        bool sameSession = array.size(store) > 0 and box.get_left(array.get(store, array.size(store) - 1)) == startT
+        if sameSession
+            box lastBox = array.get(store, array.size(store) - 1)
+            box.set_top(lastBox, hi)
+            box.set_bottom(lastBox, lo)
+            box.set_right(lastBox, endT)
+        else
+            box newBox = box.new(left = startT, top = hi, right = endT, bottom = lo, xloc = xloc.bar_time, border_color = color.new(tone, 45), border_width = 1, bgcolor = color.new(tone, sessionBoxTransparency), text = name, text_color = color.new(tone, 10), text_size = size.small, text_halign = text.align_left, text_valign = text.align_top)
+            array.push(store, newBox)
+            while array.size(store) > sessionBoxHistory
+                box.delete(array.shift(store))
+    0
+
+if showSessionBoxes
+    int sessionBoxEnd = na(time_close) ? time : time_close
+    f_updateSessionBox(sessionBoxesAsia, not na(asiaLiveStart), asiaLiveStart, asiaLiveHigh, asiaLiveLow, sessionBoxEnd, asiaColor, "Asia")
+    f_updateSessionBox(sessionBoxesLondon, ldnIn == 1, ldnStart, ldnHigh, ldnLow, sessionBoxEnd, londonColor, "London")
+    f_updateSessionBox(sessionBoxesNy, nyIn == 1, nyStart, nyHigh, nyLow, sessionBoxEnd, nyColor, "New York")
+
+
 // ------- TRADE PLAN (PRICE-ACTION ENTRY AT A QUALIFIED POI, TARGET AT A KEY LEVEL) -------
 // Rules, evaluated only on closed bars:
 //  1. Direction follows the external bias (long in a bullish bias, short in a bearish one).
@@ -2750,7 +2818,7 @@ f_renderPanel() =>
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
         if compactPanel
-            table.cell(dashboard, 0, 0, "APEXVOID v2.11", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.12", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 2, "Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
             table.cell(dashboard, 1, 2, biasText + htfBiasSuffix, text_color = valueColor, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Directional leg: " + legText)
@@ -2775,7 +2843,7 @@ f_renderPanel() =>
             table.cell(dashboard, 1, 27, tradeSummary, text_color = tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = tradeTip)
             table.cell(dashboard, 1, 22, zonesCompact, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
         else
-            table.cell(dashboard, 0, 0, "APEXVOID v2.11", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+            table.cell(dashboard, 0, 0, "APEXVOID v2.12", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
             table.cell(dashboard, 0, 1, "MARKET STATE", height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
             table.cell(dashboard, 0, 2, "External Bias", height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
