@@ -11,6 +11,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
 
@@ -63,6 +64,10 @@ type Options struct {
 	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
 	// docs/strategies/htf-zone-structure.md uses it to see which higher-timeframe zones the production window drops while they are still live.
 	LegacyWindowBars map[market.Timeframe]int
+	// KeyLevelSource replaces the levels the Key Level strategy reads for this replay only (the frame, and every other strategy, keep theirs). It is a test
+	// option like WithoutStopBudget with no production caller (test/architecture enforces that): docs/strategies/keylevel-edge-source.md measures whether
+	// Key Level's edge is in the level or in the reaction with it.
+	KeyLevelSource keylevel.LevelSource
 }
 
 // Replay dispatches a capture through the exact engine path a live feed uses
@@ -99,6 +104,7 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 		engine.WithFrozenBinding(&settings)
 	}
 	settings.OnEvaluation = opts.OnEvaluation
+	settings.KeyLevelSource = opts.KeyLevelSource
 	settings.OnWithdrawn = opts.OnWithdrawn
 	for _, id := range opts.DisabledStrategies {
 		found := false

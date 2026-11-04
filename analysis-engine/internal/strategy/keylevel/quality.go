@@ -2,12 +2,14 @@ package keylevel
 
 import (
 	"math"
+	"sort"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
 // QualityModel is the version of the scoring rule below. A change to a dimension or a range is a new version.
@@ -35,6 +37,12 @@ type qualityInputs struct {
 	htfAligned   bool
 	htfTouches   int     // touches of the best higher-timeframe level at this price (H1 weighted fully, M15 by half), 0 when none/unavailable
 	htfWeight    float64 // 1 for an H1 level, 0.5 for an M15 level
+
+	// The level's own facts, published as measurements only (forward labels for a later decision; never a score, a gate or a star).
+	levelKind string                // the level's kind as the strategy read it ("reaction", "round")
+	levelBand float64               // the level's own band (price units)
+	swings    []techniquezone.Swing // the frame's swings, whose members within the band say how the level formed
+	coverage  float64               // share of the window's [low, high] inside any level band at this evaluation
 }
 
 // scoreQuality is Key Level's technical quality: how strong this level and this reaction are as a Key Level thesis. Six dimensions,
@@ -95,6 +103,21 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
 
+	// Forward labels: what kind of level this was, so realised outcomes can later be cut by it. Measurements only.
+	if in.levelKind == "round" {
+		m.Measure("level_kind", 1)
+	} else {
+		m.Measure("level_kind", 0)
+	}
+	m.Measure("level_round_class", roundClass(in.level))
+	origin, age := levelOrigin(in.swings, in.level, in.levelBand, in.confirmIndex)
+	m.Measure("level_origin", origin)
+	m.Measure("level_age_bars", age)
+	if in.atr > 0 {
+		m.Measure("level_band_atr", in.levelBand/in.atr)
+	}
+	m.Measure("level_coverage", in.coverage)
+
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }
 
@@ -120,4 +143,85 @@ func higherTimeframeLevel(ctx *context.MarketContext, levelPrice float64, contra
 		}
 	}
 	return touches, weight
+}
+
+// roundClass is how round the level's PRICE is: 0 none, 1 a multiple of 5, 2 of 10, 3 of 50, 4 of 100 (the most round class that holds, to 1e-6). A merged level whose price was averaged is not on a
+// handle, whatever its kind says: this judges the price.
+func roundClass(price float64) float64 {
+	for _, c := range []struct {
+		step  float64
+		class float64
+	}{{100, 4}, {50, 3}, {10, 2}, {5, 1}} {
+		ratio := price / c.step
+		if math.Abs(ratio-math.Round(ratio))*c.step <= 1e-6 {
+			return c.class
+		}
+	}
+	return 0
+}
+
+// levelOrigin reads how a level formed from the frame's swings within its band, as known at the confirmation bar (upto): +1 when swing lows formed it, -1 when swing highs did, 0 when mixed (or when no swing lies
+// in the band), and the age in bars, at the confirmation, of its newest member swing (upto + 1, the bars read, when it has no member, so the measurement is always a finite number). Bars after the confirmation
+// change nothing, like every other published component.
+func levelOrigin(swings []techniquezone.Swing, price, band float64, upto int) (origin, ageBars float64) {
+	highs, lows, newest := 0, 0, -1
+	for _, s := range swings {
+		if s.Index > upto || math.Abs(s.Price-price) > band {
+			continue
+		}
+		if s.Kind == "high" {
+			highs++
+		} else {
+			lows++
+		}
+		if s.Index > newest {
+			newest = s.Index
+		}
+	}
+	switch {
+	case lows > highs:
+		origin = 1
+	case highs > lows:
+		origin = -1
+	}
+	if newest < 0 {
+		return origin, float64(upto + 1)
+	}
+	return origin, float64(upto - newest)
+}
+
+// levelCoverage is the share of the window's [low, high] that lies inside any level's band (the union of [price - band, price + band] of every level the strategy considers). A selective definition covers
+// little; a level on every second dollar covers everything and so selects nothing.
+func levelCoverage(levels []techniquezone.Level, minimumTouches int, bars []market.Candle) float64 {
+	if len(bars) == 0 {
+		return math.NaN()
+	}
+	low, high := bars[0].Low, bars[0].High
+	for _, b := range bars {
+		low, high = math.Min(low, b.Low), math.Max(high, b.High)
+	}
+	if !(high > low) {
+		return math.NaN()
+	}
+	type span struct{ lo, hi float64 }
+	var spans []span
+	for _, l := range levels {
+		if l.Touches < maxInt(1, minimumTouches) {
+			continue
+		}
+		lo, hi := math.Max(low, l.Price-l.Band), math.Min(high, l.Price+l.Band)
+		if hi > lo {
+			spans = append(spans, span{lo, hi})
+		}
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].lo < spans[j].lo })
+	covered, edge := 0.0, low
+	for _, sp := range spans {
+		if sp.hi <= edge {
+			continue
+		}
+		covered += sp.hi - math.Max(sp.lo, edge)
+		edge = sp.hi
+	}
+	return covered / (high - low)
 }
