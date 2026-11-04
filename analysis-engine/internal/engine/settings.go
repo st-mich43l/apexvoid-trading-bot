@@ -17,6 +17,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/regime"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/session"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
+	strategykeylevel "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/trendline"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/zone"
@@ -116,6 +117,8 @@ type Settings struct {
 	// OnWithdrawn, when set, receives every live zone opportunity withdrawn because a close of its structure's own timeframe went beyond the structural
 	// far edge (opportunity.ReasonStructureClosedThrough), with the open time of the closing bar. Observation only, like OnEvaluation.
 	OnWithdrawn func(candidate opportunity.Candidate, at int64)
+	// KeyLevelSource replaces the levels the Key Level strategy reads, for measurement only (replaycapture.Options.KeyLevelSource). Production leaves it nil.
+	KeyLevelSource strategykeylevel.LevelSource
 }
 
 // Evaluation is the per-bar strategy output delivered to Settings.OnEvaluation.

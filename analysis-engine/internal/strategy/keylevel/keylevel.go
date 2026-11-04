@@ -99,6 +99,11 @@ type Config struct {
 	StopBudget strategyutil.StopBudget
 }
 
+// LevelSource replaces the levels Key Level reads (the frame's SwingLevels under the profit_week contract) for this strategy's evaluation only: the frame itself, and
+// every other strategy that reads its levels, is untouched. seed is the latest closed bar's open time, so a source that draws random levels is deterministic.
+// It is a measurement hook (replaycapture.Options.KeyLevelSource, docs/strategies/keylevel-edge-source.md) with no production caller; an architecture test enforces that.
+type LevelSource func(frame *context.LegacyFrame, seed int64) []techniquezone.Level
+
 // Strategy is KeyLevelStrategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
@@ -106,7 +111,11 @@ type Strategy struct {
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
+	levelSource LevelSource
 }
+
+// UseLevelSource installs a LevelSource. Test-only: nothing in production calls it.
+func (s *Strategy) UseLevelSource(source LevelSource) { s.levelSource = source }
 
 func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if cfg.ID != ID {
@@ -227,6 +236,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	}
 	zoneBandFloor := math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr))
 	levels, zones := s.structure(base)
+	coverage := levelCoverage(levels, s.cfg.MinimumTouches, frame.Bars)
 
 	// Each level's confirmed attempt becomes a full candidate (reaction-anchored invalidation, the sweep requirement, the stop budget, the target) BEFORE
 	// the highest-stars one is kept, so an attempt the strategy then refuses can no longer suppress a valid one on another level. (v5 chose the best
@@ -319,7 +329,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			continue
 		}
 		chosen := confirmed[0]
-		candidate, ok := s.candidate(ctx, base, &chosen)
+		candidate, ok := s.candidate(ctx, base, &chosen, coverage)
 		if !ok {
 			continue
 		}
@@ -342,7 +352,7 @@ func reactionFactors(confirmationType string, htfAligned bool, touches int, sess
 	return strategyutil.ReactionFactors(confirmationType, htfAligned, touches, sessionSweep)
 }
 
-func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt) (opportunity.Candidate, bool) {
+func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt, coverage float64) (opportunity.Candidate, bool) {
 	atr := d.ATR
 	direction := a.direction
 	buffer := s.cfg.InvalidationBufferATR * atr
@@ -398,6 +408,7 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity",
 		localTrend: d.Frame.Structure, choch: a.detector.RecentCHoCH(maxInt(1, d.Settings.ReactionLookbackBars)), htfAligned: a.detector.HTFAligned(),
 		htfTouches: htfTouches, htfWeight: htfWeight,
+		levelKind: a.level.Kind, levelBand: a.level.Band, swings: d.Frame.Swings, coverage: coverage,
 	})
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
@@ -464,6 +475,9 @@ func (s *Strategy) structure(d *strategyutil.LegacyDetector) ([]techniquezone.Le
 	levels, zones := d.Frame.Levels, d.Frame.Zones
 	if s.cfg.Contract == contractProfitWeek {
 		levels, zones = d.Frame.SwingLevels, d.Frame.ContractZones
+	}
+	if s.levelSource != nil && len(d.Frame.Bars) > 0 {
+		levels = s.levelSource(d.Frame, d.Frame.Bars[len(d.Frame.Bars)-1].Time)
 	}
 	ordered := append([]techniquezone.Level(nil), levels...)
 	sort.SliceStable(ordered, func(i, j int) bool {
