@@ -2711,7 +2711,7 @@ f_keyLevels() =>
                 array.push(fl, inPlay ? 1.0 : 0.0)
                 array.push(fl, first * 1.0)
                 array.push(fl, bal * 1.0)
-                array.push(tips, "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(array.get(fin, j * 4 + 1), "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · formed as " + (above ? "support" : "resistance") + " → flipped" + (keyV7 ? " · Break & Retest territory; key_level v7 skips it" : "") : "") + (inPlay ? " · key_level can trade this level now" : "") + (math.abs(p - capP) > 0.005 ? " · round " + str.tostring(capP, "#.##") + ", engine price merged" : "") + " · definition " + (keyV7 ? "Selective v7 preview (window " : "Engine v6 (SwingLevels, window ") + str.tostring(w) + ") · " + covTxt)
+                array.push(tips, "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(array.get(fin, j * 4 + 1), "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · formed as " + (above ? "support" : "resistance") + " → flipped" + (keyV7 ? " · Break & Retest territory; key_level v7 skips it" : "") : "") + (inPlay ? " · in play: price is still working this level" : "") + (math.abs(p - capP) > 0.005 ? " · round " + str.tostring(capP, "#.##") + ", engine price merged" : "") + " · definition " + (keyV7 ? "Selective v7 preview (window " : "Engine v6 (SwingLevels, window ") + str.tostring(w) + ") · " + covTxt)
             int[] near = array.sort_indices(gap, order.ascending)
             for k = 0 to nl - 1
                 int j = array.get(near, k)
