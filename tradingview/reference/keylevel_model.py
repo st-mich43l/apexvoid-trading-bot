@@ -371,3 +371,217 @@ def captions(chosen, labels, gap, step=5.0):
     text = ("KL %s" % ("%g" % (round(lv["price"] / step) * step)) if lv["kind"] == "round" else "KL×%d" % lv["touches"]) + (" ●" if lv["in_play"] else "")
     (folded if any(abs(x - lv["price"]) <= gap for x in labels) else shown).append((text, lv))
   return shown, folded
+
+
+# ---- v2.17: one code path, two definitions (Engine key_level v6 / Selective v7 preview) -----------------------------------------------------------------------
+
+V6 = dict(name="Engine (key_level v6)", cluster_atr=0.5, step=5.0, merge="average")
+V7 = dict(name="Selective (v7 preview)", cluster_atr=0.25, step=10.0, merge="strongest")
+MAJOR_STEP = 50.0
+
+
+def definition_levels(h, l, c, window, mode, step=None):
+  """The five steps of the Pine layer on the last `window` closed bars, for one definition (V6 or V7). Only the cluster tolerance, the round step and the merge differ.
+  `step` overrides the definition's round step (0 = off). Returns dict(levels, swings, tol, median_atr, atr, offset, lo, hi, coverage). Each level: price, kind, touches, band,
+  newest (window index of its newest member swing), origin ('support' / 'resistance' / 'mixed': the majority of the zigzag swings within tol of its price)."""
+  off = max(0, len(h) - window)
+  hh, ll, cc = h[off:], l[off:], c[off:]
+  atr = atr_series(hh, ll, cc)
+  swings = zigzag(fractal_candidates(hh, ll), atr) if len(hh) >= 2 * FRACTAL_N + 1 else []
+  tol = atr_scalar(atr) * mode["cluster_atr"]
+  step = mode["step"] if step is None else step
+  levels = []
+  for cl in clusters_of(swings, tol):
+    if len(cl) >= MIN_TOUCHES:
+      levels.append(dict(price=sum(s[1] for s in cl) / len(cl), kind="reaction", touches=len(cl), band=tol, newest=max(s[0] for s in cl)))
+  if swings and step > 0:
+    lo_p, hi_p = min(s[1] for s in swings), max(s[1] for s in swings)
+    low = math.floor(lo_p / step) * step
+    for k in range(int((math.ceil(hi_p / step) * step - low) / step) + 1):
+      price = low + k * step
+      near = [s for s in swings if abs(s[1] - price) <= max(tol, (atr[s[0]] if atr[s[0]] > 0 else 1.0) * ROUND_ATR)]
+      if len(near) >= MIN_TOUCHES:
+        levels.append(dict(price=price, kind="round", touches=len(near), band=tol, newest=max(s[0] for s in near)))
+  out = merge_levels(levels, tol, mode["merge"])
+  for v in out:
+    highs, lows, _ = origin(v["price"], swings, tol)
+    v["origin"] = "resistance" if highs > lows else "support" if lows > highs else "mixed"
+  lo, hi = min(ll), max(hh)
+  return dict(levels=out, swings=[(i + off, p, k) for i, p, k in swings], tol=tol, median_atr=tol / mode["cluster_atr"], atr=atr, offset=off, lo=lo, hi=hi, coverage=coverage(out, tol, lo, hi))
+
+
+def merge_levels(levels, tol, merge):
+  """Dedupe: price-sorted neighbours within tol merge. 'average' (v6): the average price, touches = max, the merged-in kind (and newest member) unless the previous has at least as many touches.
+  'strongest' (v7): the stronger member's exact price (strength: touches, reaction before round, newest member), compared against the one kept (no drift)."""
+  out = []
+  for v in sorted(levels, key=lambda v: v["price"]):
+    if out and abs(out[-1]["price"] - v["price"]) <= tol:
+      prev = out[-1]
+      if merge == "average":
+        out[-1] = dict(price=(prev["price"] + v["price"]) / 2, kind=prev["kind"] if prev["touches"] >= v["touches"] else v["kind"], touches=max(prev["touches"], v["touches"]),
+                       band=tol, newest=v["newest"] if v["touches"] > prev["touches"] else prev["newest"])
+      else:
+        out[-1] = dict(v if strength(v) > strength(prev) else prev)
+    else:
+      out.append(dict(v))
+  return out
+
+
+def clusters_of(swings, tol):
+  """Clusters of zigzag swings sorted by price: a swing joins while it is within tol of every member and the span stays within 2 tol."""
+  out = []
+  for s in sorted(swings, key=lambda s: s[1]):
+    if out:
+      ps = [x[1] for x in out[-1]] + [s[1]]
+      if max(ps) - min(ps) <= tol * SPAN_MULTIPLE and all(abs(x[1] - s[1]) <= tol for x in out[-1]):
+        out[-1].append(s)
+        continue
+    out.append([s])
+  return out
+
+
+def strength(v):
+  """v7 dedupe order: more touches, then reaction before round, then the more recent newest member."""
+  return (v["touches"], 1 if v["kind"] == "reaction" else 0, v["newest"])
+
+
+def coverage(levels, tol, lo, hi):
+  """The share of the window's [low, high] inside any level band (price +- tol), all levels."""
+  if not hi > lo:
+    return float("nan")
+  covered, edge = 0.0, lo
+  for a, b in sorted((max(lo, v["price"] - tol), min(hi, v["price"] + tol)) for v in levels):
+    if b > a and b > edge:
+      covered += b - max(a, edge)
+      edge = b
+  return covered / (hi - lo)
+
+
+def coverage_text(cov):
+  """The wording of the tooltip: low selectivity above 40 %, selective at or below 25 %."""
+  pct = "coverage %d %% of the recent range" % round(cov * 100)
+  return pct + (": low selectivity" if cov > 0.40 else ": selective" if cov <= 0.25 else "")
+
+
+def is_major(price, step, gold):
+  """A major round level: a $50 / $100 multiple on gold, judged on the caption price (the step price)."""
+  caption = round(price / step) * step if step > 0 else price
+  return gold and abs(caption - round(caption / MAJOR_STEP) * MAJOR_STEP) < 0.005
+
+
+def display217(res, closes, per_side, mode, scale_ok=lambda p: True, gold=True, step=None):
+  """The v2.17 display. No level is hidden for being broken. Nearest first, at most `per_side` per side inside the candle-scale window, in play counted for its side.
+  Per level: side, origin, flipped, in_play (the engine Role is not broken: the last 2 closes are not both beyond its band; in v7 a flipped level is skipped by the
+  strategy, so it is not in play), line transparency (in play 45, flipped 88, major 60, else by touches 82 / 74 / 66) and the tooltip."""
+  step = mode["step"] if step is None else step
+  tol, last, v7 = res["tol"], closes[-1], mode["merge"] == "strongest"
+  chosen, up, down = [], 0, 0
+  for lv in sorted(res["levels"], key=lambda x: abs(x["price"] - last)):
+    above = lv["price"] > last
+    if not scale_ok(lv["price"]) or (up if above else down) >= per_side:
+      continue
+    up, down = up + above, down + (not above)
+    run = 0
+    for cl in reversed(closes):
+      if not (cl < lv["price"] - tol if above else cl > lv["price"] + tol):
+        break
+      run += 1
+    side = "resistance" if above else "support"
+    flipped = lv["origin"] not in (side, "mixed")
+    in_play = run < 2 and not (v7 and flipped)
+    major = lv["kind"] == "round" and is_major(lv["price"], step, gold)
+    transparency = 45 if in_play else 88 if flipped else 60 if major else 66 if lv["touches"] >= 4 else 74 if lv["touches"] == 3 else 82
+    caption_price = round(lv["price"] / step) * step if step > 0 else lv["price"]
+    chosen.append(dict(lv, side=side, flipped=flipped, in_play=in_play, major=major, transparency=transparency, caption_price=caption_price, formed=lv["origin"]))
+  return chosen
+
+
+def captions217(chosen, labels, gap):
+  """A selected level keeps its line always. Its caption (`KL×3`, `KL 3950`, ` ●` when in play) folds into a stronger right-column label within `gap`."""
+  shown, folded = [], []
+  for lv in chosen:
+    text = ("KL %s" % ("%g" % lv["caption_price"]) if lv["kind"] == "round" else "KL×%d" % lv["touches"]) + (" ●" if lv["in_play"] else "")
+    (folded if any(abs(x - lv["price"]) <= gap for x in labels) else shown).append((text, lv))
+  return shown, folded
+
+
+def tooltip(lv, tol, mode, window, cov):
+  """The tooltip of a key level (the Pine string, in the same order)."""
+  side = lv["side"]
+  parts = ["Key level %.2f ± %.2f" % (lv["price"], tol), lv["kind"], "%d touches" % lv["touches"], side]
+  if lv["flipped"]:
+    parts.append("formed as %s → flipped" % lv["origin"])
+    if mode["merge"] == "strongest":
+      parts.append("Break & Retest territory; key_level v7 skips it")
+  if lv["in_play"]:
+    parts.append("key_level can trade this level now")
+  if lv["kind"] == "round" and abs(lv["price"] - lv["caption_price"]) > 0.005:
+    parts.append("engine price %.2f (merged)" % lv["price"])
+  parts.append("definition %s (SwingLevels, window %d)" % (mode["name"], window))
+  parts.append(coverage_text(cov))
+  return " · ".join(parts)
+
+
+def pine_definition_levels(h, l, c, window, step, v7):
+  """The Pine algorithm for v2.17, step by step (strides [price, touches, round, newest], simplified join, stride dedupe). Returns (levels as (price, touches, round?, newest), swings)."""
+  off = max(0, len(h) - window)
+  hh, ll, cc = h[off:], l[off:], c[off:]
+  w = len(hh)
+  tr, av = [], []
+  for i in range(w):
+    tr.append(hh[i] - ll[i] if i == 0 else max(hh[i] - ll[i], max(abs(hh[i] - cc[i - 1]), abs(ll[i] - cc[i - 1]))))
+    lo = max(0, i - 13)
+    av.append(sum(tr[lo:i + 1]) / (i - lo + 1))
+  sw = []
+  for i in range(2, w - 2):
+    cand = []
+    if hh[i] >= hh[i + 1] and hh[i] >= hh[i + 2] and hh[i] > hh[i - 1] and hh[i] > hh[i - 2]:
+      cand.append((hh[i], 1))
+    if ll[i] <= ll[i + 1] and ll[i] <= ll[i + 2] and ll[i] < ll[i - 1] and ll[i] < ll[i - 2]:
+      cand.append((ll[i], -1))
+    for p, k in cand:
+      if not sw:
+        sw.append([i, p, k])
+      elif k == sw[-1][2]:
+        if (p > sw[-1][1]) if k > 0 else (p < sw[-1][1]):
+          sw[-1] = [i, p, k]
+      elif abs(p - sw[-1][1]) >= av[i]:
+        sw.append([i, p, k])
+  if not sw:
+    return [], []
+  s_av = sorted(av)
+  tol = (s_av[w // 2] if w % 2 else (s_av[w // 2 - 1] + s_av[w // 2]) / 2) * (0.25 if v7 else 0.5)
+  order = sorted(range(len(sw)), key=lambda q: sw[q][1])
+  raw, q = [], 0
+  while q < len(order):
+    start, total, cnt, newest = sw[order[q]][1], 0.0, 0, 0
+    while q < len(order) and sw[order[q]][1] - start <= tol:
+      total += sw[order[q]][1]
+      cnt += 1
+      newest = max(newest, sw[order[q]][0])
+      q += 1
+    if cnt >= 2:
+      raw.append((total / cnt, cnt, 0, newest))
+  if step > 0:
+    low = math.floor(sw[order[0]][1] / step) * step
+    for s in range(int((math.ceil(sw[order[-1]][1] / step) * step - low) / step) + 1):
+      rp = low + s * step
+      rt, newest = 0, 0
+      for i, p, _ in sw:
+        if abs(p - rp) <= max(tol, av[i] * 0.25):
+          rt += 1
+          newest = max(newest, i)
+      if rt >= 2:
+        raw.append((rp, rt, 1, newest))
+  fin = []
+  for price, t, k, nw in sorted(raw, key=lambda x: x[0]):
+    if fin and abs(fin[-1][0] - price) <= tol:
+      fp, ft, fk, fn = fin[-1]
+      if v7:
+        if (t, 1 - k, nw) > (ft, 1 - fk, fn):
+          fin[-1] = (price, t, k, nw)
+      else:
+        fin[-1] = ((fp + price) / 2.0, max(ft, t), k if t > ft else fk, nw if t > ft else fn)
+    else:
+      fin.append((price, t, k, nw))
+  return fin, sw
