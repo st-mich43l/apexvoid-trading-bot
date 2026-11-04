@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.16.1", "AV PA v2.16.1", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.17", "AV PA v2.17", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -128,16 +128,16 @@ int maxStructureEvents = input.int(60, "Maximum BOS/CHoCH events", minval = 10, 
 int zoneMaxAge = input.int(600, "Zone maximum age (bars)", minval = 50, maxval = 5000, group = G6)
 bool showDashboard = input.bool(true, "Show Market Intelligence panel", group = G6)
 string textScaleInput = input.string("Standard", "Global text scale", options = ["Compact", "Standard", "Large"], group = G6)
-string dashboardDensity = input.string("Compact", "Dashboard display size", options = ["Compact", "Standard"], group = G6)
 string dashboardPositionInput = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right"], group = G6)
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
 int gutter = input.int(12, "Annotation gutter (bars right of the last candle)", minval = 4, maxval = 40, group = G6)
 
-bool showKeyLevels = input.bool(true, "Show key levels (engine key_level definition, dimmed)", group = G7)
-int keyPerSide = input.int(3, "Key levels per side", minval = 1, maxval = 10, group = G7)
-int keyWindowInput = input.int(0, "Key level window (bars, 0 = auto by timeframe)", minval = 0, maxval = 780, group = G7)
-float keyRoundInput = input.float(0.0, "Round step (price, 0 = auto: 5.0 on XAU, off otherwise)", minval = 0, step = 0.5, group = G7)
+bool showKeyLevels = input.bool(true, "Show key levels", group = G7)
+string keyDefinition = input.string("Engine (key_level v6)", "Key level definition", options = ["Engine (key_level v6)", "Selective (v7 preview)"], group = G7)
+int keyPerSide = input.int(2, "Key levels per side", minval = 1, maxval = 10, group = G7)
+int keyWindowInput = input.int(0, "Key level window (0 = auto)", minval = 0, maxval = 780, group = G7)
+float keyRoundInput = input.float(0.0, "Round step (0 = by definition: XAU 5 / 10)", minval = 0, step = 0.5, group = G7)
 bool showKeyBand = input.bool(false, "Show key level band", group = G7)
 color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
 
@@ -166,12 +166,14 @@ int externalLength = sensitivity == "Manual" ? manualExternal : chartSecs <= 300
 float atr = ta.atr(14)
 int keyWindow = keyWindowInput > 0 ? keyWindowInput : chartSecs <= 300 ? 150 : chartSecs <= 900 ? 250 : 400
 bool isGold = str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")
-float keyStep = keyRoundInput > 0 ? keyRoundInput : isGold ? 5.0 : 0.0
+bool keyV7 = keyDefinition == "Selective (v7 preview)"
+float keyStep = keyRoundInput > 0 ? keyRoundInput : isGold ? (keyV7 ? 10.0 : 5.0) : 0.0
 // Candle-scale protection: an object may be drawn if it is near price (window in ATR) or
 // inside the price range the last `Candle range reference` bars already span, so it can
 // never stretch the chart's price scale beyond what the candles themselves need.
 float scaleBandHigh = ta.highest(high, scaleLookbackBars)
 float scaleBandLow = ta.lowest(low, scaleLookbackBars)
+float columnGap = math.max(annotationATRSpacing * nz(atr, syminfo.mintick), (scaleBandHigh - scaleBandLow) / 36.0)
 f_scaleOk(float price) =>
     float pad = nz(atr, 0.0)
     not protectCandleScale or math.abs(price - close) <= scaleWindowATR * nz(atr, syminfo.mintick) or (price <= scaleBandHigh + pad and price >= scaleBandLow - pad)
@@ -202,13 +204,12 @@ string tier2Size = compactText ? size.small : size.normal
 string tier3Size = compactText ? size.tiny : largeText ? size.normal : size.small
 // Dashboard sizing is independent from chart annotation sizing. This prevents
 // the Standard chart typography preset from turning the panel into a large HUD.
-string dashboardTitleSize = dashboardDensity == "Compact" ? size.small : size.normal
+string dashboardTitleSize = size.small
 string dashboardValueSize = size.small
-string dashboardSectionSize = size.small
 float primaryLabelOffsetATR = compactText ? 0.16 : largeText ? 0.30 : 0.22
 float structureLabelOffsetATR = compactText ? 0.14 : largeText ? 0.26 : 0.19
-float dashboardKeyWidth = dashboardDensity == "Compact" ? 6.0 : 7.0
-float dashboardValueWidth = dashboardDensity == "Compact" ? 9.0 : 11.0
+float dashboardKeyWidth = 6.0
+float dashboardValueWidth = 9.0
 // Zero delegates row height to TradingView's text-fit sizing.
 float dashboardRowHeight = 0.0
 string dashboardPosition = dashboardPositionInput == "Top Left" ? position.top_left : dashboardPositionInput == "Bottom Right" ? position.bottom_right : position.top_right
@@ -1973,8 +1974,6 @@ float bullPoiBarrier = na
 float bearPoiBarrier = na
 string nearestBullPoiText = "—"
 string nearestBearPoiText = "—"
-string poiContextText = "No qualified POI"
-string opposingBarrierText = "—"
 int visibleOB = 0
 int visibleFVG = 0
 int visibleSD = 0
@@ -2132,10 +2131,6 @@ if array.size(zones) > 0
                         bullPoiBarrier := barrierMid
                     if not actionableBearPoi and not na(nearestBearPoi) and barrierSide == 1 and barrierMid < nearestBearPoi and (na(bearPoiBarrier) or barrierMid > bearPoiBarrier)
                         bearPoiBarrier := barrierMid
-        string bullState = na(nearestBullPoi) ? "" : actionableBullPoi ? "Bull actionable · " + f_px(nearestActionableBullPoi) : "Bull distant/tested"
-        string bearState = na(nearestBearPoi) ? "" : actionableBearPoi ? "Bear actionable · " + f_px(nearestActionableBearPoi) : "Bear distant/tested"
-        poiContextText := bullState + (bullState != "" and bearState != "" ? " · " : "") + bearState
-        opposingBarrierText := bias == 1 ? (na(bullPoiBarrier) ? "Bull path open" : "Overhead · " + f_px(bullPoiBarrier)) : bias == -1 ? (na(bearPoiBarrier) ? "Bear path open" : "Support · " + f_px(bearPoiBarrier)) : "Bias required"
 
         // Order-block display selection. Order blocks have their own per-side budget and
         // distance limit, independent of POI qualification and of the FVG / supply-demand
@@ -2820,17 +2815,20 @@ f_emitCluster(int[] members, int slot) =>
         label.set_tooltip(existing, tip)
     slot + 1
 
-// ------- KEY LEVELS (LegacyFrame.SwingLevels of the key_level strategy, dimmed) -------
+// ------- KEY LEVELS (one code path, two definitions; dimmed) -------
 // Computed on the last bar from the last keyWindow CLOSED bars: the window's own ATR series (mean of up to 14 true ranges), fractal candidates (2 bars each side) through the
-// zigzag filter (a move of at least the ATR at the swing), clusters within 0.5 x the median ATR of the window (joined while within tol of the lowest member, which implies the
-// span <= 2 tol test), round levels (2+ swings within max(tol, 0.25 ATR at the swing)), levels within tol merged. Levels are [price, touches, round] strides, swings
-// [window index, price, +1 high / -1 low] strides.
-f_keyAdd(float[] lv, float[] pr, float price, int touches, float kind) =>
+// zigzag filter (a move of at least the ATR at the swing), clusters within tol of the lowest member (tol = 0.5 x the median ATR of the window in Engine v6, 0.25 in Selective
+// v7), round levels (2+ swings within max(tol, 0.25 ATR at the swing); step 5 / 10 on XAU), levels within tol merged (v6: average; v7: the stronger member's exact price).
+// Levels are [price, touches, round, newest member] strides, swings [window index, price, +1 high / -1 low] strides.
+f_keyAdd(float[] lv, float[] pr, float price, int touches, float kind, int newest) =>
     array.push(pr, price)
     array.push(lv, price)
     array.push(lv, touches * 1.0)
     array.push(lv, kind)
+    array.push(lv, newest * 1.0)
     0
+
+f_keyStrength(float[] a, int i) => array.get(a, i + 1) * 1000000 + (1 - array.get(a, i + 2)) * 100000 + array.get(a, i + 3)
 
 f_zig(float[] sw, float[] av, int c, float p, float k) =>
     int n = array.size(sw)
@@ -2854,9 +2852,13 @@ f_keyLevels() =>
     float[] ranges = array.new_float()
     float[] av = array.new_float()
     float[] sw = array.new_float()
+    float wHi = high[lastOff]
+    float wLo = low[lastOff]
     if showKeyLevels and w >= 5
         for i = 0 to w - 1
             int o = lastOff + w - 1 - i
+            wHi := math.max(wHi, high[o])
+            wLo := math.min(wLo, low[o])
             array.push(ranges, i == 0 ? high[o] - low[o] : math.max(high[o] - low[o], math.max(math.abs(high[o] - close[o + 1]), math.abs(low[o] - close[o + 1]))))
             int lo = math.max(0, i - 13)
             float s14 = 0.0
@@ -2870,7 +2872,7 @@ f_keyLevels() =>
                     f_zig(sw, av, i - 2, low[o + 2], -1.0)
     int ns = int(array.size(sw) / 3)
     if ns > 0
-        float tol = array.median(av) * 0.5
+        float tol = array.median(av) * (keyV7 ? 0.25 : 0.5)
         float[] px = array.new_float()
         for k = 0 to ns - 1
             array.push(px, array.get(sw, k * 3 + 1))
@@ -2882,50 +2884,63 @@ f_keyLevels() =>
             float start = array.get(px, array.get(ord, q))
             float sum = 0.0
             int cnt = 0
+            int nw = 0
             while q < ns and array.get(px, array.get(ord, q)) - start <= tol
                 sum += array.get(px, array.get(ord, q))
+                nw := math.max(nw, int(array.get(sw, array.get(ord, q) * 3)))
                 cnt += 1
                 q += 1
             if cnt >= 2
-                f_keyAdd(lv, pr, sum / cnt, cnt, 0.0)
+                f_keyAdd(lv, pr, sum / cnt, cnt, 0.0, nw)
         if keyStep > 0
             float lowStep = math.floor(array.get(px, array.get(ord, 0)) / keyStep) * keyStep
             for s = 0 to int((math.ceil(array.get(px, array.get(ord, ns - 1)) / keyStep) * keyStep - lowStep) / keyStep)
                 float rp = lowStep + s * keyStep
                 int rt = 0
+                int rn = 0
                 for k = 0 to ns - 1
-                    rt += math.abs(array.get(px, k) - rp) <= math.max(tol, array.get(av, int(array.get(sw, k * 3))) * 0.25) ? 1 : 0
+                    if math.abs(array.get(px, k) - rp) <= math.max(tol, array.get(av, int(array.get(sw, k * 3))) * 0.25)
+                        rt += 1
+                        rn := math.max(rn, int(array.get(sw, k * 3)))
                 if rt >= 2
-                    f_keyAdd(lv, pr, rp, rt, 1.0)
+                    f_keyAdd(lv, pr, rp, rt, 1.0, rn)
         float[] fin = array.new_float()
         float[] gap = array.new_float()
         float lastClose = close[lastOff]
+        float cov = 0.0
         if array.size(pr) > 0
             int[] ord2 = array.sort_indices(pr, order.ascending)
             for k = 0 to array.size(pr) - 1
-                int i = array.get(ord2, k) * 3
-                int d = array.size(fin) - 3
+                int i = array.get(ord2, k) * 4
+                int d = array.size(fin) - 4
                 if d >= 0 and math.abs(array.get(fin, d) - array.get(lv, i)) <= tol
-                    if array.get(lv, i + 1) > array.get(fin, d + 1)
-                        array.set(fin, d + 2, array.get(lv, i + 2))
-                    array.set(fin, d, (array.get(fin, d) + array.get(lv, i)) / 2.0)
-                    array.set(fin, d + 1, math.max(array.get(fin, d + 1), array.get(lv, i + 1)))
+                    bool better = keyV7 ? f_keyStrength(lv, i) > f_keyStrength(fin, d) : array.get(lv, i + 1) > array.get(fin, d + 1)
+                    if better
+                        for z = 1 to 3
+                            array.set(fin, d + z, array.get(lv, i + z))
+                    array.set(fin, d, keyV7 ? (better ? array.get(lv, i) : array.get(fin, d)) : (array.get(fin, d) + array.get(lv, i)) / 2.0)
                 else
-                    for z = 0 to 2
+                    for z = 0 to 3
                         array.push(fin, array.get(lv, i + z))
-            for k = 0 to int(array.size(fin) / 3) - 1
-                array.push(gap, math.abs(array.get(fin, k * 3) - lastClose))
+            float edge = wLo
+            for k = 0 to int(array.size(fin) / 4) - 1
+                float a = math.max(wLo, array.get(fin, k * 4) - tol)
+                float b = math.min(wHi, array.get(fin, k * 4) + tol)
+                array.push(gap, math.abs(array.get(fin, k * 4) - lastClose))
+                if b > a and b > edge
+                    cov += b - math.max(a, edge)
+                    edge := b
+            cov := wHi > wLo ? cov / (wHi - wLo) : 0.0
         // nearest first, at most keyPerSide per side inside the candle-scale window; no level is hidden for being broken
         int up = 0
         int down = 0
-        float clusterRange = math.max(annotationATRSpacing * atr, (scaleBandHigh - scaleBandLow) / 36.0)
         if array.size(gap) > 0
             int[] near = array.sort_indices(gap, order.ascending)
             for k = 0 to array.size(gap) - 1
                 int j = array.get(near, k)
-                float p = array.get(fin, j * 3)
-                float touches = array.get(fin, j * 3 + 1)
-                bool isRound = array.get(fin, j * 3 + 2) > 0
+                float p = array.get(fin, j * 4)
+                float touches = array.get(fin, j * 4 + 1)
+                bool isRound = array.get(fin, j * 4 + 2) > 0
                 bool above = p > lastClose
                 if f_scaleOk(p) and (above ? up : down) < keyPerSide
                     up += above ? 1 : 0
@@ -2933,31 +2948,31 @@ f_keyLevels() =>
                     int run = 0
                     while run < w and (above ? close[lastOff + run] < p - tol : close[lastOff + run] > p + tol)
                         run += 1
-                    int nh = 0
-                    int nl = 0
+                    int bal = 0
                     int first = w
                     for m = 0 to ns - 1
                         if math.abs(array.get(px, m) - p) <= tol
-                            nh += array.get(sw, m * 3 + 2) > 0 ? 1 : 0
-                            nl += array.get(sw, m * 3 + 2) > 0 ? 0 : 1
+                            bal += array.get(sw, m * 3 + 2) > 0 ? 1 : -1
                             first := math.min(first, int(array.get(sw, m * 3)))
-                    bool inPlay = run < 2
-                    bool flipped = (nh > nl and not above) or (nl > nh and above)
-                    string tip = "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(touches, "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · flipped (formed as " + (above ? "support" : "resistance") + ")" : "") + (inPlay ? " · key_level can trade this level now" : "") + " · key_level definition (SwingLevels), window " + str.tostring(w)
+                    bool flipped = (bal > 0 and not above) or (bal < 0 and above)
+                    bool inPlay = run < 2 and not (keyV7 and flipped)
+                    float capP = isRound ? math.round(p / keyStep) * keyStep : p
+                    bool major = isRound and isGold and math.abs(capP - math.round(capP / 50) * 50) < 0.005
+                    string tip = "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(touches, "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · formed as " + (above ? "support" : "resistance") + " → flipped" + (keyV7 ? " · Break & Retest territory; key_level v7 skips it" : "") : "") + (inPlay ? " · key_level can trade this level now" : "") + (math.abs(p - capP) > 0.005 ? " · engine price " + f_px(p) + " (merged)" : "") + " · definition " + (keyV7 ? "Selective v7 preview (window " : "Engine v6 (SwingLevels, window ") + str.tostring(w) + ") · coverage " + str.tostring(math.round(cov * 100)) + " % of the recent range" + (cov > 0.4 ? ": low selectivity" : cov <= 0.25 ? ": selective" : "")
                     int leftBar = math.max(bar_index - lastOff - w + 1 + (first < w ? first : 0), bar_index - maxDrawBars)
-                    array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, inPlay ? 45 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
+                    array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, inPlay ? 45 : flipped ? 88 : major ? 60 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
                     if showKeyBand
                         array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
                     // only the caption yields: a stronger right-column label within a label height carries the note, else the level gets its own caption
                     bool carried = false
                     if array.size(rlY) > 0
                         for r = 0 to array.size(rlY) - 1
-                            if math.abs(array.get(rlY, r) - p) <= clusterRange and str.contains("|80|35|60|62|45|", "|" + str.tostring(array.get(rlPriority, r)) + "|")
+                            if math.abs(array.get(rlY, r) - p) <= columnGap and str.contains("|80|35|60|62|45|", "|" + str.tostring(array.get(rlPriority, r)) + "|")
                                 carried := true
                                 array.set(rlText, r, str.replace_all(array.get(rlText, r), " ·KL", "") + " ·KL")
                                 array.set(rlTip, r, array.get(rlTip, r) + "\n" + tip)
                     if not carried
-                        f_regLabel(p, (isRound ? "KL " + str.tostring(math.round(p / keyStep) * keyStep, "#.##") : "KL×" + str.tostring(touches, "0")) + (inPlay ? " ●" : ""), keyColor, 30, tip, 4, inPlay ? 2 : 3)
+                        f_regLabel(p, (isRound ? "KL " + str.tostring(capP, "#.##") : "KL×" + str.tostring(touches, "0")) + (inPlay ? " ●" : ""), keyColor, 30, tip, 4, inPlay ? 2 : 3)
     0
 
 if barstate.islast
@@ -2974,13 +2989,12 @@ if barstate.islast
         int[] byPrice = array.sort_indices(rlY, order.descending)
         // Labels closer than this merge: at least the annotation spacing, and about one label
         // height (~1/36 of the candle range the chart already shows) so the merge rule follows the zoom.
-        float clusterGap = math.max(annotationATRSpacing * nz(atr, syminfo.mintick), (scaleBandHigh - scaleBandLow) / 36.0)
         int[] members = array.new_int()
         float previousY = na
         for r = 0 to regCount - 1
             int idx = array.get(byPrice, r)
             float y = array.get(rlY, idx)
-            if array.size(members) > 0 and previousY - y >= clusterGap
+            if array.size(members) > 0 and previousY - y >= columnGap
                 slotsUsed := f_emitCluster(members, slotsUsed)
                 array.clear(members)
             array.push(members, idx)
@@ -3009,10 +3023,6 @@ if barstate.isfirst
 // Panel drawing is a function so the main script body stays within TradingView's size limit.
 f_key(int row, string label) =>
     table.cell(dashboard, 0, row, label, height = dashboardRowHeight, text_color = color.silver, text_size = dashboardValueSize, text_halign = text.align_left)
-    0
-
-f_head(int row, string title) =>
-    table.cell(dashboard, 0, row, title, height = dashboardRowHeight, text_color = #CDB5FF, text_size = dashboardSectionSize, text_halign = text.align_left, bgcolor = color.new(#231B38, 10))
     0
 
 f_val(int row, string txt, color tone, string tip) =>
@@ -3045,14 +3055,12 @@ f_renderPanel() =>
         string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
         string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + f_cnt(sdStats, 0) + " · duplicate " + f_cnt(sdStats, 5) + " · retired by cap " + f_cnt(sdStats, 6) + "\nRejected: weak departure " + f_cnt(sdStats, 1) + " · no impulse " + f_cnt(sdStats, 2) + " · closed back " + f_cnt(sdStats, 3) + " · pattern filter " + f_cnt(sdStats, 4) + "\n" + sdLastText
         string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + f_px(nearestBslPrice) + (nearestBslShown ? "" : "*")) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + f_px(nearestSslPrice) + (nearestSslShown ? "" : "*"))
-        bool compactPanel = dashboardDensity == "Compact"
         bool nearestBullIsActionable = actionableBullPoi and math.abs(nearestBullPoi - nearestActionableBullPoi) <= syminfo.mintick
         bool nearestBearIsActionable = actionableBearPoi and math.abs(nearestBearPoi - nearestActionableBearPoi) <= syminfo.mintick
-        string bullPoiDisplay = na(nearestBullPoi) ? "—" : compactPanel ? f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D") : nearestBullPoiText
-        string bearPoiDisplay = na(nearestBearPoi) ? "—" : compactPanel ? f_px(nearestBearPoi) + " · " + str.tostring(nearestBearPoiDistanceATR, "#.0") + (nearestBearIsActionable ? "A" : actionableBearPoi ? "Q" : "D") : nearestBearPoiText
-        string poiStatusDisplay = compactPanel ? (na(nearestBullPoi) ? "" : actionableBullPoi ? "B:A" : "B:D") + (not na(nearestBullPoi) and not na(nearestBearPoi) ? " · " : "") + (na(nearestBearPoi) ? "" : actionableBearPoi ? "S:A" : "S:D") : poiContextText
+        string bullPoiDisplay = na(nearestBullPoi) ? "—" : f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D")
+        string bearPoiDisplay = na(nearestBearPoi) ? "—" : f_px(nearestBearPoi) + " · " + str.tostring(nearestBearPoiDistanceATR, "#.0") + (nearestBearIsActionable ? "A" : actionableBearPoi ? "Q" : "D")
         string compactBarrier = bias == 1 ? (na(bullPoiBarrier) ? "Open above" : "OH " + f_px(bullPoiBarrier)) : bias == -1 ? (na(bearPoiBarrier) ? "Open below" : "SUP " + f_px(bearPoiBarrier)) : "Bias pending"
-        string barrierLiquidityText = (compactPanel ? compactBarrier : opposingBarrierText) + " · LQ " + str.tostring(relevantLiquidityCount) + "/" + str.tostring(poolActiveCount)
+        string barrierLiquidityText = compactBarrier + " · LQ " + str.tostring(relevantLiquidityCount) + "/" + str.tostring(poolActiveCount)
 
         // Compact = major information only: bias and phase, where price sits in the range
         // (premium / discount), swing levels, last structure event, nearest POIs, nearest
@@ -3081,76 +3089,30 @@ f_renderPanel() =>
         if array.size(tradeLog) > 0
             for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
                 tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.16.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.17", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
-        if compactPanel
-            f_key(2, "Bias")
-            f_val(2, biasText, valueColor, "Directional leg: " + legText)
-            f_key(3, "Phase")
-            f_val(3, phaseText, valueColor, "Directional leg: " + legText)
-            f_key(4, "Range")
-            f_val(4, rangeCompact, rangeTone, "Position of the close inside the dealing range: the confirmed swing range extended to the live extreme of the current leg (" + f_px(dealingLow) + " - " + f_px(dealingHigh) + "). Premium (upper half) is the supply side, discount (lower half) the demand side; EQ is the 50% level.")
-            f_key(6, "Range H / L")
-            f_val(6, dealingHighText + " / " + dealingLowText, color.white, swingTip)
-            f_key(9, "Protected")
-            f_val(9, protectedText, valueColor, "The external level whose break flips the bias.")
-            f_key(10, "Last break")
-            f_val(10, lastBreak + breakAge, valueColor, "Last external BOS / CHoCH." + (na(lastBreakTime) ? "" : " At " + f_time(lastBreakTime)) + "\nLast internal break: " + internalCompact)
-            f_key(13, "Bull POI")
-            f_val(13, bullPoiDisplay, bullColor, nearestBullPoiText + "\nA actionable · Q qualified · D distant or tested")
-            f_key(14, "Bear POI")
-            f_val(14, bearPoiDisplay, bearColor, nearestBearPoiText + "\nA actionable · Q qualified · D distant or tested")
-            f_key(16, "BSL / SSL")
-            f_val(16, liqRowText, liquidityColor, liquidityText + "\n" + barrierLiquidityText)
-            f_key(22, "Zones")
-            f_key(27, "Trades")
-            f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)
-            f_val(22, zonesCompact, color.white, "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
-        else
-            f_head(1, "MARKET STATE")
-            f_key(2, "External Bias")
-            f_val(2, biasText, valueColor, "")
-            f_key(3, "Market Phase")
-            f_val(3, phaseText, valueColor, "")
-            f_key(4, "Directional Leg")
-            f_val(4, legText, developingDirection == 1 ? bullColor : developingDirection == -1 ? bearColor : color.silver, "")
-            f_head(5, "STRUCTURE")
-            f_key(6, compactPanel ? "Confirmed H / L" : "Confirmed Major High")
-            string swingWhen = "High " + highText + (na(lastHighTime) ? "" : " · " + f_time(lastHighTime)) + "\nLow " + lowText + (na(lastLowTime) ? "" : " · " + f_time(lastLowTime)) + "\nLast confirmed external swings (chart time zone). A newer lower high or higher low is not listed until it is confirmed by a displaced leg."
-            f_val(6, compactPanel ? highText + " / " + lowText : highText, compactPanel ? color.white : bearColor, swingWhen)
-            if not compactPanel
-                f_key(7, "Confirmed Major Low")
-                f_val(7, lowText, bullColor, "")
-            f_key(8, "Developing Extreme")
-            f_val(8, developingText, developingDirection == 1 ? bullColor : bearColor, "")
-            f_key(9, "Protected Level")
-            f_val(9, protectedText, valueColor, "")
-            f_key(10, "Last BOS / CHoCH")
-            string lastBreakAge = na(lastBreakTime) ? "" : " · " + f_age(lastBreakTime)
-            string lastBreakWhen = na(lastBreakTime) ? "No external break yet" : "External break at " + f_time(lastBreakTime) + " (chart time zone). External structure only: lower lows that were never confirmed as swings do not create a new BOS. See the internal break below."
-            f_val(10, lastBreak + lastBreakAge, valueColor, lastBreakWhen)
-            string internalAge = na(lastInternalBreakTime) ? "" : " · " + f_age(lastInternalBreakTime)
-            color internalTone = str.startswith(lastInternalBreak, "Bull") ? bullColor : str.startswith(lastInternalBreak, "Bear") ? bearColor : color.silver
-            f_key(11, "Last Internal Break")
-            f_val(11, lastInternalBreak + internalAge, internalTone, na(lastInternalBreakTime) ? "No internal break yet" : "Internal break at " + f_time(lastInternalBreakTime) + " (chart time zone). Internal structure never changes the external bias.")
-            f_head(12, "PRICE ACTION")
-            f_key(13, "Nearest Bullish POI")
-            f_val(13, bullPoiDisplay, bullColor, nearestBullPoiText)
-            f_key(14, "Nearest Bearish POI")
-            f_val(14, bearPoiDisplay, bearColor, nearestBearPoiText)
-            f_key(15, "POI Status")
-            f_val(15, poiStatusDisplay == "" ? "No qualified POI" : poiStatusDisplay, color.white, poiContextText + "\n" + zoneText + "\nA = actionable; D = distant, tested, or wrong side of price")
-            f_key(16, "Barrier / Liquidity")
-            f_val(16, barrierLiquidityText, color.white, liquidityText)
-            f_head(21, "BLOCKS & LIQUIDITY")
-            f_key(22, "Order Blocks")
-            f_val(22, obSummary, activeOB == 0 ? color.new(color.silver, 18) : color.white, obTooltip)
-            f_key(23, "Nearest BSL / SSL")
-            f_val(23, liqRowText, liquidityColor, liquidityText)
-            f_key(27, "Trades")
-            f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)
-            f_key(24, "Supply / Demand")
-            f_val(24, sdSummary, color.white, sdTooltip)
+        f_key(2, "Bias")
+        f_val(2, biasText, valueColor, "Directional leg: " + legText)
+        f_key(3, "Phase")
+        f_val(3, phaseText, valueColor, "Directional leg: " + legText)
+        f_key(4, "Range")
+        f_val(4, rangeCompact, rangeTone, "Position of the close inside the dealing range: the confirmed swing range extended to the live extreme of the current leg (" + f_px(dealingLow) + " - " + f_px(dealingHigh) + "). Premium (upper half) is the supply side, discount (lower half) the demand side; EQ is the 50% level.")
+        f_key(6, "Range H / L")
+        f_val(6, dealingHighText + " / " + dealingLowText, color.white, swingTip)
+        f_key(9, "Protected")
+        f_val(9, protectedText, valueColor, "The external level whose break flips the bias.")
+        f_key(10, "Last break")
+        f_val(10, lastBreak + breakAge, valueColor, "Last external BOS / CHoCH." + (na(lastBreakTime) ? "" : " At " + f_time(lastBreakTime)) + "\nLast internal break: " + internalCompact)
+        f_key(13, "Bull POI")
+        f_val(13, bullPoiDisplay, bullColor, nearestBullPoiText + "\nA actionable · Q qualified · D distant or tested")
+        f_key(14, "Bear POI")
+        f_val(14, bearPoiDisplay, bearColor, nearestBearPoiText + "\nA actionable · Q qualified · D distant or tested")
+        f_key(16, "BSL / SSL")
+        f_val(16, liqRowText, liquidityColor, liquidityText + "\n" + barrierLiquidityText)
+        f_key(22, "Zones")
+        f_key(27, "Trades")
+        f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)
+        f_val(22, zonesCompact, color.white, "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
     0
 
 if barstate.islast
