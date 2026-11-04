@@ -2806,7 +2806,7 @@ f_poiCell(float poi, float distATR, bool actionable, float nearestActionable) =>
     f_px(poi) + " · " + str.tostring(distATR, "#.0") + (actionable and math.abs(poi - nearestActionable) <= syminfo.mintick ? "A" : actionable ? "Q" : "D")
 
 f_renderPanel() =>
-    table.clear(dashboard, 0, 0, 1, 27)
+    table.clear(dashboard, 0, 0, 1, 22)
     if showDashboard
         color valueColor = bias == 1 ? bullColor : bias == -1 ? bearColor : color.silver
         string biasText = bias == 1 ? "BULLISH" : bias == -1 ? "BEARISH" : "NEUTRAL"
