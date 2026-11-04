@@ -469,18 +469,16 @@ def is_major(price, step, gold):
   return gold and abs(caption - round(caption / MAJOR_STEP) * MAJOR_STEP) < 0.005
 
 
-def display217(res, closes, per_side, mode, scale_ok=lambda p: True, gold=True, step=None):
-  """The v2.17 display. No level is hidden for being broken. Nearest first, at most `per_side` per side inside the candle-scale window, in play counted for its side.
-  Per level: side, origin, flipped, in_play (the engine Role is not broken: the last 2 closes are not both beyond its band; in v7 a flipped level is skipped by the
-  strategy, so it is not in play), line transparency (in play 45, flipped 88, major 60, else by touches 82 / 74 / 66) and the tooltip."""
+def levels217(res, closes, per_side, mode, scale_ok=lambda p: True, gold=True, step=None):
+  """The v2.17 display. No level is hidden for being broken. Every level gets its flags (side, origin, flipped, in_play = the engine Role is not broken: the last 2 closes
+  are not both beyond its band, and in v7 a flipped level is not in play because the strategy skips it); then, nearest first, at most `per_side` per side inside the
+  candle-scale window are drawn (`drawn`), in play counted for its side. A drawn level has its line transparency (in play 45, flipped 88, major round 60, else by touches
+  82 / 74 / 66). Returns (every level highest price first, the drawn ones nearest first)."""
   step = mode["step"] if step is None else step
   tol, last, v7 = res["tol"], closes[-1], mode["merge"] == "strongest"
-  chosen, up, down = [], 0, 0
-  for lv in sorted(res["levels"], key=lambda x: abs(x["price"] - last)):
+  rows = []
+  for lv in res["levels"]:
     above = lv["price"] > last
-    if not scale_ok(lv["price"]) or (up if above else down) >= per_side:
-      continue
-    up, down = up + above, down + (not above)
     run = 0
     for cl in reversed(closes):
       if not (cl < lv["price"] - tol if above else cl > lv["price"] + tol):
@@ -492,17 +490,79 @@ def display217(res, closes, per_side, mode, scale_ok=lambda p: True, gold=True, 
     major = lv["kind"] == "round" and is_major(lv["price"], step, gold)
     transparency = 45 if in_play else 88 if flipped else 60 if major else 66 if lv["touches"] >= 4 else 74 if lv["touches"] == 3 else 82
     caption_price = round(lv["price"] / step) * step if step > 0 else lv["price"]
-    chosen.append(dict(lv, side=side, flipped=flipped, in_play=in_play, major=major, transparency=transparency, caption_price=caption_price, formed=lv["origin"]))
-  return chosen
+    rows.append(dict(lv, side=side, flipped=flipped, in_play=in_play, major=major, transparency=transparency, caption_price=caption_price, formed=lv["origin"], drawn=False))
+  chosen, up, down = [], 0, 0
+  for lv in sorted(rows, key=lambda x: abs(x["price"] - last)):
+    above = lv["price"] > last
+    if scale_ok(lv["price"]) and (up if above else down) < per_side:
+      up, down = up + above, down + (not above)
+      lv["drawn"] = True
+      chosen.append(lv)
+  return sorted(rows, key=lambda x: -x["price"]), chosen
 
 
-def captions217(chosen, labels, gap):
-  """A selected level keeps its line always. Its caption (`KL×3`, `KL 3950`, ` ●` when in play) folds into a stronger right-column label within `gap`."""
-  shown, folded = [], []
-  for lv in chosen:
-    text = ("KL %s" % ("%g" % lv["caption_price"]) if lv["kind"] == "round" else "KL×%d" % lv["touches"]) + (" ●" if lv["in_play"] else "")
-    (folded if any(abs(x - lv["price"]) <= gap for x in labels) else shown).append((text, lv))
-  return shown, folded
+def display217(res, closes, per_side, mode, scale_ok=lambda p: True, gold=True, step=None):
+  """The drawn levels of `levels217`, nearest first."""
+  return levels217(res, closes, per_side, mode, scale_ok, gold, step)[1]
+
+
+def key_text(lv):
+  """The caption of one key level, price first: `3949.12 ×3`, `3950 ×6` where a round level sits on its step price, ` ●` when in play. The price is the line's own."""
+  on_step = lv["kind"] == "round" and abs(lv["price"] - lv["caption_price"]) < 0.005
+  return ("%g" % lv["caption_price"] if on_step else "%.2f" % lv["price"]) + " ×%d" % lv["touches"] + (" ●" if lv["in_play"] else "")
+
+
+def register_keys(chosen):
+  """The labels a drawn key level registers in the right-edge column: category 4 (key level), tier 2 in play else 3, priority 30."""
+  return [dict(y=lv["price"], text=key_text(lv), cat=4, tier=2 if lv["in_play"] else 3, prio=30, tip="key level %.2f" % lv["price"]) for lv in chosen]
+
+
+def emit_labels(regs, gap):
+  """The right-edge column pass (Pine `f_emitCluster`). Labels are clustered highest first (a new cluster starts when the previous label is at least `gap` higher). The
+  host of a cluster is its best member that is not a key level (lowest tier, then priority); only members of its category add words (at most 3), the other non-key
+  members show as `+n`. Key levels are never folded: their captions follow the host's words as `KL p1 · p2` (highest first), or are the whole label when the cluster has no
+  other member. Returns one dict(y, text, members, host) per label."""
+  out, cluster = [], []
+
+  def emit(members):
+    ranking = sorted(range(len(members)), key=lambda i: -(members[i]["prio"] - members[i]["tier"] * 1000 - (1000000 if members[i]["cat"] == 4 else 0)))
+    top = members[ranking[0]]
+    words, keys = [], [m["text"] for m in members if m["cat"] == 4]
+    for i in ranking:
+      if members[i]["cat"] == top["cat"] and top["cat"] != 4 and len(words) < 3:
+        words.append(members[i]["text"])
+    text = " · ".join(words)
+    hidden = len(members) - len(keys) - len(words)
+    if hidden > 0:
+      text += " +%d" % hidden
+    if keys:
+      text += (" · " if text else "") + "KL " + " · ".join(keys)
+    out.append(dict(y=top["y"], text=text, members=members, host=top))
+
+  prev = None
+  for r in sorted(regs, key=lambda x: -x["y"]):
+    if cluster and prev - r["y"] >= gap:
+      emit(cluster)
+      cluster = []
+    cluster.append(r)
+    prev = r["y"]
+  if cluster:
+    emit(cluster)
+  return out
+
+
+def panel_row(chosen, limit=40):
+  """The `KL` panel value: the drawn prices by side, nearest first (in play marked `●`), truncated with `…`. Above price `▲`, below `▼`."""
+  up = " · ".join("%.2f%s" % (lv["price"], "●" if lv["in_play"] else "") for lv in chosen if lv["side"] == "resistance")
+  down = " · ".join("%.2f%s" % (lv["price"], "●" if lv["in_play"] else "") for lv in chosen if lv["side"] == "support")
+  text = ("▲ " + up if up else "") + ("  " if up and down else "") + ("▼ " + down if down else "")
+  return text[:limit - 1] + "…" if len(text) > limit else text
+
+
+def panel_tooltip(rows, cov):
+  """The `KL` panel tooltip: every level found, highest first, one per line, then the coverage line."""
+  lines = ["%.2f · %s · %d touches · formed as %s%s%s · %s" % (lv["price"], lv["kind"], lv["touches"], lv["formed"], " · flipped" if lv["flipped"] else "", " · in play" if lv["in_play"] else "", "drawn" if lv["drawn"] else "not drawn") for lv in rows]
+  return "\n".join(lines + [coverage_text(cov)])
 
 
 def tooltip(lv, tol, mode, window, cov):
@@ -516,7 +576,7 @@ def tooltip(lv, tol, mode, window, cov):
   if lv["in_play"]:
     parts.append("key_level can trade this level now")
   if lv["kind"] == "round" and abs(lv["price"] - lv["caption_price"]) > 0.005:
-    parts.append("engine price %.2f (merged)" % lv["price"])
+    parts.append("round %s, engine price merged" % ("%g" % lv["caption_price"]))
   parts.append("definition %s (SwingLevels, window %d)" % (mode["name"], window))
   parts.append(coverage_text(cov))
   return " · ".join(parts)
