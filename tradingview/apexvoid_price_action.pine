@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.17", "AV PA v2.17", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.18", "AV PA v2.18", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -17,7 +17,6 @@ const string G4 = "04  Fair Value Gaps"
 const string G5 = "05  Sessions"
 const string G6 = "06  Visuals & Performance"
 const string G7 = "07  Key Levels"
-const string G8 = "08  Trade Plan"
 
 string displayProfile = input.string("Balanced — Recommended", "Display profile", options = ["Balanced — Recommended", "Minimal", "Detailed", "Debug"], group = G6)
 string sensitivity = input.string("Auto", "Swing sensitivity", options = ["Auto", "Manual"], group = G1)
@@ -141,24 +140,6 @@ float keyRoundInput = input.float(0.0, "Round step (0 = by definition: XAU 5 / 1
 bool showKeyBand = input.bool(false, "Show key level band", group = G7)
 color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
 
-bool showTradePlan = input.bool(true, "Track the trade plan (paper results in the panel; nothing is drawn on the chart)", group = G8)
-string tradeZoneKinds = input.string("All qualified POIs", "Entry zones", options = ["All qualified POIs", "Order blocks and supply/demand", "Order blocks only"], group = G8)
-string tradeTrigger = input.string("Rejection or engulfing", "Entry trigger candle", options = ["Rejection or engulfing", "Rejection wick", "Engulfing"], group = G8)
-int tradeTriggerBars = input.int(2, "Trigger window after the first touch (bars)", minval = 0, maxval = 10, group = G8)
-float tradeWickFrac = input.float(0.40, "Rejection wick minimum (share of candle range)", minval = 0.2, maxval = 0.8, step = 0.05, group = G8)
-float tradeChaseATR = input.float(0.75, "Maximum entry distance from the zone edge (ATR)", minval = 0.1, maxval = 3, step = 0.05, group = G8)
-bool tradeRequirePD = input.bool(true, "Longs only in discount, shorts only in premium", group = G8)
-float tradeStopBufferATR = input.float(0.15, "Stop buffer beyond the zone (ATR)", minval = 0, maxval = 1, step = 0.05, group = G8)
-float tradeMinStopATR = input.float(0.40, "Minimum stop distance (ATR)", minval = 0.1, maxval = 3, step = 0.05, group = G8)
-float tradeMaxStopATR = input.float(3.00, "Maximum stop distance (ATR)", minval = 0.5, maxval = 10, step = 0.25, group = G8)
-string tradeTargetMode = input.string("Next key level", "Target selection", options = ["Next key level", "Nearest level with minimum R:R"], group = G8)
-float tradeMinRR = input.float(1.5, "Minimum reward : risk to the key level", minval = 1, maxval = 10, step = 0.1, group = G8)
-float tradeTargetBufferATR = input.float(0.05, "Take-profit placed this far before the level (ATR)", minval = 0, maxval = 0.5, step = 0.01, group = G8)
-float tradeMaxTargetATR = input.float(25.0, "Maximum target distance (ATR)", minval = 2, maxval = 100, step = 1, group = G8)
-int tradeTimeoutBars = input.int(96, "Close a trade at market after (bars)", minval = 5, maxval = 780, group = G8)
-float tradeCost = input.float(0.0, "Round-turn cost (price units, deducted from every result)", minval = 0, step = 0.01, group = G8)
-float tradeMaxStopPips = input.float(70.0, "Maximum stop (pips, 0 = off): a stop over the cap refuses, it is never tightened", minval = 0, step = 5, group = G8)
-float tradePipSizeInput = input.float(0.0, "Pip size in price units (0 = auto: 0.1 for XAU, 10 x mintick otherwise)", minval = 0, step = 0.0001, group = G8)
 
 int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
@@ -1607,8 +1588,7 @@ if showOB and barstate.isconfirmed and not na(atr)
 
 // ------- SUPPLY / DEMAND FROM REJECTED, CONFIRMED EXTERNAL SWINGS -------
 // v2.13 freshness: the bars after the swing's departure (majorBar + externalLength + 1 ... now) are scanned before the zone is drawn. A close beyond the far
-// edge means the zone is dead: it is not added. A touch means it is drawn already Tested (first touch, measured depth): never Fresh, never actionable and
-// never a trade trigger, because it was retested before the indicator showed it.
+// edge means the zone is dead: it is not added. A touch means it is drawn already Tested (first touch, measured depth): never Fresh and never actionable, because it was retested before the indicator showed it.
 var float[] scanOut = array.new_float(3, 0.0)   // [closed through (0/1), first touching bar or -1, deepest penetration 0..1]
 
 f_swingScan(int side, float top, float bottom, int majorBar) =>
@@ -1805,9 +1785,7 @@ if bullFVG
 if bearFVG
     f_addZone(bar_index - 2, low[2], high, -1, 2, "Bear FVG", bearFvgColor, 0, "")
 
-// Named POI qualification path of zone i ("Candidate" = not qualified). Used by the display
-// pass and by the trade plan so a trade can only start from a zone that is marked as a POI.
-// `fresh` is passed in because the trade plan evaluates a zone on the bar that first touches it.
+// Named POI qualification path of zone i ("Candidate" = not qualified). Used by the display pass.
 f_poiPath(int i, bool fresh) =>
     int side = array.get(zoneSides, i)
     int kind = array.get(zoneKinds, i)
@@ -2420,248 +2398,6 @@ if showSessionBoxes
     f_updateSessionBox(sessionBoxesNy, nyIn == 1, nyStart, nyHigh, nyLow, sessionBoxEnd, nyColor, "New York")
 
 
-// ------- TRADE PLAN (PRICE-ACTION ENTRY AT A QUALIFIED POI, TARGET AT A KEY LEVEL) -------
-// Rules, evaluated only on closed bars:
-//  1. Direction follows the external bias (long in a bullish bias, short in a bearish one).
-//  2. Zone: an active zone on that side that is a qualified POI (same qualification as the
-//     chart), first touched within `Trigger window` bars, not further than `Maximum entry
-//     distance` from its edge, and (optionally) on the right side of equilibrium.
-//  3. Trigger: the closed bar is a rejection wick or an engulfing candle in the trade direction.
-//  4. Entry at that close. Stop beyond the zone's far edge plus a buffer.
-//  5. Target: the TECHNICAL level, i.e. the next key level ahead of the entry (default), with the
-//     take-profit a small buffer before it so a touch fills. The trade is taken only if that
-//     level offers at least the minimum reward : risk; a level that is too close means no trade
-//     (the target never jumps over a nearer level). Key levels = active BSL/SSL pools, confirmed
-//     swing highs/lows, the Asian high/low, equilibrium and opposing supply/demand/order-block
-//     edges. Option "Nearest level with minimum R:R" instead takes the first level that is far enough.
-//  6. A zone is spent after one trade; it is never re-entered. One trade at a time. Stop is checked before target on a bar that touches both. A trade
-//     that is still open after `Close a trade at market after` bars is closed at that close.
-// Results are paper results on closed bars of the loaded history. No orders are sent.
-var int tradeDir = 0
-var float tradeEntry = na
-var float tradeStop = na
-var float tradeTarget = na
-var int tradeEntryBar = na
-var string tradeZoneName = ""
-var string tradeTargetName = ""
-var float[] tradeResults = array.new_float()
-var string[] tradeLog = array.new_string()
-// Trigger bars that opened nothing, by the first failing check: 0 not a POI, 1 wrong premium/discount side, 2 entry too far from the zone, 3 stop outside the ATR
-// limits, 4 stop over the pip cap, 5 no target room, 6 no zone touched.
-var int[] tradeRefusals = array.new_int(7, 0)
-float tradePipPrice = tradePipSizeInput > 0 ? tradePipSizeInput : isGold ? 0.1 : syminfo.mintick * 10.0
-var int[] tradeStats = array.new_int(6, 0)   // 0 opened, 1 target, 2 stop, 3 timeout, 4 skipped: no key-level target, 5 skipped: stop outside limits
-var float tradeEquityR = 0.0
-var float tradePeakR = 0.0
-var float tradeMaxDrawdownR = 0.0
-var float tradeGrossWinR = 0.0
-var float tradeGrossLossR = 0.0
-var string[] tradeScratch = array.new_string(1, "")
-var int[] tradeSpentBirth = array.new_int()     // zones that already produced a trade (birth bar + top edge)
-var float[] tradeSpentTop = array.new_float()
-bool tradeLongOpened = false
-bool tradeShortOpened = false
-bool tradeTargetHit = false
-bool tradeStopHit = false
-
-// Technical target for a trade at `entry`: the take-profit price (a buffer before the key level)
-// or na when there is no acceptable level; the level's name goes to tradeScratch.
-f_keyTarget(bool isLong, float entry, float risk, bool enforceMin) =>
-    float[] levels = array.new_float()
-    string[] names = array.new_string()
-    int poolSide = isLong ? 1 : -1
-    if array.size(poolStates) > 0
-        for p = 0 to array.size(poolStates) - 1
-            if array.get(poolStates, p) == 0 and array.get(poolSides, p) == poolSide
-                string poolKind = array.get(poolKinds, p)
-                array.push(levels, isLong ? array.get(poolTops, p) : array.get(poolBottoms, p))
-                array.push(names, poolKind == "EQ" ? (isLong ? "EQH" : "EQL") : poolKind == "Swing" ? (isLong ? "BSL" : "SSL") : poolKind)
-    array.push(levels, isLong ? lastSwingHigh : lastSwingLow)
-    array.push(names, isLong ? "Swing high" : "Swing low")
-    array.push(levels, isLong ? previousSwingHigh : previousSwingLow)
-    array.push(names, isLong ? "Prev swing high" : "Prev swing low")
-    array.push(levels, isLong ? asiaHigh : asiaLow)
-    array.push(names, isLong ? "Asia H" : "Asia L")
-    array.push(levels, isLong ? asiaLiveHigh : asiaLiveLow)
-    array.push(names, isLong ? "Asia H live" : "Asia L live")
-    array.push(levels, dealingMid)
-    array.push(names, "EQ")
-    if array.size(zones) > 0
-        for z = 0 to array.size(zones) - 1
-            if array.get(zoneKinds, z) != 2 and array.get(zoneSides, z) == -poolSide
-                array.push(levels, isLong ? array.get(zoneBottoms, z) : array.get(zoneTops, z))
-                array.push(names, array.get(zoneTitles, z))
-    // v2.13: every unswept internal swing ahead is a room obstacle (the iBSL / iSSL intact test: no later bar traded through it). The nearest level still
-    // decides, so an obstacle that pays less than the minimum reward:risk refuses the target instead of being skipped.
-    if array.size(ringPrices) > 0
-        for r = 0 to array.size(ringPrices) - 1
-            float ringPrice = array.get(ringPrices, r)
-            int ringBar = array.get(ringBars, r)
-            if array.get(ringSides, r) == poolSide and (isLong ? ringPrice > entry : ringPrice < entry) and bar_index - ringBar >= 1 and bar_index - ringBar <= 750
-                bool intact = true
-                for k = 0 to bar_index - ringBar - 1
-                    if intact and (isLong ? high[k] > ringPrice : low[k] < ringPrice)
-                        intact := false
-                if intact
-                    array.push(levels, ringPrice)
-                    array.push(names, isLong ? "iBSL" : "iSSL")
-    float best = na
-    float bestRaw = 1.0e10
-    float bestAdjusted = 0.0
-    string bestName = ""
-    float atrNow = nz(atr, syminfo.mintick)
-    float buffer = tradeTargetBufferATR * atrNow
-    float minDistance = tradeMinRR * risk
-    float maxDistance = tradeMaxTargetATR * atrNow
-    bool nextOnly = tradeTargetMode == "Next key level" or not enforceMin
-    for c = 0 to array.size(levels) - 1
-        float level = array.get(levels, c)
-        if not na(level)
-            float rawDistance = isLong ? level - entry : entry - level
-            float adjustedDistance = rawDistance - buffer
-            bool qualifies = nextOnly or adjustedDistance >= minDistance
-            if rawDistance > 0 and adjustedDistance <= maxDistance and qualifies and rawDistance < bestRaw
-                best := isLong ? level - buffer : level + buffer
-                bestRaw := rawDistance
-                bestAdjusted := adjustedDistance
-                bestName := array.get(names, c)
-    // Technical-target mode: the next level is the target; if it is too close for the minimum
-    // reward : risk there is no trade (a farther level would sit behind it).
-    if enforceMin and nextOnly and not na(best) and bestAdjusted < minDistance
-        best := na
-    array.set(tradeScratch, 0, bestName)
-    best
-
-// A zone the trade plan may use: its kind is allowed by the input and it has not already started a trade.
-f_zoneUsable(int z) =>
-    int zoneKind = array.get(zoneKinds, z)
-    bool usable = tradeZoneKinds == "All qualified POIs" or (tradeZoneKinds == "Order blocks and supply/demand" and zoneKind != 2) or (tradeZoneKinds == "Order blocks only" and zoneKind == 1)
-    if usable and array.size(tradeSpentBirth) > 0
-        for q = 0 to array.size(tradeSpentBirth) - 1
-            if array.get(tradeSpentBirth, q) == array.get(zoneBirth, z) and array.get(tradeSpentTop, q) == array.get(zoneTops, z)
-                usable := false
-    usable
-
-f_tradeResultText(float r) =>
-    (r >= 0 ? "+" : "−") + str.tostring(math.abs(r), "0.0") + "R"
-
-if showTradePlan and barstate.isconfirmed and not na(atr) and bar_index > 40
-    bool closedNow = false
-    // 1) Follow the open trade.
-    if tradeDir != 0 and bar_index > tradeEntryBar
-        bool isLongOpen = tradeDir == 1
-        float riskOpen = math.abs(tradeEntry - tradeStop)
-        bool stopTouched = isLongOpen ? low <= tradeStop : high >= tradeStop
-        bool targetTouched = isLongOpen ? high >= tradeTarget : low <= tradeTarget
-        bool timedOut = bar_index - tradeEntryBar >= tradeTimeoutBars
-        string outcome = ""
-        float exitPrice = na
-        if stopTouched
-            outcome := "SL"
-            exitPrice := isLongOpen ? math.min(tradeStop, open) : math.max(tradeStop, open)
-        else if targetTouched
-            outcome := "TP"
-            exitPrice := tradeTarget
-        else if timedOut
-            outcome := "TIME"
-            exitPrice := close
-        if outcome != ""
-            float resultR = (isLongOpen ? exitPrice - tradeEntry : tradeEntry - exitPrice) / riskOpen - tradeCost / riskOpen
-            closedNow := true
-            tradeTargetHit := outcome == "TP"
-            tradeStopHit := outcome == "SL"
-            array.push(tradeResults, resultR)
-            f_inc(tradeStats, outcome == "TP" ? 1 : outcome == "SL" ? 2 : 3)
-            tradeEquityR += resultR
-            tradePeakR := math.max(tradePeakR, tradeEquityR)
-            tradeMaxDrawdownR := math.max(tradeMaxDrawdownR, tradePeakR - tradeEquityR)
-            tradeGrossWinR += resultR > 0 ? resultR : 0.0
-            tradeGrossLossR += resultR < 0 ? -resultR : 0.0
-            array.push(tradeLog, f_time(bar_index - tradeEntryBar <= 790 ? time[bar_index - tradeEntryBar] : time) + " " + (isLongOpen ? "LONG " : "SHORT ") + f_px(tradeEntry) + " → " + outcome + " " + f_tradeResultText(resultR) + " · " + tradeZoneName + " → " + tradeTargetName)
-            if array.size(tradeLog) > 12
-                array.shift(tradeLog)
-            tradeDir := 0
-    // 2) Look for a new setup.
-    if tradeDir == 0 and not closedNow and bias != 0 and array.size(zones) > 0
-        bool isLong = bias == 1
-        float rng = high - low
-        float wickLow = math.min(open, close) - low
-        float wickHigh = high - math.max(open, close)
-        bool rejection = rng > 0 and (isLong ? (close > open and wickLow >= tradeWickFrac * rng) : (close < open and wickHigh >= tradeWickFrac * rng))
-        bool engulfing = isLong ? (close[1] < open[1] and close > open and close > open[1] and open <= close[1]) : (close[1] > open[1] and close < open and close < open[1] and open >= close[1])
-        bool triggered = tradeTrigger == "Rejection wick" ? rejection : tradeTrigger == "Engulfing" ? engulfing : (rejection or engulfing)
-        if triggered
-            float eqLevel = dealingMid
-            float bestRR = 0.0
-            int pickZone = -1
-            float pickStop = na
-            float pickTarget = na
-            string pickTargetName = ""
-            bool sawNoTarget = false
-            bool sawBadStop = false
-            int deepestStage = -1   // the zone that got furthest through the checks decides the reason this trigger bar is counted under
-            for z = 0 to array.size(zones) - 1
-                int firstTouch = array.get(zoneFirstTouch, z)
-                // A zone starts a trade only when it was first touched AFTER it existed (a swing zone drawn already tested was retested before the indicator showed it).
-                if f_zoneUsable(z) and array.get(zoneSides, z) == bias and bar_index > array.get(zoneBirth, z) and firstTouch >= array.get(zoneBirth, z) and bar_index - firstTouch <= tradeTriggerBars
-                    float zTop = array.get(zoneTops, z)
-                    float zBottom = array.get(zoneBottoms, z)
-                    float zMid = (zTop + zBottom) / 2.0
-                    bool nearZone = isLong ? close - zTop <= tradeChaseATR * atr : zBottom - close <= tradeChaseATR * atr
-                    bool onZoneSide = isLong ? close > zBottom : close < zTop
-                    bool pdOk = not tradeRequirePD or na(eqLevel) or (isLong ? zMid <= eqLevel : zMid >= eqLevel)
-                    float stopPrice = isLong ? zBottom - tradeStopBufferATR * atr : zTop + tradeStopBufferATR * atr
-                    float riskDistance = math.abs(close - stopPrice)
-                    // checks in the order of the refusal histogram; the first failing one is the zone's reason
-                    int zoneStage = -1
-                    if f_poiPath(z, true) == "Candidate"
-                        zoneStage := 0
-                    else if not pdOk
-                        zoneStage := 1
-                    else if not (nearZone and onZoneSide)
-                        zoneStage := 2
-                    if zoneStage < 0 and not (riskDistance >= tradeMinStopATR * atr and riskDistance <= tradeMaxStopATR * atr)
-                        zoneStage := 3
-                        sawBadStop := true
-                    if zoneStage < 0 and tradeMaxStopPips > 0 and riskDistance / tradePipPrice > tradeMaxStopPips + 1.0e-9
-                        zoneStage := 4
-                    if zoneStage < 0
-                        float targetPrice = f_keyTarget(isLong, close, riskDistance, true)
-                        if na(targetPrice)
-                            zoneStage := 5
-                            sawNoTarget := true
-                        else
-                            float rr = math.abs(targetPrice - close) / riskDistance
-                            if rr > bestRR
-                                bestRR := rr
-                                pickZone := z
-                                pickStop := stopPrice
-                                pickTarget := targetPrice
-                                pickTargetName := array.get(tradeScratch, 0)
-                    if zoneStage > deepestStage
-                        deepestStage := zoneStage
-            if pickZone < 0
-                f_inc(tradeRefusals, deepestStage >= 0 ? deepestStage : 6)
-                if sawNoTarget
-                    f_inc(tradeStats, 4)
-                else if sawBadStop
-                    f_inc(tradeStats, 5)
-            else
-                tradeDir := bias
-                tradeEntry := close
-                tradeStop := pickStop
-                tradeTarget := pickTarget
-                tradeEntryBar := bar_index
-                tradeZoneName := array.get(zoneTitles, pickZone)
-                array.push(tradeSpentBirth, array.get(zoneBirth, pickZone))
-                array.push(tradeSpentTop, array.get(zoneTops, pickZone))
-                if array.size(tradeSpentBirth) > 200
-                    array.shift(tradeSpentBirth)
-                    array.shift(tradeSpentTop)
-                tradeTargetName := pickTargetName
-                tradeLongOpened := isLong
-                tradeShortOpened := not isLong
-                f_inc(tradeStats, 0)
 // ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------
 // A confirmed pool needs an external swing or two independent tests, so in a clean trend
 // the obvious recent highs/lows are not pools. These two lines mark only the nearest
@@ -3050,7 +2786,7 @@ f_age(int fromTime) =>
     out
 
 // ------- DASHBOARD v2 / MARKET INTELLIGENCE -------
-var table dashboard = table.new(dashboardPosition, 2, 28, bgcolor = color.new(#090D18, 7), frame_color = color.new(#B48AFF, 30), frame_width = 1, border_color = color.new(#493D64, 75), border_width = 1)
+var table dashboard = table.new(dashboardPosition, 2, 23, bgcolor = color.new(#090D18, 7), frame_color = color.new(#B48AFF, 30), frame_width = 1, border_color = color.new(#493D64, 75), border_width = 1)
 if barstate.isfirst
     table.merge_cells(dashboard, 0, 1, 1, 1)
     table.merge_cells(dashboard, 0, 5, 1, 5)
@@ -3113,21 +2849,7 @@ f_renderPanel() =>
         string dealingHighText = f_px(dealingHigh)
         string dealingLowText = f_px(dealingLow)
         string swingTip = "Dealing range " + dealingLowText + " - " + dealingHighText + ": the confirmed swing range extended to the live extreme of the current leg (the range premium / discount and EQ use).\nConfirmed swings: high " + highText + (na(lastHighTime) ? "" : " · " + f_time(lastHighTime)) + ", low " + lowText + (na(lastLowTime) ? "" : " · " + f_time(lastLowTime)) + " (chart time zone).\nDeveloping extreme " + developingText
-        int closedTrades = array.size(tradeResults)
-        int tradeWins = 0
-        if closedTrades > 0
-            for t = 0 to closedTrades - 1
-                tradeWins += array.get(tradeResults, t) > 0 ? 1 : 0
-        float tradeProfitFactor = tradeGrossLossR > 0 ? tradeGrossWinR / tradeGrossLossR : na
-        float openRR = tradeDir != 0 ? math.abs(tradeTarget - tradeEntry) / math.max(math.abs(tradeEntry - tradeStop), syminfo.mintick) : na
-        string tradeSummary = tradeDir != 0 ? (tradeDir == 1 ? "LONG" : "SHORT") + " open · " + str.tostring(openRR, "0.0") + "R → " + tradeTargetName : not showTradePlan ? "Off" : tradeMaxStopPips > 0 and tradeMaxStopPips * tradePipPrice < (tradeMinStopATR + tradeStopBufferATR) * atr ? "Plan off: " + str.tostring(tradeMaxStopPips, "0") + "-pip cap < min stop on this frame (use M5/M15)" : closedTrades == 0 ? "No trades yet" : str.tostring(closedTrades) + " · " + str.tostring(tradeWins * 100.0 / closedTrades, "0") + "% · " + f_tradeResultText(tradeEquityR)
-        string tradeTip = "Paper results of the trade plan on closed bars of the loaded history. No orders are sent; this is not a performance claim.\n" + "Closed " + str.tostring(closedTrades) + " · target " + f_cnt(tradeStats, 1) + " · stop " + f_cnt(tradeStats, 2) + " · timeout " + f_cnt(tradeStats, 3) + "\n" + "Total " + f_tradeResultText(tradeEquityR) + " · profit factor " + (na(tradeProfitFactor) ? "n/a" : str.tostring(tradeProfitFactor, "0.00")) + " · max drawdown " + str.tostring(tradeMaxDrawdownR, "0.0") + "R\n" + "Skipped: no key-level target " + f_cnt(tradeStats, 4) + " · stop outside limits " + f_cnt(tradeStats, 5)
-        // Refusal histogram: every trigger bar that opened nothing, counted once under the first check that failed.
-        tradeTip += "\nTrigger bars that opened nothing: not a POI " + f_cnt(tradeRefusals, 0) + " · wrong premium/discount side " + f_cnt(tradeRefusals, 1) + " · entry too far " + f_cnt(tradeRefusals, 2) + " · stop outside limits " + f_cnt(tradeRefusals, 3) + " · stop over pip cap " + f_cnt(tradeRefusals, 4) + " · no target room " + f_cnt(tradeRefusals, 5) + " · no zone touched " + f_cnt(tradeRefusals, 6)
-        if array.size(tradeLog) > 0
-            for t = array.size(tradeLog) - 1 to math.max(0, array.size(tradeLog) - 8)
-                tradeTip += "\n" + array.get(tradeLog, t)
-        table.cell(dashboard, 0, 0, "APEXVOID v2.17", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.18", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         f_key(2, "Bias")
         f_val(2, biasText, valueColor, "Directional leg: " + legText)
@@ -3151,8 +2873,6 @@ f_renderPanel() =>
             f_key(17, "KL")
             f_val(17, array.get(keyInfo, 0) == "" ? "—" : array.get(keyInfo, 0), color.white, array.get(keyInfo, 1))
         f_key(22, "Zones")
-        f_key(27, "Trades")
-        f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)
         f_val(22, zonesCompact, color.white, "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
     0
 
@@ -3172,10 +2892,6 @@ alertcondition(externalBslSweep, "ApexVoid External Buy-Side Sweep", "External b
 alertcondition(externalSslSweep, "ApexVoid External Sell-Side Sweep", "External sell-side liquidity sweep on {{ticker}} ({{interval}})")
 alertcondition(bslTaken, "ApexVoid Buy-Side Liquidity Consumed", "Buy-side liquidity pool consumed (close-confirmed acceptance or structural break) on {{ticker}} ({{interval}})")
 alertcondition(sslTaken, "ApexVoid Sell-Side Liquidity Consumed", "Sell-side liquidity pool consumed (close-confirmed acceptance or structural break) on {{ticker}} ({{interval}})")
-alertcondition(tradeLongOpened, "ApexVoid Trade Plan Long", "Long setup (price-action trigger at a qualified POI) on {{ticker}} ({{interval}})")
-alertcondition(tradeShortOpened, "ApexVoid Trade Plan Short", "Short setup (price-action trigger at a qualified POI) on {{ticker}} ({{interval}})")
-alertcondition(tradeTargetHit, "ApexVoid Trade Plan Target Hit", "Trade plan target reached on {{ticker}} ({{interval}})")
-alertcondition(tradeStopHit, "ApexVoid Trade Plan Stop Hit", "Trade plan stop hit on {{ticker}} ({{interval}})")
 alertcondition(bullFVG, "ApexVoid Bullish FVG", "New bullish FVG on {{ticker}} ({{interval}})")
 alertcondition(bearFVG, "ApexVoid Bearish FVG", "New bearish FVG on {{ticker}} ({{interval}})")
 alertcondition(bullBase, "ApexVoid Demand Base Zone", "New base-and-impulse demand zone on {{ticker}} ({{interval}})")
