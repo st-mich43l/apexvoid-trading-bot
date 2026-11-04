@@ -1,7 +1,7 @@
 """Before/after report for the v2.13 indicator on the committed XAU captures (counts, not P&L).
 
 Run: python tradingview/reference/report_v213.py
-`v2.12` = the model with every v2.13 switch off, `v2.13` = the Pine defaults (pa_model.v213, trade_model.v213_trade).
+`v2.12` = the model with every v2.13 switch off, `v2.13` = the Pine defaults (pa_model.v213).
 """
 import json
 import os
@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 import pa_model as m
-import trade_model as tm
+import pipeline_model as pl
 
 HERE = os.path.dirname(__file__)
 ENGINE = os.path.join(HERE, "..", "..", "analysis-engine", "testdata")
@@ -100,7 +100,7 @@ def fvg_counts(bars, secs):
   return out
 
 
-class _Births(tm.TradePlanSim):
+class _Births(pl.Pipeline):
   """Counts the qualification path of every zone on the bar it is created (the snapshot at the last bar only sees survivors)."""
 
   def lifecycle(self, i):
@@ -115,15 +115,8 @@ class _Births(tm.TradePlanSim):
 
 def poi_paths(bars, secs, version):
   p = m.v213(secs) if version == "v2.13" else m.P21(chart_secs=secs)
-  tp = tm.v213_trade() if version == "v2.13" else tm.TradeParams()
-  sim = _Births(bars, p, tp).run()
+  sim = _Births(bars, p).run()
   return dict(sorted(getattr(sim, "births", {}).items())), sim
-
-
-def trade_row(bars, secs, version):
-  counts, sim = poi_paths(bars, secs, version)
-  st = sim.stats()
-  return counts, dict(trades=st["closed"], tp=st["tp"], sl=st["sl"], time=st["time"], refusals=dict(sorted(sim.refusals.items(), key=lambda kv: -kv[1])))
 
 
 def main():
@@ -137,9 +130,8 @@ def main():
     print("late ob origin differs/late external breaks", late_ob_origin_differs(bars, secs))
     print("fvg", fvg_counts(bars, secs))
     for version in ("v2.12", "v2.13"):
-      paths, row = trade_row(bars, secs, version)
+      paths, _ = poi_paths(bars, secs, version)
       print("poi paths at birth %s" % version, paths)
-      print("trades    %s" % version, row)
 
 
 if __name__ == "__main__":

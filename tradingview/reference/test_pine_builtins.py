@@ -178,6 +178,19 @@ def test_no_request_security_of_the_charts_own_structure_series():
   assert not re.search(r"request\.security\([^\n]*\[[^\]\n]*(bias|activeProtected|protectedHigh|protectedLow)", code), "request.security of the structure series"
 
 
+def test_every_dashboard_row_is_inside_the_table():
+  """RE10040 at run time ("Row 27 is out of table bounds, number of rows is 23"): a row used by f_key / f_val / table.cell / table.clear / table.merge_cells that the table
+  was not created with. Found after v2.18 shrank the table; the compile cannot see it."""
+  src = open(PINE, encoding="utf-8").read()
+  rows = int(re.search(r"table\.new\(dashboardPosition, 2, (\d+)", src).group(1))
+  used = [int(x) for x in re.findall(r"\bf_(?:key|val)\((\d+),", src)]
+  used += [int(x) for x in re.findall(r"table\.cell\(dashboard, \d, (\d+),", src)]
+  used += [int(x) for m in re.findall(r"table\.clear\(dashboard, \d+, \d+, \d+, (\d+)\)", src) for x in [m]]
+  used += [int(x) for m in re.findall(r"table\.merge_cells\(dashboard, \d+, (\d+), \d+, (\d+)\)", src) for x in m]
+  assert used and max(used) < rows, "row %d used, table has %d rows" % (max(used), rows)
+  assert max(used) == rows - 1, "the table has unused rows (%d rows, last used %d)" % (rows, max(used))
+
+
 def test_the_indicator_call_does_not_declare_no_scale():
   # `scale = scale.none` put the drawings on their own hidden scale: after the price axis was dragged or zoomed they kept their pixels and drifted off the candles
   src = open(PINE, encoding="utf-8").read()

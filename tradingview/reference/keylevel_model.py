@@ -574,7 +574,7 @@ def tooltip(lv, tol, mode, window, cov):
     if mode["merge"] == "strongest":
       parts.append("Break & Retest territory; key_level v7 skips it")
   if lv["in_play"]:
-    parts.append("key_level can trade this level now")
+    parts.append("in play: price is still working this level")
   if lv["kind"] == "round" and abs(lv["price"] - lv["caption_price"]) > 0.005:
     parts.append("round %s, engine price merged" % ("%g" % lv["caption_price"]))
   parts.append("definition %s (SwingLevels, window %d)" % (mode["name"], window))

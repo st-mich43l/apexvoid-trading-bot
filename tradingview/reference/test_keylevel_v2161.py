@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import keylevel_model as kl
 import pa_model as m
 import report_v213 as rep
-import trade_model as tm
+import pipeline_model as pl
 
 HERE = os.path.dirname(__file__)
 GOLDEN = json.load(open(os.path.join(HERE, "fixtures", "keylevel-golden-scalpwindow-m5.json")))
@@ -160,7 +160,7 @@ def measurement():
     r = kl.swing_levels(h, l, c, window, 5.0)
     closes = c[-window:]
     chosen = kl.display(r["levels"], r["swings"], closes, r["tol"], 3)
-    sim = tm.TradePlanSim(bars, m.v213(secs), tm.v213_trade()).run()
+    sim = pl.Pipeline(bars, m.v213(secs)).run()
     s = sim.s
     hi, lo, mid = s.dealing_range()
     prot = s.protected_high if s.bias == -1 else s.protected_low if s.bias == 1 else m.NAN

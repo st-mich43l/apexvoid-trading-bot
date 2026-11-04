@@ -6,8 +6,8 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.13). |
-| `reference/` | Python models of the indicator's order-block, liquidity, supply/demand and trade-plan logic with rule checks on real XAUUSD closed bars (`python tradingview/reference/test_<name>.py`). They validate the algorithm only; they do not compile or draw the Pine file. |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.18). |
+| `reference/` | Python models of the indicator's structure, order-block, liquidity, supply/demand and key-level logic with rule checks on real XAUUSD closed bars (`python tradingview/reference/test_<name>.py`). They validate the algorithm only; they do not compile or draw the Pine file. |
 
 ## ApexVoid Price Action
 
@@ -15,9 +15,7 @@ A market-structure indicator that draws structure, order blocks, imbalances,
 supply/demand, liquidity pools and session levels, then summarises them in a small
 "Market Intelligence" panel. Every structural event and every zone state change
 needs a **closed** chart bar, so nothing repaints once a bar has closed. A zone,
-pool or sweep is an analytical reference, not an entry signal. Since v2.8 the
-indicator also tracks a rule-based **trade plan** with paper results in the panel (nothing
-is drawn on the chart: no position boxes, entry lines, R labels or TP / ENTRY / SL tags); it sends no orders and the rules have not shown an edge
+pool or sweep is an analytical reference, not an entry signal. The indicator tracks no trades: since v2.18 there is no trade plan, no paper results and no entry, stop or target logic.
 
 ### Install
 
@@ -164,7 +162,7 @@ changes bias and never creates an entry.
 Tokyo ended early at London open (a bar inside London is never Asia, so the end follows London daylight saving: 07:00 UTC on
 23 Oct 2026, 08:00 UTC on 27 Oct), London 08:00-16:30 London, New York 09:00-17:00 New York. The Asian range is
 drawn on the chart only, live while the session runs and then as the completed range (configurable); the panel does not show it. The live
-and completed Asian high/low are also key levels for the trade-plan take-profit. On charts above 5m the session is evaluated on a 5-minute request.
+and completed Asian high/low are drawn as levels only. On charts above 5m the session is evaluated on a 5-minute request.
 
 **Multi-timeframe structure (not in this script).** v2.14 first shipped a panel row that requested the chart's own `bias` / `activeProtected` on two other frames
 (`request.security` of a global series). TradingView rejected it: **104,204 compiled tokens against the 100,256 limit (CE10117)** at 33,514 source tokens. A
@@ -192,7 +190,7 @@ Engine v6 is exactly what the bot trades today (parity: zero differences against
 - **Swings:** fractal candidates (2 bars each side; left strictly lower, right not higher) through the **zigzag filter** (same kind replaces when more extreme; the opposite kind is kept when the move is at least the ATR at its bar).
 - **Levels:** swings sorted by price join a cluster while within the tolerance of the lowest member (equal to "within tolerance of every member", implying the 2 x tolerance span cap); clusters of 2+ are reaction levels (price = mean). Round levels: every multiple of `Round step` with 2+ swings within max(tolerance, 0.25 x the ATR at the swing).
 - **Never hidden for being "broken":** the engine `Role` marks nearly every level price is not touching as broken (a decision-time test), so it is not a display filter. Above price = resistance, below = support. The swings within the tolerance say where the level formed; a level whose origin is opposite to its side is **flipped**: still drawn, at transparency 88, tooltip `flipped (formed as support)` (v7 adds `Break & Retest territory; key_level v7 skips it`).
-- **In play:** the last 2 closes are not both beyond the band, so `key_level` can trade the level now (v7: a flipped level is skipped by the strategy, so it is never in play). Line transparency 45, caption `KL 3917.18 ×3 ●` (Pine cannot switch a caption to bold at run time, so the marker is the ● only).
+- **In play:** the last 2 closes are not both beyond the band, so price is still working the level (v7: a flipped level is skipped by the strategy, so it is never in play). Line transparency 45, caption `KL 3917.18 ×3 ●` (Pine cannot switch a caption to bold at run time, so the marker is the ● only).
 - **Sparse by default:** inside the candle-scale window, `Key levels per side` (default 3, up to 10) nearest levels each side, in play counted for its side. Research on the live levels found that nearness to *a* level carries no information, so more lines only add clutter.
 - **Look:** width-1 dotted line (dashed for a round level), `Key level colour`; transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; major round levels (XAU $50 / $100 multiples) 60 in both modes; from the earliest member swing (capped by `Maximum drawn length`) to the end of the gutter. Fainter than pools and zones.
 - **Lines always draw, and every drawn level shows its price:** there is no "near a zone edge: not drawn" rule and no `+n` for a key level. The right-column caption always starts with `KL` and the line's own price: reaction `KL 3949.12 ×3`; round on its step price `KL 3950 ×6`; round where v6 averaging moved the price `KL 3949.12 ×6` (tooltip: `round 3950, engine price merged`); in play adds ` ●`.
@@ -251,7 +249,6 @@ for the key level definitions; the information it listed is in these rows' toolt
 | Bull POI / Bear POI | Nearest qualified POI, distance in ATR, `A` actionable / `Q` qualified / `D` distant or tested |
 | BSL / SSL | Nearest active pools (`*` = active but not drawn) |
 | Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
-| Trades | Open plan (`LONG open · 1.8R → Swing high`) or paper stats (`11 · 27% · −1.6R`); tooltip has profit factor, drawdown and the last 8 trades |
 
 The Zones tooltip splits hidden blocks into far / overlapping / budget and shows lifetime counters (accepted, rejected, replaced, covered, mitigated, invalidated, aged, evicted).
 
@@ -293,13 +290,6 @@ switch / density / position, global text scale, annotation spacing, `Annotation 
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
 
-**08 Trade Plan** — show, entry zones, trigger candle, trigger window, wick share, maximum chase, premium/discount filter, stop buffer, minimum/maximum stop, target selection (next key level), minimum reward : risk (1.5), take-profit buffer, maximum target, timeout, cost, `Maximum stop (pips, 0 = off)` (70) and `Pip size` (0 = auto: 0.1 for XAU, 10 x mintick otherwise).
-
-**Trade-plan room (v2.13).** The target search also treats every unswept internal swing ahead as an obstacle (the `iBSL` / `iSSL` test): the nearest level still decides, so an
-obstacle that pays less than the minimum reward : risk refuses the trade instead of being skipped. A stop over `Maximum stop (pips)` refuses and is never tightened (structure sets the stop;
-the ATR limits stay). The `Trades` tooltip lists the trigger bars that
-opened nothing, each counted once by the first failing check: not a POI, wrong premium/discount side, entry too far from the zone, stop outside the ATR limits, stop over the pip cap, no target room, or no zone touched.
-
 ### Alerts
 
 All fire on bar close. Create them from the indicator's alert dialog.
@@ -311,8 +301,6 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | `ApexVoid Buy-Side / Sell-Side Sweep` | A liquidity pool is swept (once per pool) |
 | `ApexVoid External Buy-Side / Sell-Side Sweep` | The current external swing is swept |
 | `ApexVoid Buy-Side / Sell-Side Liquidity Consumed` | A pool is accepted through or broken by structure (once per pool) |
-| `ApexVoid Trade Plan Long / Short` | A trade-plan setup opens (price-action trigger at a qualified POI) |
-| `ApexVoid Trade Plan Target Hit / Stop Hit` | The paper trade reaches its target / stop |
 | `ApexVoid Demand / Supply Base Zone` | A new base-and-impulse zone is accepted |
 | `ApexVoid Bullish / Bearish FVG` | A new FVG forms |
 | `ApexVoid Bullish / Bearish OB` | A new qualified order block is accepted |
@@ -342,8 +330,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 - `reference/test_pine_builtins.py` fails if the indicator calls a Pine built-in that has not
   been confirmed to exist, or if the script body outside functions grows past TradingView's
   size limit (CE10295).
-- The trade plan sends no orders. On about two weeks of XAUUSD its paper results showed no edge;
-  treat the in-chart tracker as a way to collect evidence on your own history.
+- The indicator sends no orders and tracks no trades (the v2.8 paper trade plan was removed in v2.18).
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
 - Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
 - The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
@@ -353,6 +340,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | Version | Change |
 | --- | --- |
 | 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.18 | The trade plan is removed: the `08 Trade Plan` settings (all 18 inputs), the paper tracker (entries, stops, targets, results), the `Trades` panel row and its tooltip, and the four alerts `ApexVoid Trade Plan Long / Short / Target Hit / Stop Hit`. Alerts built on those four conditions stop firing; because the alert-condition list changes, open your other alerts for this indicator and re-select the condition if it shows the wrong one. Nothing else changes: structure, zones, liquidity, key levels and the other alerts are as in v2.17. The reference model `trade_model.py` and its tests are gone; the harness the other tests need is `pipeline_model.py` and the session tests are `test_session_model.py`. |
 | 2.17 | Key levels, one code path and two definitions: `Engine (key_level v6)` (what the bot trades, default) and `Selective (v7 preview)` (cluster 0.25 ATR, $10 round step, stronger-member dedupe, origin kind for flipped / in play); `Key levels per side` 3 (up to 10); every drawn level shows its price (`KL 3949.12 ×3`), labels of several key levels or of a key level beside another label list the prices instead of folding to `+n`, and a `KL` panel row lists the drawn prices (tooltip: all levels); flipped levels drawn at transparency 88, major round levels 60; tooltip with origin, definition and a coverage readout (share of the recent range the levels cover). The Python model, a new v7 golden and 200 random capture windows prove the Pine algorithm in both modes. To fit the token budget, after the three cuts the brief listed were already spent in v2.16.1: the `Dashboard display size` option and its `Standard` full panel are removed (the Compact panel is unchanged). |
 | 2.16.1 | Key levels = what the strategy reads (`LegacyFrame.SwingLevels`: zigzag-filtered fractals, median window ATR, ATR at each swing for the round band), computed from the last closed bars on the last bar; no level is hidden for being "broken" (side, origin, flipped, in play instead); lines always drawn, only the caption yields to a stronger label; captions `KL×3` / `KL 3945`; the pivot ring and `Show broken key levels` are gone. To fit the token budget: the Debug `xEH` / `xEL` labels, the `Show historical major classifications` option (and its `M HH` / `M HL` / `M LH` / `M LL` labels) and the `Expanded` panel density (its `Invalidated Level` and `Zone Audit` rows) are removed. |
 | 2.16 | Key levels layer (display only): the engine's `keylevel.Cluster` / `Role` ported (reaction clusters, round levels, dedupe, broken after 2 closes), computed on the last bar from a fractal-pivot ring, dotted and faint behind everything else, nearest 3 per side, yielding to stronger objects; own input group `07 Key Levels`. The premium / discount gauge moves to the very right edge, beyond the zone boxes; the label column starts 4 bars beyond the gutter. The `Label vocabulary` option is removed (long wording is gone). Python port `reference/keylevel_model.py` and Go golden `analysis-engine/test/keylevelgolden`. |

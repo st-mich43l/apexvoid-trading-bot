@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import keylevel_model as kl
 import pa_model as m
 import report_v213 as rep
-import trade_model as tm
+import pipeline_model as pl
 
 HERE = os.path.dirname(__file__)
 GOLDEN_V6 = json.load(open(os.path.join(HERE, "fixtures", "keylevel-golden-scalpwindow-m5.json")))
@@ -164,7 +164,7 @@ def test_3917_is_in_play_in_v6():
   r, chosen = golden_view(kl.V6, per_side=11)
   assert [round(x["price"], 2) for x in chosen if x["in_play"]] == [3917.18]
   tip = kl.tooltip([x for x in chosen if x["in_play"]][0], r["tol"], kl.V6, WINDOW, r["coverage"])
-  assert "key_level can trade this level now" in tip
+  assert "in play: price is still working this level" in tip
 
 
 def test_flipped_levels_are_drawn_faint_and_v7_does_not_call_them_tradable():
@@ -323,7 +323,7 @@ def test_the_pine_source_carries_the_v217_contract():
   assert "keyV7 ? 0.25 : 0.5" in code and "isGold ? (keyV7 ? 10.0 : 5.0) : 0.0" in code, "the four differing parameters mirror the model's V6 / V7"
   assert (kl.V6["cluster_atr"], kl.V6["step"], kl.V7["cluster_atr"], kl.V7["step"]) == (0.5, 5.0, 0.25, 10.0)
   assert "inPlay ? 45 : flipped ? 88 : major ? 60 : touches >= 4 ? 66 : touches == 3 ? 74 : 82" in code, "line transparency: in play, flipped, major round, then by touches"
-  for text in ("key_level can trade this level now", "Break & Retest territory; key_level v7 skips it", "formed as ", " → flipped", "engine price merged", "low selectivity", ": selective", "of the recent range"):
+  for text in ("in play: price is still working this level", "Break & Retest territory; key_level v7 skips it", "formed as ", " → flipped", "engine price merged", "low selectivity", ": selective", "of the recent range"):
     assert text in src, text
   assert "bool inPlay = run < 2 and not (keyV7 and flipped)" in code
   assert 'str.tostring(array.get(fin, j * 4 + 1), "0") + " touches' in code and "KL×" not in code and '"KL "' in code and '"R "' not in body
@@ -343,7 +343,7 @@ def measurement():
   for tf, secs, window in (("M5", 300, 150), ("M15", 900, 250), ("H1", 3600, 400)):
     bars = rep.bars_from(SCALP, tf)
     h, l, c = bars[2], bars[3], bars[4]
-    sim = tm.TradePlanSim(bars, m.v213(secs), tm.v213_trade()).run()
+    sim = pl.Pipeline(bars, m.v213(secs)).run()
     s = sim.s
     hi, lo, mid = s.dealing_range()
     prot = s.protected_high if s.bias == -1 else s.protected_low if s.bias == 1 else m.NAN
