@@ -135,7 +135,7 @@ int gutter = input.int(12, "Annotation gutter (bars right of the last candle)", 
 
 bool showKeyLevels = input.bool(true, "Show key levels", group = G7)
 string keyDefinition = input.string("Engine (key_level v6)", "Key level definition", options = ["Engine (key_level v6)", "Selective (v7 preview)"], group = G7)
-int keyPerSide = input.int(2, "Key levels per side", minval = 1, maxval = 10, group = G7)
+int keyPerSide = input.int(3, "Key levels per side", minval = 1, maxval = 10, group = G7)
 int keyWindowInput = input.int(0, "Key level window (0 = auto)", minval = 0, maxval = 780, group = G7)
 float keyRoundInput = input.float(0.0, "Round step (0 = by definition: XAU 5 / 10)", minval = 0, step = 0.5, group = G7)
 bool showKeyBand = input.bool(false, "Show key level band", group = G7)
@@ -224,7 +224,7 @@ var label[] internalEventLabels = array.new_label()
 
 // Gold-like prices print at most 2 decimals (3935.16, not 3935.158); a small price (FX) keeps the symbol's own tick format.
 f_px(float x) =>
-    syminfo.mintick < 0.01 and math.abs(x) >= 100 ? str.tostring(x, "0.00") : str.tostring(x, format.mintick)
+    na(x) ? "—" : syminfo.mintick < 0.01 and math.abs(x) >= 100 ? str.tostring(x, "0.00") : str.tostring(x, format.mintick)
 
 f_cnt(int[] counts, int idx) =>
     str.tostring(array.get(counts, idx))
@@ -2778,28 +2778,38 @@ if barstate.islast
 // ------- RIGHT-EDGE LABEL COLUMN (ONE LABEL PER PRICE CLUSTER) -------
 var label[] colLabels = array.new_label()
 
-// Merge the registered labels of one cluster into a single label in column slot `slot`. The best member (lowest tier, then priority) sets the colour, size and
-// weight and only members of its own category add words; every other member goes to the tooltip and shows as a `+n`.
+// Merge the registered labels of one cluster into a single label in column slot `slot`. The best member that is not a key level (lowest tier, then priority) sets the
+// colour, size and weight and only members of its own category add words; every other member goes to the tooltip and shows as a `+n`. Key levels (category 4) are
+// never folded: their captions (price first) are appended after the host's words as `KL p1 · p2`, highest price first, or are the whole label when no other member exists.
 f_emitCluster(int[] members, int slot) =>
     int m = array.size(members)
     float[] prio = array.new_float()
     for q = 0 to m - 1
-        array.push(prio, array.get(rlPriority, array.get(members, q)) - array.get(rlTier, array.get(members, q)) * 1000.0)
+        int mi = array.get(members, q)
+        array.push(prio, array.get(rlPriority, mi) - array.get(rlTier, mi) * 1000.0 - (array.get(rlCat, mi) == 4 ? 1000000.0 : 0.0))
     int[] ranking = array.sort_indices(prio, order.descending)
     int top = array.get(members, array.get(ranking, 0))
     int topCat = array.get(rlCat, top)
     int topTier = array.get(rlTier, top)
     int shown = 0
+    int keys = 0
     string caption = ""
+    string keyText = ""
     string tip = ""
     for q = 0 to m - 1
         int idx = array.get(members, array.get(ranking, q))
-        if array.get(rlCat, idx) == topCat and shown < 3
+        if array.get(rlCat, idx) == topCat and topCat != 4 and shown < 3
             caption += (shown > 0 ? " · " : "") + array.get(rlText, idx)
             shown += 1
         tip += (q > 0 ? "\n" : "") + array.get(rlTip, idx)
-    if m > shown
-        caption += " +" + str.tostring(m - shown)
+        int own = array.get(members, q)
+        if array.get(rlCat, own) == 4
+            keyText += (keys > 0 ? " · " : "") + array.get(rlText, own)
+            keys += 1
+    if m - keys > shown
+        caption += " +" + str.tostring(m - keys - shown)
+    if keys > 0
+        caption += (caption == "" ? "" : " · ") + "KL " + keyText
     float y = array.get(rlY, top)
     color tone = topTier == 1 ? array.get(rlTone, top) : color.new(array.get(rlTone, top), topTier == 2 ? 25 : 20)
     string labelSize = topTier == 1 ? tier1Size : topTier == 2 ? tier2Size : tier3Size
@@ -2841,6 +2851,8 @@ f_zig(float[] sw, float[] av, int c, float p, float k) =>
         array.push(sw, p)
         array.push(sw, k)
     0
+
+string[] keyInfo = array.new_string(2, "")
 
 f_keyLevels() =>
     while array.size(keyLines) > 0
@@ -2931,12 +2943,41 @@ f_keyLevels() =>
                     cov += b - math.max(a, edge)
                     edge := b
             cov := wHi > wLo ? cov / (wHi - wLo) : 0.0
-        // nearest first, at most keyPerSide per side inside the candle-scale window; no level is hidden for being broken
+        // Every level gets its flags first (side, origin, flipped, in play), then the nearest keyPerSide per side inside the candle-scale window are drawn: no level is hidden
+        // for being broken, and every drawn level shows its price in a label that is never folded (see f_emitCluster).
+        string covTxt = "coverage " + str.tostring(math.round(cov * 100)) + " % of the recent range" + (cov > 0.4 ? ": low selectivity" : cov <= 0.25 ? ": selective" : "")
+        int nl = int(array.size(fin) / 4)
+        float[] fl = array.new_float()
+        string[] tips = array.new_string()
+        float[] drawn = array.new_float(nl, 0.0)
+        string upTxt = ""
+        string downTxt = ""
         int up = 0
         int down = 0
-        if array.size(gap) > 0
+        if nl > 0
+            for j = 0 to nl - 1
+                float p = array.get(fin, j * 4)
+                bool above = p > lastClose
+                int run = 0
+                while run < w and (above ? close[lastOff + run] < p - tol : close[lastOff + run] > p + tol)
+                    run += 1
+                int bal = 0
+                int first = w
+                for m = 0 to ns - 1
+                    if math.abs(array.get(px, m) - p) <= tol
+                        bal += array.get(sw, m * 3 + 2) > 0 ? 1 : -1
+                        first := math.min(first, int(array.get(sw, m * 3)))
+                bool flipped = (bal > 0 and not above) or (bal < 0 and above)
+                bool inPlay = run < 2 and not (keyV7 and flipped)
+                bool isRound = array.get(fin, j * 4 + 2) > 0
+                float capP = isRound ? math.round(p / keyStep) * keyStep : p
+                array.push(fl, flipped ? 1.0 : 0.0)
+                array.push(fl, inPlay ? 1.0 : 0.0)
+                array.push(fl, first * 1.0)
+                array.push(fl, bal * 1.0)
+                array.push(tips, "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(array.get(fin, j * 4 + 1), "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · formed as " + (above ? "support" : "resistance") + " → flipped" + (keyV7 ? " · Break & Retest territory; key_level v7 skips it" : "") : "") + (inPlay ? " · key_level can trade this level now" : "") + (math.abs(p - capP) > 0.005 ? " · round " + str.tostring(capP, "#.##") + ", engine price merged" : "") + " · definition " + (keyV7 ? "Selective v7 preview (window " : "Engine v6 (SwingLevels, window ") + str.tostring(w) + ") · " + covTxt)
             int[] near = array.sort_indices(gap, order.ascending)
-            for k = 0 to array.size(gap) - 1
+            for k = 0 to nl - 1
                 int j = array.get(near, k)
                 float p = array.get(fin, j * 4)
                 float touches = array.get(fin, j * 4 + 1)
@@ -2945,34 +2986,30 @@ f_keyLevels() =>
                 if f_scaleOk(p) and (above ? up : down) < keyPerSide
                     up += above ? 1 : 0
                     down += above ? 0 : 1
-                    int run = 0
-                    while run < w and (above ? close[lastOff + run] < p - tol : close[lastOff + run] > p + tol)
-                        run += 1
-                    int bal = 0
-                    int first = w
-                    for m = 0 to ns - 1
-                        if math.abs(array.get(px, m) - p) <= tol
-                            bal += array.get(sw, m * 3 + 2) > 0 ? 1 : -1
-                            first := math.min(first, int(array.get(sw, m * 3)))
-                    bool flipped = (bal > 0 and not above) or (bal < 0 and above)
-                    bool inPlay = run < 2 and not (keyV7 and flipped)
+                    array.set(drawn, j, 1.0)
+                    bool flipped = array.get(fl, j * 4) > 0
+                    bool inPlay = array.get(fl, j * 4 + 1) > 0
                     float capP = isRound ? math.round(p / keyStep) * keyStep : p
                     bool major = isRound and isGold and math.abs(capP - math.round(capP / 50) * 50) < 0.005
-                    string tip = "Key level " + f_px(p) + " ± " + f_px(tol) + " · " + (isRound ? "round" : "reaction") + " · " + str.tostring(touches, "0") + " touches · " + (above ? "resistance" : "support") + (flipped ? " · formed as " + (above ? "support" : "resistance") + " → flipped" + (keyV7 ? " · Break & Retest territory; key_level v7 skips it" : "") : "") + (inPlay ? " · key_level can trade this level now" : "") + (math.abs(p - capP) > 0.005 ? " · engine price " + f_px(p) + " (merged)" : "") + " · definition " + (keyV7 ? "Selective v7 preview (window " : "Engine v6 (SwingLevels, window ") + str.tostring(w) + ") · coverage " + str.tostring(math.round(cov * 100)) + " % of the recent range" + (cov > 0.4 ? ": low selectivity" : cov <= 0.25 ? ": selective" : "")
+                    int first = int(array.get(fl, j * 4 + 2))
                     int leftBar = math.max(bar_index - lastOff - w + 1 + (first < w ? first : 0), bar_index - maxDrawBars)
                     array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, inPlay ? 45 : flipped ? 88 : major ? 60 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
                     if showKeyBand
                         array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
-                    // only the caption yields: a stronger right-column label within a label height carries the note, else the level gets its own caption
-                    bool carried = false
-                    if array.size(rlY) > 0
-                        for r = 0 to array.size(rlY) - 1
-                            if math.abs(array.get(rlY, r) - p) <= columnGap and str.contains("|80|35|60|62|45|", "|" + str.tostring(array.get(rlPriority, r)) + "|")
-                                carried := true
-                                array.set(rlText, r, str.replace_all(array.get(rlText, r), " ·KL", "") + " ·KL")
-                                array.set(rlTip, r, array.get(rlTip, r) + "\n" + tip)
-                    if not carried
-                        f_regLabel(p, (isRound ? "KL " + str.tostring(capP, "#.##") : "KL×" + str.tostring(touches, "0")) + (inPlay ? " ●" : ""), keyColor, 30, tip, 4, inPlay ? 2 : 3)
+                    f_regLabel(p, (math.abs(p - capP) < 0.005 and isRound ? str.tostring(capP, "#.##") : f_px(p)) + " ×" + str.tostring(touches, "0") + (inPlay ? " ●" : ""), keyColor, 30, array.get(tips, j), 4, inPlay ? 2 : 3)
+                    string pTxt = f_px(p) + (inPlay ? "●" : "")
+                    if above
+                        upTxt += (up > 1 ? " · " : "") + pTxt
+                    else
+                        downTxt += (down > 1 ? " · " : "") + pTxt
+            // the panel's KL row: the drawn prices by side, and in its tooltip every level found, highest first
+            string rowTxt = (up > 0 ? "▲ " + upTxt : "") + (up > 0 and down > 0 ? "  " : "") + (down > 0 ? "▼ " + downTxt : "")
+            array.set(keyInfo, 0, str.length(rowTxt) > 40 ? str.substring(rowTxt, 0, 39) + "…" : rowTxt)
+            string listTxt = ""
+            for j = nl - 1 to 0
+                float bal = array.get(fl, j * 4 + 3)
+                listTxt += f_px(array.get(fin, j * 4)) + " · " + (array.get(fin, j * 4 + 2) > 0 ? "round" : "reaction") + " · " + str.tostring(array.get(fin, j * 4 + 1), "0") + " touches · formed as " + (bal > 0 ? "resistance" : bal < 0 ? "support" : "mixed") + (array.get(fl, j * 4) > 0 ? " · flipped" : "") + (array.get(fl, j * 4 + 1) > 0 ? " · in play" : "") + (array.get(drawn, j) > 0 ? " · drawn" : " · not drawn") + "\n"
+            array.set(keyInfo, 1, listTxt + covTxt)
     0
 
 if barstate.islast
@@ -3029,6 +3066,9 @@ f_val(int row, string txt, color tone, string tip) =>
     table.cell(dashboard, 1, row, txt, text_color = tone, text_size = dashboardValueSize, text_halign = text.align_right, tooltip = tip)
     0
 
+f_poiCell(float poi, float distATR, bool actionable, float nearestActionable) =>
+    f_px(poi) + " · " + str.tostring(distATR, "#.0") + (actionable and math.abs(poi - nearestActionable) <= syminfo.mintick ? "A" : actionable ? "Q" : "D")
+
 f_renderPanel() =>
     table.clear(dashboard, 0, 0, 1, 27)
     if showDashboard
@@ -3037,8 +3077,8 @@ f_renderPanel() =>
         string phaseText = transitionContext ? "Structural transition" : expansionContext ? (bias == 1 ? "Bull expansion" : "Bear expansion") : developingDirection == -bias and bias != 0 ? (bias == -1 ? "Counter-trend rebound" : "Counter-trend pullback") : rangeContext ? "Range / consolidation" : bias == 0 ? "Range / discovery" : internalBias == -bias ? "Corrective pullback" : "Trend / balance"
         float majorMid = dealingMid
         string rangeText = na(majorMid) ? "Range pending" : close > dealingHigh ? "Above range" : close < dealingLow ? "Below range" : close >= majorMid ? "Premium" : "Discount"
-        string highText = na(lastSwingHigh) ? "—" : f_px(lastSwingHigh)
-        string lowText = na(lastSwingLow) ? "—" : f_px(lastSwingLow)
+        string highText = f_px(lastSwingHigh)
+        string lowText = f_px(lastSwingLow)
         string developingText = developingDirection == 1 and not na(developingHigh) ? "High · " + f_px(developingHigh) : developingDirection == -1 and not na(developingLow) ? "Low · " + f_px(developingLow) : "—"
         string legText = developingDirection == 1 ? "UP · " + rangeText : developingDirection == -1 ? "DOWN · " + rangeText : "UNDEFINED"
         string protectedText = bias == 1 ? (na(protectedLow) ? "—" : "Low · " + f_px(protectedLow)) : bias == -1 ? (na(protectedHigh) ? "—" : "High · " + f_px(protectedHigh)) : "—"
@@ -3055,10 +3095,8 @@ f_renderPanel() =>
         string sdSummary = "Swing " + str.tostring(activeSD - activeBaseSD) + " · Base " + str.tostring(visibleBaseSD) + "/" + str.tostring(activeBaseSD)
         string sdTooltip = "Base-and-impulse zones visible / active\nAccepted " + f_cnt(sdStats, 0) + " · duplicate " + f_cnt(sdStats, 5) + " · retired by cap " + f_cnt(sdStats, 6) + "\nRejected: weak departure " + f_cnt(sdStats, 1) + " · no impulse " + f_cnt(sdStats, 2) + " · closed back " + f_cnt(sdStats, 3) + " · pattern filter " + f_cnt(sdStats, 4) + "\n" + sdLastText
         string liqRowText = (na(nearestBslPrice) ? "BSL —" : "BSL " + f_px(nearestBslPrice) + (nearestBslShown ? "" : "*")) + " · " + (na(nearestSslPrice) ? "SSL —" : "SSL " + f_px(nearestSslPrice) + (nearestSslShown ? "" : "*"))
-        bool nearestBullIsActionable = actionableBullPoi and math.abs(nearestBullPoi - nearestActionableBullPoi) <= syminfo.mintick
-        bool nearestBearIsActionable = actionableBearPoi and math.abs(nearestBearPoi - nearestActionableBearPoi) <= syminfo.mintick
-        string bullPoiDisplay = na(nearestBullPoi) ? "—" : f_px(nearestBullPoi) + " · " + str.tostring(nearestBullPoiDistanceATR, "#.0") + (nearestBullIsActionable ? "A" : actionableBullPoi ? "Q" : "D")
-        string bearPoiDisplay = na(nearestBearPoi) ? "—" : f_px(nearestBearPoi) + " · " + str.tostring(nearestBearPoiDistanceATR, "#.0") + (nearestBearIsActionable ? "A" : actionableBearPoi ? "Q" : "D")
+        string bullPoiDisplay = f_poiCell(nearestBullPoi, nearestBullPoiDistanceATR, actionableBullPoi, nearestActionableBullPoi)
+        string bearPoiDisplay = f_poiCell(nearestBearPoi, nearestBearPoiDistanceATR, actionableBearPoi, nearestActionableBearPoi)
         string compactBarrier = bias == 1 ? (na(bullPoiBarrier) ? "Open above" : "OH " + f_px(bullPoiBarrier)) : bias == -1 ? (na(bearPoiBarrier) ? "Open below" : "SUP " + f_px(bearPoiBarrier)) : "Bias pending"
         string barrierLiquidityText = compactBarrier + " · LQ " + str.tostring(relevantLiquidityCount) + "/" + str.tostring(poolActiveCount)
 
@@ -3072,8 +3110,8 @@ f_renderPanel() =>
         string breakAge = na(lastBreakTime) ? "" : " · " + f_age(lastBreakTime)
         string internalCompact = na(lastInternalBreakTime) ? "none" : lastInternalBreak + " · " + f_age(lastInternalBreakTime)
         string zonesCompact = "OB " + str.tostring(visibleOB) + "/" + str.tostring(activeOB) + " · S/D " + str.tostring(visibleSD) + "/" + str.tostring(activeSD) + " · FVG " + str.tostring(visibleFVG) + "/" + str.tostring(activeFVG)
-        string dealingHighText = na(dealingHigh) ? "—" : f_px(dealingHigh)
-        string dealingLowText = na(dealingLow) ? "—" : f_px(dealingLow)
+        string dealingHighText = f_px(dealingHigh)
+        string dealingLowText = f_px(dealingLow)
         string swingTip = "Dealing range " + dealingLowText + " - " + dealingHighText + ": the confirmed swing range extended to the live extreme of the current leg (the range premium / discount and EQ use).\nConfirmed swings: high " + highText + (na(lastHighTime) ? "" : " · " + f_time(lastHighTime)) + ", low " + lowText + (na(lastLowTime) ? "" : " · " + f_time(lastLowTime)) + " (chart time zone).\nDeveloping extreme " + developingText
         int closedTrades = array.size(tradeResults)
         int tradeWins = 0
@@ -3109,6 +3147,9 @@ f_renderPanel() =>
         f_val(14, bearPoiDisplay, bearColor, nearestBearPoiText + "\nA actionable · Q qualified · D distant or tested")
         f_key(16, "BSL / SSL")
         f_val(16, liqRowText, liquidityColor, liquidityText + "\n" + barrierLiquidityText)
+        if showKeyLevels
+            f_key(17, "KL")
+            f_val(17, array.get(keyInfo, 0) == "" ? "—" : array.get(keyInfo, 0), color.white, array.get(keyInfo, 1))
         f_key(22, "Zones")
         f_key(27, "Trades")
         f_val(27, tradeSummary, tradeDir == 1 ? bullColor : tradeDir == -1 ? bearColor : color.white, tradeTip)

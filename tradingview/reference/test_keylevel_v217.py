@@ -141,23 +141,23 @@ def test_the_pine_algorithm_equals_the_model_on_random_bars():
   assert nonempty > 60, nonempty
 
 
-def golden_view(mode, per_side=2):
+def golden_view(mode, per_side=3):
   r = kl.definition_levels(H, L, C, WINDOW, mode)
   return r, kl.display217(r, C[-WINDOW:], per_side, mode)
 
 
-def test_with_no_other_objects_exactly_min_2_per_side_lines_and_none_is_hidden_for_being_broken():
+def test_with_no_other_objects_exactly_min_3_per_side_lines_and_none_is_hidden_for_being_broken():
   for mode in (kl.V6, kl.V7):
     r, chosen = golden_view(mode)
     last = C[-1]
     above = sum(1 for x in r["levels"] if x["price"] > last)
     below = sum(1 for x in r["levels"] if x["price"] <= last)
-    assert len(chosen) == min(2, above) + min(2, below) and len(chosen) > 0, (mode["name"], above, below, len(chosen))
+    assert len(chosen) == min(3, above) + min(3, below) and len(chosen) > 0, (mode["name"], above, below, len(chosen))
     assert [x["price"] for x in chosen] == sorted((x["price"] for x in chosen), key=lambda p: abs(p - last))
     assert len(kl.display217(r, C[-WINDOW:], 99, mode)) == len(r["levels"]), "every level can be shown"
     broken = sum(1 for x in r["levels"] if kl.broken(x["price"], last, C[-WINDOW:], r["tol"]))
     assert broken >= 7 and len(chosen) >= 2, "most levels are broken by the engine Role (v2.16 hid them); the display must not"
-  assert C[-1] < min(x["price"] for x in golden_view(kl.V6)[0]["levels"]), "on the golden the last close is under all 11 levels: two lines, both resistance"
+  assert C[-1] < min(x["price"] for x in golden_view(kl.V6)[0]["levels"]), "on the golden the last close is under all 11 levels: three lines, all resistance"
 
 
 def test_3917_is_in_play_in_v6():
@@ -186,28 +186,104 @@ def test_flipped_levels_are_drawn_faint_and_v7_does_not_call_them_tradable():
   assert not mixed["flipped"]
 
 
-def test_major_round_levels_are_fainter_in_both_modes_and_the_caption_shows_the_step_price():
+def test_major_round_levels_are_fainter_in_both_modes():
   tol = 1.0
   lv = dict(price=3950.0, kind="round", touches=4, band=tol, newest=5, origin="support")
   for mode in (kl.V6, kl.V7):
     d = kl.display217(dict(levels=[lv], tol=tol), [3960.0] * 3, 2, mode)[0]
     assert d["major"] and d["transparency"] == 60
-  merged = dict(lv, price=3949.12)
-  d = kl.display217(dict(levels=[merged], tol=tol), [3960.0] * 3, 2, kl.V6)[0]
-  assert d["major"] and kl.captions217([d], [], 0.5)[0][0][0] == "KL 3950"
-  assert "engine price 3949.12 (merged)" in kl.tooltip(d, tol, kl.V6, 150, 0.3)
   assert not kl.is_major(3945.0, 5.0, True) and not kl.is_major(3950.0, 5.0, False)
 
 
-def test_only_the_caption_yields_to_a_stronger_label():
-  r, chosen = golden_view(kl.V6)
-  first = chosen[0]["price"]
-  shown, folded = kl.captions217(chosen, [first + 0.3], 0.5)
-  assert len(shown) + len(folded) == len(chosen), "every selected level keeps its line"
-  assert [lv["price"] for _, lv in folded] == [first] and first not in [lv["price"] for _, lv in shown]
-  assert all(not text.startswith("R ") for text, _ in shown + folded), "never `R ...`"
-  text = dict((lv["price"], t) for t, lv in kl.captions217(chosen, [], 0.5)[0])
-  assert text[first].startswith("KL") and (text[first].endswith("●")) == chosen[0]["in_play"]
+def test_a_key_level_caption_starts_with_the_price_of_its_line():
+  tol = 1.0
+  base = dict(price=3949.12, kind="reaction", touches=3, band=tol, newest=5, origin="support")
+  rnd = dict(base, price=3950.0, kind="round", touches=6)
+  moved = dict(base, price=3949.12, kind="round", touches=6)
+  res = dict(levels=[base, rnd, moved], tol=tol)
+  d = kl.display217(res, [3960.0] * 3, 9, kl.V6)
+  texts = {(x["kind"], x["price"]): kl.key_text(x) for x in d}
+  assert texts[("reaction", 3949.12)] == "3949.12 ×3", texts
+  assert texts[("round", 3950.0)] == "3950 ×6", "a round level on its step price shows the step price"
+  assert texts[("round", 3949.12)] == "3949.12 ×6", "v6 averaging moved the price: the caption shows the line's price, not the step"
+  assert "round 3950, engine price merged" in kl.tooltip([x for x in d if x["price"] == 3949.12 and x["kind"] == "round"][0], tol, kl.V6, 150, 0.3)
+  playing = kl.display217(dict(levels=[base], tol=tol), [3949.0, 3949.0, 3949.0], 2, kl.V6)[0]
+  assert playing["in_play"] and kl.key_text(playing) == "3949.12 ×3 ●"
+
+
+def _reg(y, text, cat, tier=1, prio=60):
+  return dict(y=y, text=text, cat=cat, tier=tier, prio=prio, tip=text)
+
+
+def drawn_labels(chosen, others, gap):
+  return kl.emit_labels(kl.register_keys(chosen) + others, gap)
+
+
+def test_every_drawn_key_level_shows_its_price_in_exactly_one_visible_label_text():
+  for mode in (kl.V6, kl.V7):
+    r, chosen = golden_view(mode, per_side=11)
+    gap = 0.8
+    for others in ([], [_reg(chosen[0]["price"] + 0.2, "BSL", 1), _reg(chosen[2]["price"] - 0.1, "PROT", 0, prio=80), _reg(chosen[4]["price"], "POI · Bull OB", 3, prio=62)]):
+      labels = drawn_labels(chosen, others, gap)
+      for lv in chosen:
+        price = ("%g" % lv["caption_price"]) if lv["kind"] == "round" and abs(lv["price"] - lv["caption_price"]) < 0.005 else "%.2f" % lv["price"]
+        owners = [x for x in labels if price + " ×%d" % lv["touches"] in x["text"]]
+        assert len(owners) == 1, (mode["name"], price, [x["text"] for x in labels])
+        assert "KL" in owners[0]["text"] and "+" not in owners[0]["text"].split("KL")[1], "a key level is never folded into a +n"
+        assert owners[0]["text"].count(price + " ×") == 1
+
+
+def test_two_key_levels_within_one_gap_make_one_label_listing_both_prices_highest_first():
+  r, chosen = golden_view(kl.V6, per_side=11)
+  two = [x for x in chosen if round(x["price"], 2) in (3949.12, 3951.42)]
+  assert len(two) == 2
+  labels = kl.emit_labels(kl.register_keys(two), 3.0)
+  assert len(labels) == 1 and labels[0]["text"] == "KL 3951.42 ×3 · 3949.12 ×6", labels[0]["text"]
+  apart = kl.emit_labels(kl.register_keys(two), 1.0)
+  assert [x["text"] for x in apart] == ["KL 3951.42 ×3", "KL 3949.12 ×6"], "labels farther apart than the gap stay separate"
+
+
+def test_a_key_level_next_to_a_bsl_label_is_appended_visibly_not_folded():
+  r, chosen = golden_view(kl.V6, per_side=11)
+  kl3949 = [x for x in chosen if round(x["price"], 2) == 3949.12]
+  labels = drawn_labels(kl3949, [_reg(3949.5, "BSL", 1)], 1.0)
+  assert len(labels) == 1 and labels[0]["text"] == "BSL · KL 3949.12 ×6", labels[0]["text"]
+  assert labels[0]["host"]["text"] == "BSL" and labels[0]["host"]["cat"] == 1, "the host keeps its slot, position and colour"
+  assert " ·KL" not in labels[0]["text"] and "+1" not in labels[0]["text"]
+  # several members of the host's category still join, other categories still fold to +n, the key level is never counted in that +n
+  busy = drawn_labels(kl3949, [_reg(3949.5, "BSL", 1), _reg(3949.4, "EQ 3949.40", 1, prio=35), _reg(3949.3, "PROT", 0, prio=80), _reg(3949.2, "Asia H", 2, prio=40)], 1.0)
+  assert len(busy) == 1 and busy[0]["text"] == "PROT +3 · KL 3949.12 ×6", busy[0]["text"]
+  # a key level in play keeps the host rule too (tier 2 does not make it the host)
+  playing = dict(kl3949[0], in_play=True)
+  assert drawn_labels([playing], [_reg(3949.5, "BSL", 1)], 1.0)[0]["text"] == "BSL · KL 3949.12 ×6 ●"
+
+
+def test_without_another_member_the_key_level_is_the_whole_label_and_in_play_makes_it_tier_2():
+  r, chosen = golden_view(kl.V6, per_side=11)
+  play = [x for x in chosen if x["in_play"]][0]
+  label = kl.emit_labels(kl.register_keys([play]), 1.0)[0]
+  assert label["text"] == "KL 3917.18 ×3 ●" and label["host"]["tier"] == 2
+  assert [round(x["price"], 2) for x in chosen if x["in_play"]] == [3917.18]
+
+
+def test_the_kl_panel_row_lists_the_drawn_prices_and_its_tooltip_every_level_found():
+  for mode, n in ((kl.V6, 11), (kl.V7, 10)):
+    r = kl.definition_levels(H, L, C, WINDOW, mode)
+    rows, chosen = kl.levels217(r, C[-WINDOW:], 3, mode)
+    row = kl.panel_row(chosen)
+    assert len(r["levels"]) == n and len(rows) == n
+    assert row.startswith("▲ ") and "▼" not in row, "on the golden the close is under every level"
+    assert all(("%.2f" % lv["price"]) in row for lv in chosen) or row.endswith("…")
+    tip = kl.panel_tooltip(rows, r["coverage"])
+    lines = tip.split("\n")
+    assert len(lines) == n + 1 and lines[-1].startswith("coverage ") and ("drawn" in tip)
+    assert [float(x.split(" · ")[0]) for x in lines[:-1]] == [round(x["price"], 2) for x in sorted(rows, key=lambda x: -x["price"])], "highest first"
+    assert sum(1 for x in lines[:-1] if x.endswith(" · drawn")) == len(chosen) and sum(1 for x in lines[:-1] if x.endswith("not drawn")) == n - len(chosen)
+  # both sides, in play marked, truncated with an ellipsis
+  two = [dict(price=3949.12, side="resistance", in_play=False), dict(price=3917.18, side="support", in_play=True)]
+  assert kl.panel_row(two) == "▲ 3949.12  ▼ 3917.18●"
+  long = [dict(price=3900.0 + i, side="resistance", in_play=False) for i in range(9)]
+  assert kl.panel_row(long).endswith("…") and len(kl.panel_row(long)) == 40
 
 
 def test_coverage_is_the_union_of_the_bands_over_the_window_range_and_it_is_worded():
@@ -217,7 +293,7 @@ def test_coverage_is_the_union_of_the_bands_over_the_window_range_and_it_is_word
   assert kl.coverage_text(0.25) == "coverage 25 % of the recent range: selective"
   assert kl.coverage_text(0.36) == "coverage 36 % of the recent range"
   a, b = kl.definition_levels(H, L, C, WINDOW, kl.V6)["coverage"], kl.definition_levels(H, L, C, WINDOW, kl.V7)["coverage"]
-  assert a > 0.40 > b > 0.25, (a, b)
+  assert a > 0.40 > b > 0.25 and abs(a - 0.685) < 0.01 and abs(b - 0.363) < 0.01, (a, b)
 
 
 def test_the_tooltip_has_the_documented_shape():
@@ -239,7 +315,7 @@ def _pine_code():
 
 def test_the_pine_source_carries_the_v217_contract():
   code, src, re = _pine_code()
-  assert 'options = ["Engine (key_level v6)", "Selective (v7 preview)"]' in code and 'input.int(2, "Key levels per side"' in code
+  assert 'options = ["Engine (key_level v6)", "Selective (v7 preview)"]' in code and 'input.int(3, "Key levels per side"' in code
   start = code.index("f_keyLevels() =>")
   body = code[start:code.index("\nif barstate.islast", start)]
   assert len(body) > 3000 and "ta.pivothigh(" not in body and "ta.pivotlow(" not in body
@@ -247,19 +323,22 @@ def test_the_pine_source_carries_the_v217_contract():
   assert "keyV7 ? 0.25 : 0.5" in code and "isGold ? (keyV7 ? 10.0 : 5.0) : 0.0" in code, "the four differing parameters mirror the model's V6 / V7"
   assert (kl.V6["cluster_atr"], kl.V6["step"], kl.V7["cluster_atr"], kl.V7["step"]) == (0.5, 5.0, 0.25, 10.0)
   assert "inPlay ? 45 : flipped ? 88 : major ? 60 : touches >= 4 ? 66 : touches == 3 ? 74 : 82" in code, "line transparency: in play, flipped, major round, then by touches"
-  for text in ("key_level can trade this level now", "Break & Retest territory; key_level v7 skips it", "formed as ", " → flipped", "engine price ", "low selectivity", ": selective", "of the recent range"):
+  for text in ("key_level can trade this level now", "Break & Retest territory; key_level v7 skips it", "formed as ", " → flipped", "engine price merged", "low selectivity", ": selective", "of the recent range"):
     assert text in src, text
   assert "bool inPlay = run < 2 and not (keyV7 and flipped)" in code
-  assert "str.tostring(touches, \"0\") + \" touches" in code and "KL×" in code and "\"KL \"" in code and '"R "' not in body
+  assert 'str.tostring(array.get(fin, j * 4 + 1), "0") + " touches' in code and "KL×" not in code and '"KL "' in code and '"R "' not in body
   # lines always draw: the only thing that yields to a stronger label is the caption; no zone-edge swallow rule
-  assert body.index("line.new(") < body.index("carried") and "zoneTops" not in body and "zoneBottoms" not in body
+  assert "carried" not in code and "zoneTops" not in body and "zoneBottoms" not in body, "no rule folds a key level or hides it near another object"
+  emit = code[code.index("f_emitCluster("):code.index("f_keyAdd(")]
+  assert "topCat != 4" in emit and '"KL " + keyText' in emit and "== 4 ? 1000000.0" in emit, "key levels are appended to the host, never the host, never +n"
+  assert 'f_key(17, "KL")' in code and "keyInfo" in body and "str.length(rowTxt) > 40" in body and ' ×" + str.tostring(touches, "0")' in body
   assert "dashboardDensity" not in code and "Standard\", \"Dashboard" not in src
 
 
 def measurement():
-  """The PR's report: per timeframe of the 3 Nov capture and per definition, the levels found, coverage, lines drawn, captions shown / folded into a stronger label, flipped,
-  in play. The stronger labels are the protected level, EQ, every active pool edge and every qualified POI zone midpoint of the model at the last bar (an upper bound: the
-  chart draws only the visible ones)."""
+  """The PR's report: per timeframe of the 3 Nov capture and per definition, the levels found, coverage, lines drawn, key-level labels shown (clusters), prices appended to
+  another label, flipped, in play. The other labels are the protected level, EQ, every active pool edge and every qualified POI zone midpoint of the model at the last bar
+  (an upper bound: the chart draws only the visible ones)."""
   rows = []
   for tf, secs, window in (("M5", 300, 150), ("M15", 900, 250), ("H1", 3600, 400)):
     bars = rep.bars_from(SCALP, tf)
@@ -268,16 +347,22 @@ def measurement():
     s = sim.s
     hi, lo, mid = s.dealing_range()
     prot = s.protected_high if s.bias == -1 else s.protected_low if s.bias == 1 else m.NAN
-    labels = [x for x in (prot, mid) if not m.isna(x)]
-    labels += [x.top if x.side == 1 else x.bottom for x in sim.lm.pools if x.state == 0]
-    labels += [(z.top + z.bottom) / 2 for z in sim.zones if sim.poi_path(z, not z.touched) != "Candidate"]
+    others = []
+    if not m.isna(prot):
+      others.append(_reg(prot, "PROT", 0, prio=80))
+    if not m.isna(mid):
+      others.append(_reg(mid, "EQ", 1, prio=35))
+    others += [_reg(x.top if x.side == 1 else x.bottom, "BSL", 1) for x in sim.lm.pools if x.state == 0]
+    others += [_reg((z.top + z.bottom) / 2, "POI", 3, prio=62) for z in sim.zones if sim.poi_path(z, not z.touched) != "Candidate"]
     gap = max(0.3 * s.atr[-1], (max(h[-300:]) - min(l[-300:])) / 36.0)
     for mode in (kl.V6, kl.V7):
       r = kl.definition_levels(h, l, c, window, mode)
-      chosen = kl.display217(r, c[-window:], 2, mode)
-      shown, folded = kl.captions217(chosen, labels, gap)
-      rows.append(dict(tf=tf, definition=mode["name"], levels=len(r["levels"]), coverage_pct=round(r["coverage"] * 100), lines=len(chosen), captions=len(shown), folded=len(folded),
-                       flipped=sum(1 for x in chosen if x["flipped"]), in_play=sum(1 for x in chosen if x["in_play"])))
+      every, chosen = kl.levels217(r, c[-window:], 3, mode)
+      labels = drawn_labels(chosen, others, gap)
+      shown = [x for x in labels if any(mm["cat"] == 4 for mm in x["members"])]
+      appended = [x for x in shown if x["host"]["cat"] != 4]
+      rows.append(dict(tf=tf, definition=mode["name"], levels=len(r["levels"]), coverage_pct=round(r["coverage"] * 100), lines=len(chosen), key_labels=len(shown), prices_appended_to_other_labels=sum(sum(1 for mm in x["members"] if mm["cat"] == 4) for x in appended),
+                       flipped=sum(1 for x in chosen if x["flipped"]), in_play=sum(1 for x in chosen if x["in_play"]), panel_row=kl.panel_row(chosen)))
   return rows
 
 

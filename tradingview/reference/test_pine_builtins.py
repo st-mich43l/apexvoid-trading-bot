@@ -246,9 +246,11 @@ def test_key_level_loops_are_guarded_against_empty_arrays():
   code = _code()
   body = code[code.index("f_keyLevels() =>"):code.index("f_keyLevels()", code.index("f_keyLevels() =>") + 20)]
   assert "keyRing" not in code and "showBrokenKeys" not in code and "array.median" in body
-  for guard in ("w >= 5", "ns > 0", "array.size(pr) > 0", "array.size(gap) > 0", "array.size(rlY) > 0"):
+  for guard in ("w >= 5", "ns > 0", "array.size(pr) > 0", "nl > 0"):
     assert guard in body, guard
-  assert "|80|35|60|62|45|" in body, "the stronger-object priorities (PROT, EQ, pools, zones) the layer yields to"
+  # every `for ... to nl - 1` / `to ns - 1` sits under its guard (nl = 0 would run it twice): the loops over the levels are all inside `if nl > 0`
+  inside = body[body.index("        if nl > 0\n"):]
+  assert inside.count("to nl - 1") == 2 and body.count("to nl - 1") == 2 and "for j = nl - 1 to 0" in inside
 
 
 def test_no_block_opener_is_left_empty():
