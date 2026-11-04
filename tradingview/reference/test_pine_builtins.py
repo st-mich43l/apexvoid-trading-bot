@@ -219,7 +219,7 @@ def test_annotations_use_the_gutter_and_three_tiers():
 def test_label_merge_distance_is_a_thirty_sixth_of_the_candle_range():
   # v2.15.1: larger text needs more room, so labels merge at range / 36 (was / 48)
   code = _code()
-  assert "/ 48.0" not in code and code.count("/ 36.0") == 3  # label gap, column cluster gap, and the key-level caption yield
+  assert "/ 48.0" not in code and code.count("/ 36.0") == 2  # the zone label gap, and the right column gap (the column cluster merge and the key-level caption yield share it)
 
 
 def test_prices_print_two_decimals_for_gold_like_symbols_only():
