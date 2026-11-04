@@ -48,24 +48,6 @@ def test_no_swing_zone_is_drawn_fresh_after_a_retest():
   assert before >= 100, "the captures no longer show the v2.12 defect (%d)" % before
 
 
-def test_a_zone_drawn_after_a_retest_is_never_a_trade_trigger():
-  import trade_model as tm
-  trades = 0
-  for name, path, tf, secs in CASES:
-    bars = rep.bars_from(path, tf)
-    sim = tm.TradePlanSim(bars, m.v213(secs, **{**LEGACY, "fresh_sd": True}), tm.v213_trade()).run()
-    for t in sim.trades:
-      trades += 1
-      assert t.zone_first_touch >= t.zone_born, "%s %s: a trade started from a zone that was retested before it was drawn" % (name, tf)
-  assert trades >= 3
-  # the rule itself, on a zone the scan found already touched (first touch 3 bars BEFORE its publication)
-  sim = tm.TradePlanSim(rep.bars_from(CASES[0][1], "M5"), m.v213(300), tm.v213_trade())
-  tested = m.Zone(50, 110.0, 100.0, 1, 3, "Demand", 200, touched=True, first_touch=197)
-  fresh = m.Zone(50, 110.0, 100.0, 1, 3, "Demand", 200, touched=True, first_touch=201)
-  assert not sim.can_trigger(tested, 201) and not sim.can_trigger(tested, 202)
-  assert sim.can_trigger(fresh, 202) and not sim.can_trigger(fresh, 204)
-
-
 def test_swing_zone_freshness_is_a_scan_of_the_bars_after_the_departure():
   """Synthetic: a demand swing at bar 40; bars 41..52 are the departure (ignored); a later wick into the zone makes it Tested; a later close below kills it."""
   def series(touch_low=None, close_below=None):
@@ -204,10 +186,10 @@ def test_swept_imbalance_means_the_sweep_came_before_the_impulse():
 
 
 def test_real_sweeps_are_recorded_for_the_qualification():
-  import trade_model as tm
+  import pipeline_model as pl
   seen = 0
   for name, path, tf, secs in CASES:
-    sim = tm.TradePlanSim(rep.bars_from(path, tf), m.v213(secs), tm.v213_trade()).run()
+    sim = pl.Pipeline(rep.bars_from(path, tf), m.v213(secs)).run()
     seen += len(sim.s.sweeps)
     assert all(side in (-1, 1) and 0 <= bar < sim.s.n for bar, side in sim.s.sweeps)
   assert seen > 20

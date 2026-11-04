@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.dirname(__file__))
 import mtf
 import pa_model as m
 import report_v213 as rep
-import trade_model as tm
 
 CASES = list(rep.cases())
 SCALP = [p for n, p in rep.FIXTURES if n == "scalpwindow-1103"][0]
@@ -205,19 +204,6 @@ def test_3_nov_h1_the_phase_is_not_a_counter_trend_rebound_and_dev_is_not_the_pr
   assert m.isna(new.dev_high) and new.dev_low != new.protected_high
   hi, lo, _ = new.dealing_range()
   assert hi == new.protected_high and lo == new.dev_low, "range, DEV and PROTECTED are one story"
-
-
-def test_the_pip_cap_rules_out_the_higher_frames_and_the_panel_says_so():
-  tp = tm.v213_trade()
-  atr = {}
-  for name, secs in (("M5", 300), ("M15", 900), ("M30", 1800), ("H1", 3600)):
-    bars = {"M5": rep.bars_from(SCALP, "M5"), "M15": rep.bars_from(SCALP, "M15"), "M30": m30_bars(), "H1": rep.bars_from(SCALP, "H1")}[name]
-    series = [x for x in m.rma_atr(bars[2], bars[3], bars[4]) if not m.isna(x)]
-    atr[name] = sorted(series)[len(series) // 2]
-  off = {k: tm.plan_off(tp, v) for k, v in atr.items()}
-  assert off == {"M5": False, "M15": False, "M30": False, "H1": True}, (off, atr)
-  assert not tm.plan_off(tm.v213_trade(max_stop_pips=0.0), atr["H1"]), "a cap of 0 is off"
-  assert tm.plan_off(tm.v213_trade(max_stop_pips=50.0), atr["M30"])
 
 
 if __name__ == "__main__":
