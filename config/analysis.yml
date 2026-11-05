@@ -247,10 +247,10 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 12.0
     supply:
-      # v9 (docs/strategies/supply.md): self-contained, SELL only. A zone is found on M15/H1 (the range of the candles before a strong downward departure), M5
+      # v10 (docs/strategies/supply.md): self-contained, SELL only. A zone is found on M15/H1 (the range of the candles before a strong downward departure), M5
       # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="supply"}). Nothing
       # else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared confluence rubric are injected by the engine.
-      version: v9
+      version: v10
       enabled: true
       structure_timeframes: [M15, H1]
       # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
@@ -269,7 +269,7 @@ analysis:
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
       invalidation_buffer_atr: 0.5
-      # Room: the nearest opposing obstacle below the entry (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the low of
+      # Room: the nearest opposing obstacle below the entry (unbroken causal fractal pivots of obstacle_pivot_bars on the structure frame (M15/H1) only, never M5, and the low of
       # the departure) must be at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
       minimum_target_r: 1.0
       fallback_target_r: 2.0
@@ -283,11 +283,11 @@ analysis:
       fibonacci_enabled: true
       expiry_hours: 24.0
     demand:
-      # v7 (docs/strategies/demand.md): self-contained, BUY only. A zone is found on M15/H1 (the range of the candles before a strong upward departure), M5
+      # v8 (docs/strategies/demand.md): self-contained, BUY only. A zone is found on M15/H1 (the range of the candles before a strong upward departure), M5
       # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="demand"}). The
       # zone score is owned here too. Nothing else is read: the instrument scale (pip_size, round_step, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v7
+      version: v8
       enabled: true
       structure_timeframes: [M15, H1]
       # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
@@ -306,7 +306,7 @@ analysis:
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
       invalidation_buffer_atr: 0.5
-      # Room: the nearest opposing obstacle above the entry (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the high of
+      # Room: the nearest opposing obstacle above the entry (unbroken causal fractal pivots of obstacle_pivot_bars on the structure frame (M15/H1) only, never M5, and the high of
       # the departure) must be at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
       minimum_target_r: 1.0
       fallback_target_r: 2.0
@@ -320,11 +320,11 @@ analysis:
       fibonacci_enabled: true
       expiry_hours: 24.0
     order_block:
-      # v7 (docs/strategies/order_block.md): self-contained. A block is found on M15/H1 (a displacement leg that broke structure, the body of the last opposite
+      # v10 (docs/strategies/order_block.md): self-contained. A block is found on M15/H1 (a displacement leg that broke structure, the body of the last opposite
       # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as
       # strategy_refused{strategy="order_block"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v9
+      version: v10
       enabled: true
       structure_timeframes: [M15, H1]
       # v9: the block's structure break is computed by the strategy itself, causally (a swing joins the reference set when it is confirmed, BOS against CHoCH
@@ -353,7 +353,7 @@ analysis:
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
       invalidation_buffer_atr: 0.5
-      # Room: the nearest opposing obstacle (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the extreme of the leg that
+      # Room: the nearest opposing obstacle (unbroken causal fractal pivots of obstacle_pivot_bars on the structure frame (M15/H1) only, never M5, and the extreme of the leg that
       # broke structure) must be at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
       minimum_target_r: 1.0
       fallback_target_r: 2.0
@@ -362,18 +362,19 @@ analysis:
       fibonacci_enabled: true
       expiry_hours: 24.0
     fvg:
-      # v7 (docs/strategies/fvg.md): self-contained. The gap is found on M15/H1 (its definition judged on that frame as of its third candle), M5 confirms with a
+      # v10 (docs/strategies/fvg.md): self-contained. The gap is found on M15/H1 (its definition judged on that frame as of its third candle), M5 confirms with a
       # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as
       # strategy_refused{strategy="fvg"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v9
+      version: v10
       enabled: true
       structure_timeframes: [M15, H1]
-      # v9 (docs/strategies/liquidity-sweep-and-structure.md): a gap is traded only when the impulse that made it followed a sweep of resting liquidity in its
-      # favour (no_prior_sweep otherwise). The test: a bar from sweep_lookback_bars before the impulse's first candle up to it traded through a swing low
-      # (fractal of sweep_pivot_bars, confirmed, not older than sweep_level_max_age_bars, unswept), the previous day's low or an Asia/London low (SELL: highs).
-      # false still measures the sweep and publishes it as evidence, and never refuses. The structure break by the impulse (BOS/CHoCH, causal) is evidence only.
-      require_prior_sweep: true
+      # The prior-sweep test: a gap is traded only when the impulse that made it followed a sweep of resting liquidity in its favour (no_prior_sweep otherwise). The
+      # test: a bar from sweep_lookback_bars before the impulse's first candle up to it traded through a swing low (fractal of sweep_pivot_bars, confirmed, not
+      # older than sweep_level_max_age_bars, unswept), the previous day's low or an Asia/London low (SELL: highs). false still measures the sweep and publishes it
+      # as evidence (m5_fvg_prior_sweep_<kind>, prior_sweep 0/1), and never refuses. The structure break by the impulse (BOS/CHoCH, causal) is evidence only.
+      # false = evidence only since 5 Nov 2026 (production volume): a gate again only after >= 150 forward-labelled FVG outcomes show the sweep improves results.
+      require_prior_sweep: false
       sweep_lookback_bars: 6
       sweep_pivot_bars: 2
       sweep_level_max_age_bars: 96
@@ -395,7 +396,7 @@ analysis:
       minimum_wick_ratio: 0.5
       engulfing_minimum_range_atr: 0.5
       invalidation_buffer_atr: 0.5
-      # Room: the nearest opposing obstacle (unbroken causal fractal pivots of obstacle_pivot_bars on M5 and the structure frame, and the impulse extreme) must be
+      # Room: the nearest opposing obstacle (unbroken causal fractal pivots of obstacle_pivot_bars on the structure frame (M15/H1) only, never M5, and the impulse extreme) must be
       # at least minimum_target_r x risk away, otherwise no_target_room; with nothing in the way the target is fallback_target_r x risk.
       minimum_target_r: 1.0
       fallback_target_r: 2.0
@@ -687,15 +688,16 @@ analysis:
       # Evidence only (strategyutil.SessionMomentum): London's net move in M15 ATR, read for what is confirmed during New York.
       session_momentum_minimum_atr: 1.0
     asia_range:
-      # v1 (docs/strategies/asia_range.md): London raids the finalized Asia range and reverses, or breaks it and is accepted. A complete thesis with its
+      # v2 (docs/strategies/asia_range.md): London raids the finalized Asia range and reverses, or breaks it and is accepted. A complete thesis with its
       # own anchor, confirmation and stop; the session is the structure it is about, never a clock gate. Scoped to XAU.
-      version: v1
+      version: v2
       enabled: true
       symbols: [XAU]
       atr_length: 14
       atr_window_bars: 140
       minimum_range_atr: 1.0
-      maximum_range_atr: 6.0
+      # M15 ATR at London open is deflated by the Asia session; live Asia ranges 29 Oct-4 Nov were 5.6-7.6 of it (6.0 refused them as range_too_wide)
+      maximum_range_atr: 9.0
       active_window_hours: 7
       minimum_sweep_pips: 3.0
       minimum_sweep_atr: 0.10

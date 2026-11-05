@@ -1,6 +1,6 @@
 # Demand (demand v7)
 
-`demand`, `v7`. Implemented in `analysis-engine/internal/strategy/demand`, self-contained and BUY only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `supply`; `test/architecture` enforces both). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.demand`.
+`demand`, `v8`. Implemented in `analysis-engine/internal/strategy/demand`, self-contained and BUY only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `supply`; `test/architecture` enforces both). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.demand`.
 
 ## Thesis
 
@@ -25,7 +25,7 @@ Owned here: after a touch of the entry band from above, within `reaction_lookbac
 
 - **Entry**: price at the band or within `maximum_entry_atr` x the M5 ATR above its proximal edge, not below it.
 - **Stop**: below the whole zone and below the extreme of the M5 bars from the touch to the confirmation, minus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor.
-- **Room**: the obstacles above the entry, nearest first, are (a) every confirmed fractal swing high (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) on M5 and on the structure frame that no M5 close has gone above since it was known, and (b) the high of the departure, from its first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
+- **Room**: the obstacles above the entry, nearest first, are (a) every confirmed fractal swing high (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) of the structure frame (M15 or H1) that no M5 close has gone above since it was known (M5 pivots are not obstacles since v8: a 2-bar M5 fractal is noise, and M5 only confirms and enters), and (b) the high of the departure, from its first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
 - **No extension rule**: a zone sits at the origin of its departure.
 - **Selection**: among this strategy's confirmed zones on one bar, the most stars, then the nearest entry. The competition is among BUY zones only.
 
@@ -62,6 +62,7 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 
 - v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure.
 - v7: the package owns its mechanism and its zone score; M15/H1 structure only; room refusal; no competition with supply; the corrected dealing range.
+- v8 (5 Nov 2026): room obstacles from the structure frame only (no M5 pivots). Rollback: revert `geometry.go` and the version.
 
 ## Release
 

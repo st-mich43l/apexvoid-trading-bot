@@ -16,7 +16,7 @@ confirmation and its own stop, the same shape as CRT.
 ## Anchor
 
 The most recent **finalized** `ASIA_H` / `ASIA_L` pair of the session read, usable from its `AvailableAt` (London open on the session calendar, daylight-saving
-correct). The range width in **M15 ATR** as of that instant must lie in `[minimum_range_atr, maximum_range_atr]` (1 to 6), else `range_too_narrow` /
+correct). The range width in **M15 ATR** as of that instant must lie in `[minimum_range_atr, maximum_range_atr]` (1 to 9), else `range_too_narrow` /
 `range_too_wide`. The thesis is live for `active_window_hours` (7) from `AvailableAt`; an episode must **start** inside that window. The window is the structure the
 thesis is about, never a clock gate on plans or on any other strategy.
 
@@ -93,7 +93,7 @@ Live days since the deploy: two Asia ranges wider than the strategy's maximum (6
 Across the seven XAU captures the strategy published 3 setups (2 raids, 1 acceptance), and `range_too_wide` is the commonest day-level refusal in the post-22 October gold regime, where a
 $30 to $60 Asian session is not a consolidation. `strategy_refused{strategy="asia_range", reason}` now reports every such refusal live (once per distinct episode; `Evaluate` counts, `Analyze` does not).
 
-Nothing was changed to manufacture volume: `maximum_range_atr` stays 6. Whether a wider range (a maximum of 8 would have admitted 26 Oct, 29 Oct and 30 Oct) still describes a consolidation is the owner's call, and would need its own measurement.
+**v2 (5 Nov 2026): `maximum_range_atr` 9 (was 6).** The width is measured in M15 ATR at London open, and that ATR is computed over the quiet Asia bars, so it is deflated: the live ranges since 29 Oct were 6.7 and 7.6 of it (5.6 on 2 Nov, without a valid episode) and 6 refused them as `range_too_wide`. Every other rule is unchanged (sweep and reclaim, structure shift, acceptance, retest, stop budget, room, edge lock). Rollback: `maximum_range_atr: 6.0`.
 
 ## Release and rollback
 

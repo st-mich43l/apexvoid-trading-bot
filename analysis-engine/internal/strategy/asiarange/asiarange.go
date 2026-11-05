@@ -23,7 +23,7 @@ import (
 const ID strategy.StrategyID = "asia_range"
 
 // Version is the Asia Range technical contract version.
-const Version = "v1"
+const Version = "v2"
 
 type Strategy struct {
 	strategyutil.RefusalCounter
