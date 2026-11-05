@@ -689,8 +689,8 @@ def build_trade_plan_from_strategy_match(
   # The planner owns the optional XAU risk leg: it is part of the plan and of
   # the card, and the executor places exactly the legs the plan declares.
   # The risk leg is a swing-sized trade-off leg 15 pips inside a 50-70 pip gold
-  # stop. A scalp's stop is 15-45 pips, so the same leg would rest at or near the
-  # entry and add size to a trade whose point is a small, fixed risk.
+  # stop. A scalp's stop is 30-70 pips (auto_algo.strategies.scalping.stop), so the
+  # same leg would still add size to a trade whose point is a fixed, small risk.
   risk_leg = None if is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),
     strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,

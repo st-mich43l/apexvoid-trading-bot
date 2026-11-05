@@ -23,7 +23,7 @@ import (
 )
 
 const ID strategy.StrategyID = "impulse_pullback"
-const Version = "v3"
+const Version = "v4"
 
 // Config is the strategy's parameters: the lane's window and context shape, the
 // setup-window structure, the archetype's qualification and the shared stop and
@@ -38,7 +38,7 @@ type Config struct {
 	BuyMaximumPosition, SellMinimumPosition                                                 float64
 	LevelProximityATR, ZoneMaximumATR                                                       float64
 	ImpulseDisplacementATR, ImpulseBodyDominance, PullbackCorrectiveRatio                   float64
-	BufferM1ATRMultiple, BufferMinSpreadMultiple, MaximumSpreadPips                         float64
+	BufferM1ATRMultiple, BufferM5ATRMultiple, BufferMinSpreadMultiple, MaximumSpreadPips    float64
 	StopMinimumPips, StopMaximumPips, MinimumNetTargetPips                                  float64
 	SwingFractalN, LevelMinimumTouches                                                      int
 	LevelClusterATR, LevelRoundStep, LevelMaxClusterSpan, DisplacementATR, DisplacementBody float64
@@ -92,6 +92,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	cfg.ImpulseDisplacementATR, cfg.ImpulseBodyDominance = num("impulse_displacement_atr_multiple"), num("impulse_body_dominance")
 	cfg.PullbackCorrectiveRatio = num("pullback_corrective_ratio")
 	cfg.BufferM1ATRMultiple, cfg.BufferMinSpreadMultiple = num("buffer_m1_atr_multiple"), num("buffer_minimum_spread_multiple")
+	cfg.BufferM5ATRMultiple = num("buffer_m5_atr_multiple")
 	cfg.MaximumSpreadPips = num("maximum_spread_pips")
 	cfg.StopMinimumPips, cfg.StopMaximumPips = num("stop_minimum_pips"), num("stop_maximum_pips")
 	cfg.MinimumNetTargetPips = num("minimum_net_target_pips")
@@ -131,7 +132,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	switch {
 	case cfg.PipSize <= 0, cfg.SetupWindowBars < 10, cfg.ConfirmationWindowBars < 5, cfg.ConfirmationLookbackBars < 1, cfg.ContextATRBars < 1,
 		cfg.ActiveRangeBars < 2, cfg.ExpiryMinutes <= 0, cfg.PullbackExtremeConfirmBars < 1, cfg.BreakoutAcceptBars < 1,
-		cfg.StopMinimumPips <= 0, cfg.StopMaximumPips < cfg.StopMinimumPips,
+		cfg.StopMinimumPips <= 0, cfg.StopMaximumPips < cfg.StopMinimumPips, cfg.BufferM5ATRMultiple <= 0,
 		cfg.ImpulseDisplacementATR <= 0, cfg.ImpulseBodyDominance < 0, cfg.PullbackCorrectiveRatio <= 0, cfg.ZoneMaximumATR <= 0:
 		return Config{}, fmt.Errorf("invalid parameters")
 	}
@@ -256,13 +257,18 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 				zoneLow, zoneHigh = ref.Level-buffer, ref.Level
 			}
 		}
+		// v4: the stop sits outside the M5 noise. Structure sets the level, noise sets the buffer, and the stop is never compressed into the noise:
+		//   level  = the deeper of the reference and the pullback's own extreme (already confirmed, so nothing after the decision bar is read);
+		//   buffer = max(buffer_m5_atr_multiple x the structure (M5) ATR, buffer_minimum_spread_multiple x maximum_spread_pips).
+		// The M1-ATR buffer above only sizes the entry band around a level reference. A stop wider than the cap is refused, never tightened.
+		stopBuffer := math.Max(cfg.BufferM5ATRMultiple*c.ATR, cfg.BufferMinSpreadMultiple*cfg.MaximumSpreadPips*cfg.PipSize)
 		worst := zoneHigh
-		stopPrice := ref.Level - buffer
+		stopPrice := math.Min(ref.Level, ev.PullbackExtreme) - stopBuffer
 		structural := (worst - stopPrice) / cfg.PipSize
 		room := c.BuyRoomPips
 		if direction == market.Sell {
 			worst = zoneLow
-			stopPrice = ref.Level + buffer
+			stopPrice = math.Max(ref.Level, ev.PullbackExtreme) + stopBuffer
 			structural = (stopPrice - worst) / cfg.PipSize
 			room = c.SellRoomPips
 		}

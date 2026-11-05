@@ -1,7 +1,16 @@
-# Impulse Pullback Strategy V2
+# Impulse Pullback Strategy V4
 
 
 **Contract.** Ported from the Python scalp lane's `discover_impulse_pullback`: 4 ATR displacement with 0.5 body dominance, a corrective pullback (below 0.7 of the impulse body, 25-75% retracement, confirmed extreme), an unmitigated M5 zone or nearby key level whose closed-bar role agrees, location in the dealing range, an M1 confirmation at the reference, the structural stop and the corridor target. XAU only. The real XAU capture contains no Python decision, so parity is proven on seeded synthetic captures only; XAU stays observe-only.
+
+**v4 (5 Nov 2026): the stop sits outside the M5 noise.** v3 measured on real M1 (below): every opportunity filled and was stopped within 3-13 minutes, because the stop was `ref.Level -/+ buffer` with the M1-ATR buffer (`max(1.2 x M1 ATR, 1.5 x maximum spread)`, about 7-15 pips), a few M1 ATR behind the reference and inside the M5 noise (XAU M5 ATR 15-40 pips); when the pullback had already traded beyond the reference it could sit inside the pullback's own wick. v4 follows the rule "structure sets the level, noise sets the buffer; never compress the stop into the noise":
+
+- **Level:** the deeper of the reference and the pullback's own extreme (`min(ref.Level, PullbackExtreme)` for a BUY, `max` for a SELL). The extreme is already confirmed (`pullback_extreme_confirm_bars`), so nothing after the decision bar is read.
+- **Buffer:** `max(buffer_m5_atr_multiple x the structure (M5) ATR, buffer_minimum_spread_multiple x maximum_spread_pips x pip)`, with `buffer_m5_atr_multiple: 0.5`. The M1-ATR buffer (`buffer_m1_atr_multiple`) still sizes the entry band around a level reference and no longer sets the stop.
+- **Bounds:** `auto_algo.strategies.scalping.stop` is now 30 to 70 pips (was 12 to 45; 70 is the XAU instrument cap used everywhere else). A stop wider than 70 is refused, never tightened; a narrower one is widened to 30.
+- **Target and detection unchanged:** the `reward_risk_ladder` rung that clears `minimum_net_target_pips` and fits 0.9 of the corridor room. With wider stops fewer setups fit their room, which is intended: a setup whose room cannot pay 1R on an honest stop is refused. Invalidation label `impulse_reference_lost`, the 4 ATR displacement, the 15-minute expiry, the 80-pip scalp opposite separation and `scalp_outcome` are unchanged.
+- **Downstream:** the Algo Bot takes the M1 scalp stop verbatim from the invalidation price (`plan_scalp_invalidation_stop`, no clamp) and the Go stop envelope (kind `stopEnvelopeM1Scalp`) reads the same `scalping.stop` leaves, so 30/70 flows through; the only hard-coded scalp caps were the fallback defaults in `protective_stop.py` (12/45, now 30/70). The cTrader engine has no scalp stop cap.
+- **Judging it:** the daily M1 export in [operations](../operations.md#m1-capture-trail) keeps the M1 history Redis drops after about 33 hours.
 
 `impulse_pullback` qualifies a directional M5 impulse, then requires an M1
 correction within configured retracement bounds and a continuation close.

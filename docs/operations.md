@@ -63,6 +63,41 @@ still feeds `docker compose logs`. Rotation happens inside the process at local
 midnight (Python `TimedRotatingFileHandler`, C# `DailyFileLog`); retention is 14
 days (`LOG_RETENTION_DAYS`). No host `logrotate` is needed.
 
+## M1 capture trail
+
+Redis keeps only the newest 2000 M1 bars (about 33 hours), so every scalp measurement
+has had a handful of setups. Keep the history with a daily, read-only export of the bar
+windows (`tools.capture_bars` only issues `ZREVRANGE` reads and writes one JSON file;
+nothing in Redis changes). The files live on the production host, **outside the repo**,
+in `/var/lib/apexvoid/captures/`, and are kept for 90 days. 33 hours of M1 is longer
+than the 24 hours between runs, so consecutive files overlap and no bar is lost.
+
+`/usr/local/bin/apexvoid-capture-xau`:
+
+```bash
+#!/bin/sh
+# Daily read-only export of the XAU bars (M1, M5, M15, H1) for replay and scalp measurement.
+set -eu
+dir=/var/lib/apexvoid/captures
+mkdir -p "$dir"
+day=$(date -u +%F)
+docker exec apexvoid-trading-bot python -m tools.capture_bars --symbol XAU \
+  --m1 2000 --m5 2000 --m15 2000 --h1 2000 --out /tmp/xau-capture.json
+docker cp apexvoid-trading-bot:/tmp/xau-capture.json "$dir/xau-$day.json"
+docker exec apexvoid-trading-bot rm -f /tmp/xau-capture.json
+find "$dir" -name 'xau-*.json' -mtime +90 -delete
+```
+
+Crontab line (`crontab -e` as the user that can run `docker`), 00:15 UTC every day:
+
+```cron
+15 0 * * * /usr/local/bin/apexvoid-capture-xau >> /var/log/apexvoid-capture.log 2>&1
+```
+
+`--m1` exists in the bot image from the release that adds it; before that, run the same
+script from a checkout: `docker exec -i apexvoid-trading-bot python - --symbol XAU --m1 2000 ... < algo-bot/tools/capture_bars.py`.
+Replay a file with `cmd/replay -capture <file> -config config/apexvoid.yml -envelopes-out <out>`.
+
 ## Backups
 
 Back up the `signals` database with `pg_dump` (never a raw volume copy) and keep

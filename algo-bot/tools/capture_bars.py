@@ -29,7 +29,7 @@ from app.marketdata.ohlc import RedisOHLCSource
 from app.persistence import redis_state
 
 
-TF_MINUTES = {"M5": 5, "M15": 15, "H1": 60, "H4": 240}
+TF_MINUTES = {"M1": 1, "M5": 5, "M15": 15, "H1": 60, "H4": 240}
 
 
 class CaptureError(ValueError):
@@ -105,12 +105,13 @@ async def capture(symbol: str, counts: dict[str, int], client=None, *, now: date
 def main(argv: list[str] | None = None) -> int:
   parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
   parser.add_argument("--symbol", default="XAU")
+  parser.add_argument("--m1", type=int, default=0, help="M1 bars (Redis keeps the newest 2000, about 33 hours); 0 = none")
   parser.add_argument("--m5", type=int, default=1500)
   parser.add_argument("--m15", type=int, default=600)
   parser.add_argument("--h1", type=int, default=300)
   parser.add_argument("--out", required=True)
   args = parser.parse_args(argv)
-  document = asyncio.run(capture(args.symbol, {"M5": args.m5, "M15": args.m15, "H1": args.h1}))
+  document = asyncio.run(capture(args.symbol, {"M1": args.m1, "M5": args.m5, "M15": args.m15, "H1": args.h1}))
   out = Path(args.out)
   try:
     bars = validate_capture(document)         # refuse to leave a file the replay would reject
