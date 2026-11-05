@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.19", "AV PA v2.19", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.20", "AV PA v2.20", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -17,6 +17,7 @@ const string G4 = "04  Fair Value Gaps"
 const string G5 = "05  Sessions"
 const string G6 = "06  Visuals & Performance"
 const string G7 = "07  Key Levels"
+const string G8 = "08  Volume Profile"
 
 string displayProfile = input.string("Balanced — Recommended", "Display profile", options = ["Balanced — Recommended", "Minimal", "Detailed", "Debug"], group = G6)
 string sensitivity = input.string("Auto", "Swing sensitivity", options = ["Auto", "Manual"], group = G1)
@@ -137,6 +138,15 @@ int keyWindowInput = input.int(0, "Key level window (0 = auto)", minval = 0, max
 float keyRoundInput = input.float(0.0, "Round step (0 = by definition: XAU 5 / 10)", minval = 0, step = 0.5, group = G7)
 bool showKeyBand = input.bool(false, "Show key level band", group = G7)
 color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
+
+string vpMode = input.string("Auto", "Volume profile", options = ["Auto", "Manual", "Off"], group = G8)
+float vpVaPct = input.float(70.0, "Value area %", minval = 50, maxval = 95, step = 1, group = G8)
+bool vpNaked = input.bool(true, "Show naked POCs", group = G8)
+color vpColor = input.color(#8A93A6, "Volume profile colour", group = G8)
+string vpPerIn = input.string("Session", "Manual: period", options = ["Session", "Day", "Week", "Month"], group = G8)
+string vpIbIn = input.string("1", "Manual: intrabar timeframe (minutes)", options = ["1", "3", "5", "15", "60"], group = G8)
+int vpRowsIn = input.int(32, "Manual: rows", minval = 16, maxval = 40, group = G8)
+int vpKeepIn = input.int(1, "Manual: profiles drawn (completed, besides the developing one)", minval = 0, maxval = 3, group = G8)
 
 
 int chartSecs = nz(timeframe.in_seconds(), 900)
@@ -948,7 +958,7 @@ string[] rlText = array.new_string()
 color[] rlTone = array.new_color()
 int[] rlPriority = array.new_int()
 string[] rlTip = array.new_string()
-int[] rlCat = array.new_int()    // 0 structure, 1 liquidity, 2 session, 3 zone, 4 key level
+int[] rlCat = array.new_int()    // 0 structure, 1 liquidity, 2 session, 3 zone, 4 key level, 5 volume profile
 int[] rlTier = array.new_int()   // 1 decision, 2 structure, 3 context
 
 f_regLabel(float y, string caption, color tone, int priority, string tip, int cat, int tier) =>
@@ -2229,6 +2239,209 @@ if showSessionBoxes
     f_updateSessionBox(sessionBoxesNy, nyIn == 1, nyStart, nyHigh, nyLow, sessionBoxEnd, nyColor, "New York")
 
 
+// ------- VOLUME PROFILE (TICK VOLUME, DISPLAY ONLY) -------
+// One profile per period (Auto: session on <=5m, day on 10-30m, week on 1-2h, month on 3-4h, quarter on 1D and above), built from the period's intrabars
+// (request.security_lower_tf of the plain high / low / volume, never a structure series). Volume is tick volume: activity, not contracts. A completed profile
+// never changes; the developing one is recomputed on the last bar. Histograms are polylines (boxes are spent), captions go through the right label column (category 5).
+f_vp(float[] hs, float[] ls, float[] vs, float lo, float st, int rows, float pct) =>
+    float[] bins = array.new_float(rows, 0.0)
+    int n = array.size(hs)
+    if n > 0
+        for k = 0 to n - 1
+            float h = array.get(hs, k)
+            float l = array.get(ls, k)
+            int b0 = math.max(0, math.min(rows - 1, int(math.floor((l - lo) / st))))
+            int b1 = h > l ? math.max(b0, math.min(rows - 1, int(math.floor((h - lo) / st - 1.0e-9)))) : b0
+            for b = b0 to b1
+                float share = h > l ? math.max(0.0, math.min(h, lo + (b + 1) * st) - math.max(l, lo + b * st)) / (h - l) : 1.0
+                array.set(bins, b, array.get(bins, b) + nz(array.get(vs, k)) * share)
+    int poc = 0
+    for b = 1 to rows - 1
+        if array.get(bins, b) >= array.get(bins, poc)
+            poc := b
+    int bl = poc
+    int bh = poc
+    float acc = array.get(bins, poc)
+    float target = array.sum(bins) * pct / 100.0
+    while acc < target and (bl > 0 or bh < rows - 1)
+        float up = (bh + 1 < rows ? array.get(bins, bh + 1) : 0.0) + (bh + 2 < rows ? array.get(bins, bh + 2) : 0.0)
+        float dn = (bl > 0 ? array.get(bins, bl - 1) : 0.0) + (bl > 1 ? array.get(bins, bl - 2) : 0.0)
+        if bh < rows - 1 and (bl == 0 or up >= dn)
+            acc += up
+            bh := math.min(rows - 1, bh + 2)
+        else
+            acc += dn
+            bl := math.max(0, bl - 2)
+    [bins, poc, bl, bh]
+
+f_vpAdd(float[] hs, float[] ls, float[] vs, float[] ih, float[] il, float[] iv, bool cap) =>
+    int n = na(ih) ? 0 : array.size(ih)
+    int added = n
+    if n > 0
+        for k = 0 to n - 1
+            array.push(hs, array.get(ih, k))
+            array.push(ls, array.get(il, k))
+            array.push(vs, array.get(iv, k))
+    else
+        array.push(hs, high)
+        array.push(ls, low)
+        array.push(vs, volume)
+    if cap and array.size(hs) > 3000
+        for k = 0 to 499
+            array.set(hs, k, math.max(array.get(hs, 2 * k), array.get(hs, 2 * k + 1)))
+            array.set(ls, k, math.min(array.get(ls, 2 * k), array.get(ls, 2 * k + 1)))
+            array.set(vs, k, nz(array.get(vs, 2 * k)) + nz(array.get(vs, 2 * k + 1)))
+        for k = 1 to 500
+            array.remove(hs, 500)
+            array.remove(ls, 500)
+            array.remove(vs, 500)
+        added := -1
+    added
+
+f_vpShape(float[] bins, float lo, float st, int x0, float ws, int i0, int i1, int fillTr, int lineTr) =>
+    chart.point[] pts = array.new<chart.point>()
+    array.push(pts, chart.point.from_index(x0, lo + i0 * st))
+    for i = i0 to i1
+        int xr = x0 + math.round(array.get(bins, i) * ws)
+        array.push(pts, chart.point.from_index(xr, lo + i * st))
+        array.push(pts, chart.point.from_index(xr, lo + (i + 1) * st))
+    array.push(pts, chart.point.from_index(x0, lo + (i1 + 1) * st))
+    polyline.new(pts, closed = true, xloc = xloc.bar_index, line_color = color.new(vpColor, lineTr), fill_color = color.new(vpColor, fillTr), line_width = 1)
+
+f_vpLine(int x1, int x2, float y, int tr, string sty) =>
+    line.new(x1, y, x2, y, xloc = xloc.bar_index, color = color.new(vpColor, tr), style = sty, width = 1)
+
+string vpPer = vpMode == "Manual" ? vpPerIn : chartSecs <= 300 ? "Session" : chartSecs <= 1800 ? "Day" : chartSecs <= 7200 ? "Week" : chartSecs <= 14400 ? "Month" : "Quarter"
+bool vpOn = vpMode != "Off" and not minimalMode
+string vpIb = vpMode == "Manual" ? vpIbIn : chartSecs <= 900 ? "1" : chartSecs <= 1800 ? "3" : chartSecs <= 7200 ? "5" : chartSecs <= 14400 ? "15" : "60"
+int vpKeep = vpMode == "Manual" ? vpKeepIn : chartSecs <= 300 ? 2 : chartSecs <= 7200 ? 1 : 0
+float vpExp = (vpPer == "Session" ? 28800.0 : vpPer == "Day" ? 82800.0 : vpPer == "Week" ? 414000.0 : vpPer == "Month" ? 1738800.0 : 5216400.0) / chartSecs
+bool vpChg = timeframe.change(vpPer == "Day" ? "D" : vpPer == "Week" ? "W" : vpPer == "Month" ? "M" : "3M")
+bool vpAs = not na(asiaLiveStart) and nz(asiaLiveStart[1]) != asiaLiveStart
+bool vpLd = not na(ldnStart) and nz(ldnStart[1]) != ldnStart
+bool vpNy = not na(nyStart) and nz(nyStart[1]) != nyStart
+bool vpOpen = vpPer == "Session" ? vpAs or vpLd or vpNy : vpChg
+[ibH, ibL, ibV] = request.security_lower_tf(syminfo.tickerid, vpOn ? vpIb : timeframe.period, [high, low, volume], ignore_invalid_timeframe = true)
+
+f_vpTip(string nm, float poc, float vl, float vah, int rows, bool approx, bool dev) =>
+    "Volume profile (tick volume) · " + nm + " · POC " + f_px(poc) + " · VA " + str.tostring(vpVaPct, "0") + " % " + f_px(vl) + "–" + f_px(vah) + " · rows " + str.tostring(rows) + " · intrabar " + (vpIb == "60" ? "1h" : vpIb + "m") + (approx ? " · approx (chart bars)" : "") + (dev ? " · developing" : "")
+
+var float[] vpH = array.new_float()
+var float[] vpL = array.new_float()
+var float[] vpV = array.new_float()
+var bool vpApprox = false
+var int vpStart = 0
+var string vpName = ""
+var polyline[] vpPoly = array.new<polyline>()
+var polyline[] vpDevPoly = array.new<polyline>()
+var line[] vpLines = array.new_line()
+var line[] vpDevLines = array.new_line()
+var float[] vpLast = array.new_float()
+var string vpLastTip = ""
+var float[] nkP = array.new_float()
+var int[] nkB = array.new_int()
+var string[] nkT = array.new_string()
+var line[] nkLines = array.new_line()
+
+if vpOn and barstate.isconfirmed
+    if vpOpen and array.size(vpH) > 0
+        float lo = array.min(vpL)
+        float hi = math.max(array.max(vpH), lo + syminfo.mintick)
+        int rows = vpMode == "Manual" ? vpRowsIn : math.max(16, math.min(40, math.round((hi - lo) / (0.25 * nz(atr, (hi - lo) / 32.0)))))
+        float st = (hi - lo) / rows
+        [bins, poc, bl, bh] = f_vp(vpH, vpL, vpV, lo, st, rows, vpVaPct)
+        float pocP = lo + (poc + 0.5) * st
+        float vahP = lo + (bh + 1) * st
+        float valP = lo + bl * st
+        float ws = array.get(bins, poc) > 0 ? 0.30 * vpExp / array.get(bins, poc) : 0.0
+        string nm = vpName + " " + str.format_time(time[1], "MM-dd", "UTC")
+        string tip = f_vpTip(nm, pocP, valP, vahP, rows, vpApprox, false)
+        if vpKeep > 0
+            array.push(vpPoly, f_vpShape(bins, lo, st, vpStart, ws, 0, rows - 1, 88, 70))
+            array.push(vpPoly, f_vpShape(bins, lo, st, vpStart, ws, bl, bh, 80, 62))
+            array.push(vpLines, f_vpLine(vpStart, bar_index - 1, pocP, 35, line.style_solid))
+            array.push(vpLines, f_vpLine(vpStart, bar_index - 1, vahP, 60, line.style_dotted))
+            array.push(vpLines, f_vpLine(vpStart, bar_index - 1, valP, 60, line.style_dotted))
+            while array.size(vpPoly) > 2 * vpKeep
+                polyline.delete(array.shift(vpPoly))
+            while array.size(vpLines) > 3 * vpKeep
+                line.delete(array.shift(vpLines))
+        array.clear(vpLast)
+        array.push(vpLast, pocP)
+        array.push(vpLast, vahP)
+        array.push(vpLast, valP)
+        vpLastTip := tip
+        if vpNaked
+            array.push(nkP, pocP)
+            array.push(nkB, bar_index - 1)
+            array.push(nkT, tip)
+            if array.size(nkP) > 6
+                array.shift(nkP)
+                array.shift(nkB)
+                array.shift(nkT)
+    if vpOpen or barstate.isfirst
+        array.clear(vpH)
+        array.clear(vpL)
+        array.clear(vpV)
+        vpApprox := false
+        vpStart := bar_index
+        vpName := vpPer == "Session" ? (vpLd ? "London" : vpNy ? "New York" : "Asia") : vpPer
+    int added = f_vpAdd(vpH, vpL, vpV, ibH, ibL, ibV, true)
+    vpApprox := vpApprox or added <= 0
+    if array.size(nkP) > 0
+        for k = array.size(nkP) - 1 to 0
+            if low <= array.get(nkP, k) and high >= array.get(nkP, k)
+                array.remove(nkP, k)
+                array.remove(nkB, k)
+                array.remove(nkT, k)
+
+if vpOn and barstate.islast and array.size(vpH) > 0
+    int before = array.size(vpH)
+    if not barstate.isconfirmed
+        f_vpAdd(vpH, vpL, vpV, ibH, ibL, ibV, false)
+    float lo = array.min(vpL)
+    float hi = math.max(array.max(vpH), lo + syminfo.mintick)
+    int rows = vpMode == "Manual" ? vpRowsIn : math.max(16, math.min(40, math.round((hi - lo) / (0.25 * nz(atr, (hi - lo) / 32.0)))))
+    float st = (hi - lo) / rows
+    [bins, poc, bl, bh] = f_vp(vpH, vpL, vpV, lo, st, rows, vpVaPct)
+    while array.size(vpH) > before
+        array.pop(vpH)
+        array.pop(vpL)
+        array.pop(vpV)
+    float pocP = lo + (poc + 0.5) * st
+    float vahP = lo + (bh + 1) * st
+    float valP = lo + bl * st
+    float ws = array.get(bins, poc) > 0 ? 0.30 * vpExp / array.get(bins, poc) : 0.0
+    while array.size(vpDevPoly) > 0
+        polyline.delete(array.pop(vpDevPoly))
+    while array.size(vpDevLines) > 0
+        line.delete(array.pop(vpDevLines))
+    array.push(vpDevPoly, f_vpShape(bins, lo, st, vpStart, ws, 0, rows - 1, 83, 65))
+    array.push(vpDevPoly, f_vpShape(bins, lo, st, vpStart, ws, bl, bh, 75, 57))
+    array.push(vpDevLines, f_vpLine(vpStart, bar_index, pocP, 35, line.style_solid))
+    array.push(vpDevLines, f_vpLine(vpStart, bar_index, vahP, 60, line.style_dotted))
+    array.push(vpDevLines, f_vpLine(vpStart, bar_index, valP, 60, line.style_dotted))
+    string devTip = f_vpTip(vpName + " " + str.format_time(time, "MM-dd", "UTC"), pocP, valP, vahP, rows, vpApprox, true)
+    if f_scaleOk(pocP)
+        f_regLabel(pocP, "dPOC " + f_px(pocP), vpColor, 20, devTip, 5, 2)
+    if f_scaleOk(vahP)
+        f_regLabel(vahP, "dVAH " + f_px(vahP), vpColor, 19, devTip, 5, 2)
+    if f_scaleOk(valP)
+        f_regLabel(valP, "dVAL " + f_px(valP), vpColor, 19, devTip, 5, 2)
+    if array.size(vpLast) == 3
+        for k = 0 to 2
+            if f_scaleOk(array.get(vpLast, k))
+                f_regLabel(array.get(vpLast, k), (k == 0 ? "POC " : k == 1 ? "VAH " : "VAL ") + f_px(array.get(vpLast, k)), vpColor, 18, vpLastTip, 5, 3)
+    // A naked POC far from price gets no line at all: a transparent line still counts for the price auto-scale and stretches the chart.
+    while array.size(nkLines) > 0
+        line.delete(array.pop(nkLines))
+    if array.size(nkP) > 0
+        for k = 0 to array.size(nkP) - 1
+            if f_scaleOk(array.get(nkP, k))
+                array.push(nkLines, f_vpLine(array.get(nkB, k), bar_index + gutter, array.get(nkP, k), 55, line.style_dashed))
+                f_regLabel(array.get(nkP, k), "nPOC " + f_px(array.get(nkP, k)), vpColor, 17, array.get(nkT, k) + " · naked until a later bar trades through it", 5, 3)
+
+
 // ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------
 // A confirmed pool needs an external swing or two independent tests, so in a clean trend
 // the obvious recent highs/lows are not pools. These two lines mark only the nearest
@@ -2353,19 +2566,21 @@ f_emitCluster(int[] members, int slot) =>
     float[] prio = array.new_float()
     for q = 0 to m - 1
         int mi = array.get(members, q)
-        array.push(prio, array.get(rlPriority, mi) - array.get(rlTier, mi) * 1000.0 - (array.get(rlCat, mi) == 4 ? 1000000.0 : 0.0))
+        array.push(prio, array.get(rlPriority, mi) - array.get(rlTier, mi) * 1000.0 - (array.get(rlCat, mi) >= 4 ? 1000000.0 : 0.0))
     int[] ranking = array.sort_indices(prio, order.descending)
     int top = array.get(members, array.get(ranking, 0))
     int topCat = array.get(rlCat, top)
     int topTier = array.get(rlTier, top)
     int shown = 0
     int keys = 0
+    int vols = 0
     string caption = ""
     string keyText = ""
+    string volText = ""
     string tip = ""
     for q = 0 to m - 1
         int idx = array.get(members, array.get(ranking, q))
-        if array.get(rlCat, idx) == topCat and topCat != 4 and shown < 3
+        if array.get(rlCat, idx) == topCat and topCat < 4 and shown < 3
             caption += (shown > 0 ? " · " : "") + array.get(rlText, idx)
             shown += 1
         tip += (q > 0 ? "\n" : "") + array.get(rlTip, idx)
@@ -2373,10 +2588,15 @@ f_emitCluster(int[] members, int slot) =>
         if array.get(rlCat, own) == 4
             keyText += (keys > 0 ? " · " : "") + array.get(rlText, own)
             keys += 1
-    if m - keys > shown
-        caption += " +" + str.tostring(m - keys - shown)
+        if array.get(rlCat, own) == 5
+            volText += (vols > 0 ? " · " : "") + array.get(rlText, own)
+            vols += 1
+    if m - keys - vols > shown
+        caption += " +" + str.tostring(m - keys - vols - shown)
     if keys > 0
         caption += (caption == "" ? "" : " · ") + "KL " + keyText
+    if vols > 0
+        caption += (caption == "" ? "" : " · ") + volText
     float y = array.get(rlY, top)
     color tone = topTier == 1 ? array.get(rlTone, top) : color.new(array.get(rlTone, top), topTier == 2 ? 25 : 20)
     string labelSize = topTier == 1 ? tier1Size : topTier == 2 ? tier2Size : tier3Size
