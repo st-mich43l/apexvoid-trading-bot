@@ -6,14 +6,14 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.18). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.19). |
 | `reference/` | Python models of the indicator's structure, order-block, liquidity, supply/demand and key-level logic with rule checks on real XAUUSD closed bars (`python tradingview/reference/test_<name>.py`). They validate the algorithm only; they do not compile or draw the Pine file. |
 
 ## ApexVoid Price Action
 
 A market-structure indicator that draws structure, order blocks, imbalances,
-supply/demand, liquidity pools and session levels, then summarises them in a small
-"Market Intelligence" panel. Every structural event and every zone state change
+supply/demand, liquidity pools, key levels and session levels. It has no table or
+panel on the chart (removed in v2.19). Every structural event and every zone state change
 needs a **closed** chart bar, so nothing repaints once a bar has closed. A zone,
 pool or sweep is an analytical reference, not an entry signal. The indicator tracks no trades: since v2.18 there is no trade plan, no paper results and no entry, stop or target logic.
 
@@ -53,7 +53,7 @@ the candles when the price axis is dragged or zoomed.
 | `Demand` / `Supply` | green / pink box | Zone at a confirmed, displaced external swing. |
 | `Demand · DBR` … `Supply · DBD` | same colours | Base-and-impulse zone; the suffix names the pattern (below). |
 | `◆ OB+FVG`, `◆ D+OB`, `◆ S+FVG`, `◆ D·RBR` … | thicker border | A zone that passed a named qualification path (below). `◆` plus the border mark a POI; the colour carries the side, so the caption is only the kind: `OB`, `iOB`, `FVG`, `D` (demand), `S` (supply), base patterns `D·RBR` / `S·RBD`, composites joined with `+` (supply/demand, then OB, then FVG). `·T` = tested. Zones of one side that overlap or sit closer than a label height share **one** caption on the best member (`◆ OB+FVG ×3` = three boxes); hover for every member. |
-| `EQ` and the premium / discount gauge | a slim rose / green gauge at the very right edge, just beyond the zone boxes (no text; the panel `Range` row says Premium / Discount) and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
+| `EQ` and the premium / discount gauge | a slim rose / green gauge at the very right edge, just beyond the zone boxes (no text) and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
 | `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
@@ -161,7 +161,7 @@ changes bias and never creates an entry.
 **Sessions.** Defaults follow the engine's session calendar (`analysis.sessions.calendar`): Asia 07:00-17:00
 Tokyo ended early at London open (a bar inside London is never Asia, so the end follows London daylight saving: 07:00 UTC on
 23 Oct 2026, 08:00 UTC on 27 Oct), London 08:00-16:30 London, New York 09:00-17:00 New York. The Asian range is
-drawn on the chart only, live while the session runs and then as the completed range (configurable); the panel does not show it. The live
+drawn on the chart only, live while the session runs and then as the completed range (configurable). The live
 and completed Asian high/low are drawn as levels only. On charts above 5m the session is evaluated on a 5-minute request.
 
 **Multi-timeframe structure (not in this script).** v2.14 first shipped a panel row that requested the chart's own `bias` / `activeProtected` on two other frames
@@ -195,7 +195,6 @@ Engine v6 is exactly what the bot trades today (parity: zero differences against
 - **Look:** width-1 dotted line (dashed for a round level), `Key level colour`; transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; major round levels (XAU $50 / $100 multiples) 60 in both modes; from the earliest member swing (capped by `Maximum drawn length`) to the end of the gutter. Fainter than pools and zones.
 - **Lines always draw, and every drawn level shows its price:** there is no "near a zone edge: not drawn" rule and no `+n` for a key level. The right-column caption always starts with `KL` and the line's own price: reaction `KL 3949.12 ×3`; round on its step price `KL 3950 ×6`; round where v6 averaging moved the price `KL 3949.12 ×6` (tooltip: `round 3950, engine price merged`); in play adds ` ●`.
 - **Sharing a slot:** several key levels within one label height become one label that lists every price, highest first (`KL 3954.47 ×3 · 3951.42 ×3 · 3949.12 ×6`). A key level within one label height of another category (`PROT`, `BSL` / `SSL` / `EQH` / `EQL`, `EQ`, `MAJOR`, `DEV`, a zone caption, Asia) never replaces that label: the other label keeps its slot, position and colour, and the key-level text is appended visibly (`BSL · KL 3949.12 ×6`) with its tooltip line. Pine labels have one text colour, so the appended text takes the host's colour; the `KL` prefix identifies it. Other categories keep the earlier rule (the lower tier shows as `+n`).
-- **`KL` panel row** (after `BSL / SSL`): the drawn prices by side, nearest first (`▲ 3949.12 · 3954.47  ▼ 3924.67 · 3917.18●`, cut with `…` at 40 characters). Its tooltip lists **every** level found in the window, highest first: price, kind, touches, origin, flipped / in play, drawn or not, then the coverage line.
 - **Selectivity readout (tooltip only, nothing on the chart):** the share of the window's [low, high] inside any level band, over all levels: `coverage 69 % of the recent range: low selectivity` above 40 %, `selective` at or below 25 %. On the 3 Nov M5 capture: v6 69 %, v7 36 %.
 - **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count). Python reference: `reference/keylevel_model.py` (`definition_levels`, `display217`), tests `reference/test_keylevel_v217.py`; the v2.16.1 `swing_levels` and the v2.16 `keylevel.Cluster` port stay as earlier references.
 
@@ -217,8 +216,7 @@ hide them, so:
   or liquidity pool is drawn only if it is within `Candle-scale window` (15 ATR) of the close
   **or** inside the price range the last `Candle range reference` (300) bars already span (plus
   one ATR). An object inside that range cannot stretch the price scale, so it is kept; one
-  outside it is not drawn. The panel reports the reason, and
-  hidden objects keep their state. The Debug profile ignores the limit; turn the toggle off to
+  outside it is not drawn. Hidden objects keep their state. The Debug profile ignores the limit; turn the toggle off to
   ignore it everywhere. Each object type also keeps its own distance setting.
 - **Maximum drawn length** (250 bars): the left edge of zone boxes, midlines, pool lines
   and EQ bands is cut to this many bars back, so old zones no longer paint across the whole
@@ -233,24 +231,6 @@ hide them, so:
 
 Not covered: Asian levels and session boxes and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
-
-### Market Intelligence panel
-
-The panel shows **major information only**, one line each; hover a cell for the detail. (v2.17 removed the `Dashboard display size` option and its `Standard` full panel to make room
-for the key level definitions; the information it listed is in these rows' tooltips or on the chart.)
-
-| Compact row | Shows |
-| --- | --- |
-| Bias / Phase | External bias; market phase |
-| Range | `Premium 68 % · EQ 3951.50` or `Discount …`: where the close sits in the dealing range (tooltip shows its low and high) |
-| Range H / L | The dealing range high / low (same range as the premium/discount gauge; tooltip: the confirmed swings with times and the developing extreme) |
-| Protected | The external level whose break flips the bias |
-| Last break | Last external BOS/CHoCH with its age (tooltip: last internal break) |
-| Bull POI / Bear POI | Nearest qualified POI, distance in ATR, `A` actionable / `Q` qualified / `D` distant or tested |
-| BSL / SSL | Nearest active pools (`*` = active but not drawn) |
-| Zones | `OB v/a · S/D v/a · FVG v/a` (visible / active) |
-
-The Zones tooltip splits hidden blocks into far / overlapping / budget and shows lifetime counters (accepted, rejected, replaced, covered, mitigated, invalidated, aged, evicted).
 
 ### Settings
 
@@ -284,8 +264,7 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
-structure window, label and event limits, zone maximum age (600 bars), panel
-switch / density / position, global text scale, annotation spacing, `Annotation gutter` (12); `Show session titles` is in 05 Sessions.
+structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12); `Show session titles` is in 05 Sessions.
 
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
@@ -310,7 +289,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 - **Too few order blocks:** raise `Visible bullish / bearish OBs`, raise `Maximum
   visible OB distance`, lower `Minimum displacement from OB`, or lower `Minimum
-  impulse candle body`. The panel tooltip counts accepted and rejected candidates.
+  impulse candle body`.
 - **Too many / noisy order blocks:** switch off internal OBs, raise displacement, or
   use `Midpoint` or `Wick` mitigation so spent blocks leave sooner.
 - **Block disappears after a wick through it:** that is the `Wick` / `Midpoint`
@@ -340,6 +319,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | Version | Change |
 | --- | --- |
 | 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
+| 2.19 | The Market Intelligence panel (the table at the top right of the chart) is removed with its inputs `Show Market Intelligence panel` and `Dashboard position`, the `KL` row, and all the state that only fed it (zone / pool / order-block / supply-demand counters and outcome texts, the last-break / swing-time variables and the helper functions that formatted them). Everything drawn on the chart, every alert and the label tooltips are unchanged. The key-level coverage readout now lives only in each key level's tooltip. |
 | 2.18 | The trade plan is removed: the `08 Trade Plan` settings (all 18 inputs), the paper tracker (entries, stops, targets, results), the `Trades` panel row and its tooltip, and the four alerts `ApexVoid Trade Plan Long / Short / Target Hit / Stop Hit`. Alerts built on those four conditions stop firing; because the alert-condition list changes, open your other alerts for this indicator and re-select the condition if it shows the wrong one. Nothing else changes: structure, zones, liquidity, key levels and the other alerts are as in v2.17. The reference model `trade_model.py` and its tests are gone; the harness the other tests need is `pipeline_model.py` and the session tests are `test_session_model.py`. |
 | 2.17 | Key levels, one code path and two definitions: `Engine (key_level v6)` (what the bot trades, default) and `Selective (v7 preview)` (cluster 0.25 ATR, $10 round step, stronger-member dedupe, origin kind for flipped / in play); `Key levels per side` 3 (up to 10); every drawn level shows its price (`KL 3949.12 ×3`), labels of several key levels or of a key level beside another label list the prices instead of folding to `+n`, and a `KL` panel row lists the drawn prices (tooltip: all levels); flipped levels drawn at transparency 88, major round levels 60; tooltip with origin, definition and a coverage readout (share of the recent range the levels cover). The Python model, a new v7 golden and 200 random capture windows prove the Pine algorithm in both modes. To fit the token budget, after the three cuts the brief listed were already spent in v2.16.1: the `Dashboard display size` option and its `Standard` full panel are removed (the Compact panel is unchanged). |
 | 2.16.1 | Key levels = what the strategy reads (`LegacyFrame.SwingLevels`: zigzag-filtered fractals, median window ATR, ATR at each swing for the round band), computed from the last closed bars on the last bar; no level is hidden for being "broken" (side, origin, flipped, in play instead); lines always drawn, only the caption yields to a stronger label; captions `KL×3` / `KL 3945`; the pivot ring and `Show broken key levels` are gone. To fit the token budget: the Debug `xEH` / `xEL` labels, the `Show historical major classifications` option (and its `M HH` / `M HL` / `M LH` / `M LL` labels) and the `Expanded` panel density (its `Invalidated Level` and `Zone Audit` rows) are removed. |
