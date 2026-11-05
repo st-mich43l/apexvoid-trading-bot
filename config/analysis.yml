@@ -621,7 +621,9 @@ analysis:
     # to an unmitigated M5 zone or a nearby key level whose role agrees, confirmed by
     # a closed M1 bar, with the shared stop/target book. XAU only.
     impulse_pullback:
-      version: v3
+      # v4 (docs/strategies/impulse_pullback.md): the stop sits behind the deeper of the reference and the pullback's own extreme, with an M5-ATR buffer
+      # (buffer_m5_atr_multiple x the structure ATR, at least buffer_minimum_spread_multiple x maximum_spread_pips). Bounds: auto_algo.strategies.scalping.stop.
+      version: v4
       enabled: true
       symbols: [XAU]
       setup_window_bars: 120
@@ -647,6 +649,7 @@ analysis:
       displacement_atr_multiple: 1.5
       displacement_body_fraction: 0.6
       reward_risk_ladder: [2.0, 1.0]
+      buffer_m5_atr_multiple: 0.5
     round_number:
       # v1 (docs/strategies/round_number.md): stop runs at gold handles (Osler 2003/2005). The stop orders cluster just beyond a round number: a trade
       # through the band that is taken straight back is a stop run to fade, one that is accepted is a cascade to trade on the retest. Scoped to XAU.

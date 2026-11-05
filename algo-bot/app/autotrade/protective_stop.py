@@ -793,13 +793,13 @@ def stop_bounds_for_reaction_room(
         None,
       )
       try:
-        floor_pips = int(float(getattr(scalp_stop_cfg, "minimum_pips", 12) or 12))
+        floor_pips = int(float(getattr(scalp_stop_cfg, "minimum_pips", 30) or 30))
       except (TypeError, ValueError):
-        floor_pips = 12
+        floor_pips = 30
       try:
-        cap_pips = int(float(getattr(scalp_stop_cfg, "maximum_pips", 45) or 45))
+        cap_pips = int(float(getattr(scalp_stop_cfg, "maximum_pips", 70) or 70))
       except (TypeError, ValueError):
-        cap_pips = 45
+        cap_pips = 70
       if cap_pips < floor_pips:
         cap_pips = floor_pips
       min_rr = 1.0
@@ -1378,13 +1378,13 @@ def stop_bounds_for_strategy(
       None,
     )
     try:
-      scalp_min = int(float(getattr(scalp_stop_cfg, "minimum_pips", 12) or 12))
+      scalp_min = int(float(getattr(scalp_stop_cfg, "minimum_pips", 30) or 30))
     except (TypeError, ValueError):
-      scalp_min = 12
+      scalp_min = 30
     try:
-      scalp_max = int(float(getattr(scalp_stop_cfg, "maximum_pips", 45) or 45))
+      scalp_max = int(float(getattr(scalp_stop_cfg, "maximum_pips", 70) or 70))
     except (TypeError, ValueError):
-      scalp_max = 45
+      scalp_max = 70
     if scalp_max < scalp_min:
       scalp_max = scalp_min
     return scalp_min, scalp_max

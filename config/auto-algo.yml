@@ -113,9 +113,11 @@ auto_algo:
       target:
         minimum_net_target_pips: 10
       stop:
-        minimum_pips: 12
-        maximum_pips: 45
+        # Impulse Pullback v4: 30-70 pips (70 = the XAU instrument cap). A stop wider than the maximum is refused, never tightened.
+        minimum_pips: 30
+        maximum_pips: 70
         buffer_atr: 0.10
+        # Sizes the entry band around a level reference only; the stop's buffer is buffer_m5_atr_multiple in analysis.yml.
         buffer_m1_atr_multiple: 1.2
         buffer_minimum_spread_multiple: 1.5
       policy:
