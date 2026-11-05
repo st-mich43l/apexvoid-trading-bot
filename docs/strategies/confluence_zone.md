@@ -9,6 +9,8 @@ neutral facts; it never invokes another strategy and never suppresses one (a val
 FVG, iFVG, Supply, Demand or Order Block candidate is published whether or not it is
 part of a confluence).
 
+**Deep entry (PR-E1, v4).** When the structural stop from the proximal edge of the entry band is wider than the instrument cap, the strategy no longer refuses at once: `strategyutil.StopBudget.Fit` keeps the invalidation where structure puts it and cuts the entry band to the part from which the stop is within the cap (BUY: prices <= invalidation + cap; SELL: prices >= invalidation - cap, the cut edge rounded to the tick toward the inside). The candidate's entry band is the cut band (evidence `stop_budget_deep_entry`, quality measure `deep_entry_pips` = how far the proximal edge moved); room and target are recomputed from the new proximal edge. A band whose far edge is still beyond the cap, or a cut band narrower than `deep_entry_minimum_width_pips` (instrument, XAU 3.0, FX 0.5), is refused and counted as before. The identity (`StructuralID`, `SetupKey`) does not contain the entry band, so it is unchanged. The cut is made in the detector's BUY-oriented view (mirrored for SELL) before the price-has-run-away test, which stays measured from the uncut proximal edge; the band is the overlap, so the cut is rarely possible.
+
 v3 replaces the Python-parity v2, whose contract could not answer "are two
 independent structures supporting the same price?": it counted technique *labels*,
 published the *union* of the members as the entry, let a member be born on the

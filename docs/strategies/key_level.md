@@ -3,9 +3,11 @@
 
 ## Strategy ID / version
 
-`key_level`, `v5`. Implemented in
+`key_level`, `v7`. Implemented in
 `analysis-engine/internal/strategy/keylevel`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
+
+**Deep entry (PR-E1, v7).** When the structural stop from the proximal edge of the entry band is wider than the instrument cap, the strategy no longer refuses at once: `strategyutil.StopBudget.Fit` keeps the invalidation where structure puts it and cuts the entry band to the part from which the stop is within the cap (BUY: prices <= invalidation + cap; SELL: prices >= invalidation - cap, the cut edge rounded to the tick toward the inside). The candidate's entry band is the cut band (evidence `stop_budget_deep_entry`, quality measure `deep_entry_pips` = how far the proximal edge moved); room and target are recomputed from the new proximal edge. A band whose far edge is still beyond the cap, or a cut band narrower than `deep_entry_minimum_width_pips` (instrument, XAU 3.0, FX 0.5), is refused and counted as before. The identity (`StructuralID`, `SetupKey`) does not contain the entry band, so it is unchanged. The band cut is the reaction band; Key Level publishes no `Structure`, so the card shows the cut band only.
 
 ## Purpose / thesis
 

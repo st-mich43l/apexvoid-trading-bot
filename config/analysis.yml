@@ -186,7 +186,7 @@ analysis:
   # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
-      version: v6
+      version: v7
       enabled: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of
@@ -210,7 +210,7 @@ analysis:
       reaction_lookback_bars: 3
       engulfing_minimum_range_atr: 0.5
     confluence_zone:
-      version: v3
+      version: v4
       enabled: true
       # Confluence Zone v3 technical contract (docs/strategies/confluence-zone-v3-technical-spec.md).
       # Every value is a tunable default validated against captures, not a claimed
@@ -250,7 +250,7 @@ analysis:
       # v10 (docs/strategies/supply.md): self-contained, SELL only. A zone is found on M15/H1 (the range of the candles before a strong downward departure), M5
       # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="supply"}). Nothing
       # else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared confluence rubric are injected by the engine.
-      version: v10
+      version: v11
       enabled: true
       structure_timeframes: [M15, H1]
       # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
@@ -287,7 +287,7 @@ analysis:
       # confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as strategy_refused{strategy="demand"}). The
       # zone score is owned here too. Nothing else is read: the instrument scale (pip_size, round_step, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v8
+      version: v9
       enabled: true
       structure_timeframes: [M15, H1]
       # The departure: a leg of same-direction candles that moved at least displacement_atr_mult x ATR, most of them with a body of at least
@@ -324,7 +324,7 @@ analysis:
       # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as
       # strategy_refused{strategy="order_block"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v10
+      version: v11
       enabled: true
       structure_timeframes: [M15, H1]
       # v9: the block's structure break is computed by the strategy itself, causally (a swing joins the reference set when it is confirmed, BOS against CHoCH
@@ -366,7 +366,7 @@ analysis:
       # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as
       # strategy_refused{strategy="fvg"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v10
+      version: v11
       enabled: true
       structure_timeframes: [M15, H1]
       # The prior-sweep test: a gap is traded only when the impulse that made it followed a sweep of resting liquidity in its favour (no_prior_sweep otherwise). The

@@ -19,7 +19,7 @@ import (
 )
 
 const ID strategy.StrategyID = "order_block"
-const Version = "v10"
+const Version = "v11"
 
 const (
 	structureVersion = "v2"

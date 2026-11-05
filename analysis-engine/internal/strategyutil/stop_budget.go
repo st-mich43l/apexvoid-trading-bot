@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"sync/atomic"
+
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
 // Evidence codes a legacy-family candidate carries when the instrument stop budget is applied.
@@ -12,6 +14,9 @@ const (
 	StopBudgetStructuralEvidence = "stop_budget_structural"
 	// StopBudgetFloorEvidence: the structural stop is tighter than the instrument floor; execution widens it to the floor.
 	StopBudgetFloorEvidence = "stop_budget_floor"
+	// StopBudgetDeepEntryEvidence: the structural stop is wider than the cap from the proximal edge of the entry band but within it deeper in the band;
+	// the entry band was cut to the part from which the stop (never moved) risks at most the cap.
+	StopBudgetDeepEntryEvidence = "stop_budget_deep_entry"
 )
 
 // StopBudget is the instrument's stop envelope as the detector sees it: the same "refused, never tightened" rule CRT, Break & Retest, iFVG and Confluence
@@ -23,6 +28,9 @@ type StopBudget struct {
 	MinPips float64
 	// PipSize converts price distance to pips. The budget is inactive without it.
 	PipSize float64
+	// DeepEntryMinimumWidthPips is the narrowest entry band Fit may return when it cuts a band to the part within the cap (0 = deep entry off: a stop wider
+	// than the cap from the proximal edge is refused, as Apply does). Read from deep_entry_minimum_width_pips.
+	DeepEntryMinimumWidthPips float64
 	// Refusals, when set, counts every refused candidate (read by the engine's telemetry, never by the strategy).
 	Refusals *RefusalCounter
 }
@@ -66,6 +74,16 @@ func ParseStopBudget(params map[string]any) (StopBudget, error) {
 		}
 		*dst = v
 	}
+	if _, present := params["deep_entry_minimum_width_pips"]; present {
+		v, err := Float(params, "deep_entry_minimum_width_pips")
+		if err != nil {
+			return StopBudget{}, err
+		}
+		if !(v > 0) || math.IsInf(v, 0) {
+			return StopBudget{}, fmt.Errorf("deep_entry_minimum_width_pips must be > 0 when set (omit it to turn deep entry off)")
+		}
+		b.DeepEntryMinimumWidthPips = v
+	}
 	if b.MaxPips > 0 && b.MinPips > b.MaxPips {
 		return StopBudget{}, fmt.Errorf("execution_stop_min_pips %v exceeds execution_stop_max_pips %v", b.MinPips, b.MaxPips)
 	}
@@ -103,4 +121,61 @@ func (b StopBudget) Apply(reference, invalidation float64) (code string, publish
 		return StopBudgetFloorEvidence, true
 	}
 	return StopBudgetStructuralEvidence, true
+}
+
+// Fit is Apply for a strategy that owns an entry band. The invalidation is never moved; when the stop from the band's proximal edge is wider than the cap,
+// the band is cut to the part from which the stop is within the cap (the entry goes deeper into the structure instead of the stop moving closer).
+//
+//	BUY (proximal edge = high):  deep = invalidation + cap; the band becomes [low, min(high, deep)].
+//	SELL (proximal edge = low):  deep = invalidation - cap; the band becomes [max(low, deep), high].
+//
+//	no budget, or a band that fits as it is   -> Apply's result, the band unchanged
+//	fits only deeper in the band              -> the cut band, StopBudgetDeepEntryEvidence (the new proximal edge risks exactly the cap)
+//	the far edge is beyond the cap, or the cut band is narrower than DeepEntryMinimumWidthPips (or deep entry is off) -> refused and counted
+//
+// The floor never applies to a cut band: its proximal edge risks the cap, which is at or above the floor.
+func (b StopBudget) Fit(direction market.Direction, low, high, invalidation float64) (newLow, newHigh float64, code string, ok bool) {
+	proximal := high
+	if direction == market.Sell {
+		proximal = low
+	}
+	whole, fits := b.Apply(proximal, invalidation)
+	if fits {
+		return low, high, whole, true
+	}
+	// Apply counted a refusal; Fit gives the band a second chance and takes the count back when it publishes.
+	if b.Refusals != nil {
+		b.Refusals.n.Add(-1)
+	}
+	refuse := func() (float64, float64, string, bool) {
+		if b.Refusals != nil {
+			b.Refusals.n.Add(1)
+		}
+		return 0, 0, "", false
+	}
+	if !(b.DeepEntryMinimumWidthPips > 0) || !(b.MaxPips > 0) || !(b.PipSize > 0) {
+		return refuse()
+	}
+	cap := b.MaxPips * b.PipSize
+	minWidth := b.DeepEntryMinimumWidthPips * b.PipSize
+	// The cut edge is rounded to the instrument tick (a tenth of a pip: 0.01 on gold, 0.00001 on EURUSD) toward the inside of the cap, so an order placed on it and
+	// rounded to the broker's digits never risks more than the cap.
+	tick := b.PipSize / 10
+	if direction == market.Sell {
+		deep := math.Ceil((invalidation-cap)/tick-1e-6) * tick
+		if high < deep {
+			return refuse()
+		}
+		newLow, newHigh = math.Max(low, deep), high
+	} else {
+		deep := math.Floor((invalidation+cap)/tick+1e-6) * tick
+		if low > deep {
+			return refuse()
+		}
+		newLow, newHigh = low, math.Min(high, deep)
+	}
+	if newHigh-newLow < minWidth-1e-9 {
+		return refuse()
+	}
+	return newLow, newHigh, StopBudgetDeepEntryEvidence, true
 }

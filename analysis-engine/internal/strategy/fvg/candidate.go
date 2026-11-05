@@ -58,7 +58,7 @@ func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, dire
 func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Candidate, bool) {
 	v := d.v
 	atr := v.atr
-	low, high := d.res.zone.Low(), d.res.zone.High()
+	low, high := d.entryLow, d.entryHigh
 	structLow, structHigh := d.res.structuralLow, d.res.structuralHigh
 	reference, invalidation := d.reference, d.invalidation
 	target, targetLabel := d.room.Target, d.room.Label
@@ -167,6 +167,7 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
 	m.Measure("room_r", d.room.RoomR)
+	m.Measure("deep_entry_pips", deepEntryPips(d))
 	m.Measure("leg_retracement", d.room.Retracement)
 	m.Measure("formation_steepness_atr_per_bar", v.steepness(d.inst))
 	// The sweep and the structure break are measured facts of the impulse, never scores: nothing reads them to rank or to refuse (the sweep refuses only as
@@ -204,4 +205,19 @@ func boolMeasure(v bool) float64 {
 		return 1
 	}
 	return 0
+}
+
+// deepEntryPips is how far the proximal edge of the entry band moved from the gap's own edge to meet the stop cap (0 when the whole gap fits). Informational.
+func deepEntryPips(d *decision) float64 {
+	pip := d.v.cfg.StopBudget.PipSize
+	if !(pip > 0) {
+		pip = d.v.cfg.PipSize
+	}
+	if !(pip > 0) {
+		return 0
+	}
+	if d.direction == market.Sell {
+		return math.Abs(d.entryLow-d.res.zone.Low()) / pip
+	}
+	return math.Abs(d.entryHigh-d.res.zone.High()) / pip
 }

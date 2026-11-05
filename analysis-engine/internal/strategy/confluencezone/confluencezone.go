@@ -41,7 +41,7 @@ import (
 const ID strategy.StrategyID = "confluence_zone"
 
 // Version is the technical contract version. v3 replaces the Python-parity v2.
-const Version = "v3"
+const Version = "v4"
 
 const periodSeconds = 300 // the strategy reads M5
 
@@ -214,6 +214,7 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 		"technical_reward_risk":    setup.TechnicalRewardRisk,
 		"target_room_atr":          setup.TargetRoomATR,
 		"technical_risk_pips":      setup.RiskPips,
+		"deep_entry_pips":          setup.DeepEntryPips,
 		"confluence_stars":         float64(score.SelectedStars),
 	}
 	// A fact the engine cannot read is left out, never filled with a neutral value.
@@ -231,6 +232,10 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	scoreQuality(model, setup, d, d.RecentCHoCH(s.cfg.ReactionLookback), factors.HTFAligned, s.cfg.ReactionLookback)
 
 	direction := strings.ToLower(string(setup.Direction))
+	evidence := []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts", "m5_confluence_reaction"}
+	if setup.DeepEntry {
+		evidence = append(evidence, strategyutil.StopBudgetDeepEntryEvidence)
+	}
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version,
 		SetupKey: setupKey(setup),
@@ -238,7 +243,7 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 		EntryLow: setup.EntryLow, EntryHigh: setup.EntryHigh,
 		Invalidation: setup.Stop, InvalidationLabel: "confluence_overlap_failed",
 		Target: setup.Target, TargetLabel: "nearest_opposing_liquidity",
-		Evidence: []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts", "m5_confluence_reaction"},
+		Evidence: evidence,
 		// Overall is the mean of the score_* dimensions (QualityModel); the confluence stars stay in DetectorConfluence as a diagnostic.
 		Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 		FormedAt: setup.TouchTime, ConfirmedAt: setup.ConfirmTime,

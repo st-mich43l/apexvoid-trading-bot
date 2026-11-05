@@ -27,6 +27,9 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	}
 	settings.InstrumentStopMinPips = stopMinPips
 	settings.InstrumentStopMaxPips = stopMaxPips
+	if settings.InstrumentDeepEntryMinimumWidthPips, err = doc.DeepEntryMinimumWidthPipsFor(symbol); err != nil {
+		return err
+	}
 	settings.InstrumentStopEnvelopeConfigured = true
 	settings.TechniqueZones.Technique.PipSize = geometry.PipSize
 	// MAD's sweep tolerance floor is one pip of the instrument (the frozen
@@ -176,6 +179,9 @@ func applyConfluenceZoneGeometry(settings *Settings) {
 		if settings.InstrumentStopMinPips > 0 {
 			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
 		}
+		if settings.InstrumentDeepEntryMinimumWidthPips > 0 {
+			params["deep_entry_minimum_width_pips"] = settings.InstrumentDeepEntryMinimumWidthPips
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }
@@ -210,6 +216,9 @@ func applyLegacyStopBudget(settings *Settings) {
 			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
 		}
 		params["execution_pip_size"] = settings.Geometry.PipSize
+		if settings.InstrumentDeepEntryMinimumWidthPips > 0 {
+			params["deep_entry_minimum_width_pips"] = settings.InstrumentDeepEntryMinimumWidthPips
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }
@@ -225,7 +234,7 @@ func WithoutLegacyStopBudget(settings *Settings) {
 		params := make(map[string]any, len(settings.Strategies[i].Parameters))
 		for k, v := range settings.Strategies[i].Parameters {
 			switch k {
-			case "execution_stop_max_pips", "execution_stop_min_pips", "execution_pip_size":
+			case "execution_stop_max_pips", "execution_stop_min_pips", "execution_pip_size", "deep_entry_minimum_width_pips":
 			default:
 				params[k] = v
 			}

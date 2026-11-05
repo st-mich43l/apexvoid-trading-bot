@@ -62,6 +62,9 @@ type Config struct {
 	// layer widens a tighter stop to it, so reward:risk is measured against at
 	// least this much risk. 0 disables the adjustment.
 	ExecutionStopMinPips float64
+	// DeepEntryMinimumWidthPips is the narrowest entry band a deep entry may leave (PR-E1): when the stop is wider than the cap from the band's proximal edge, the band
+	// is cut to the part within the cap (the stop never moves). 0 turns deep entry off: such a setup is refused.
+	DeepEntryMinimumWidthPips float64
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -125,6 +128,16 @@ func parseConfig(params map[string]any) (Config, error) {
 			return c, fmt.Errorf("confluence_zone: execution_stop_min_pips must be >= 0")
 		}
 		c.ExecutionStopMinPips = v
+	}
+	if _, present := params["deep_entry_minimum_width_pips"]; present {
+		v, err := strategyutil.Float(params, "deep_entry_minimum_width_pips")
+		if err != nil {
+			return c, fmt.Errorf("confluence_zone: %w", err)
+		}
+		if !(v > 0) {
+			return c, fmt.Errorf("confluence_zone: deep_entry_minimum_width_pips must be > 0 when set (omit it to turn deep entry off)")
+		}
+		c.DeepEntryMinimumWidthPips = v
 	}
 	return c, c.validate()
 }

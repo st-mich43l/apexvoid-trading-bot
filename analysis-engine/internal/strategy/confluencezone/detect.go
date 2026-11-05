@@ -6,6 +6,7 @@ import (
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/reaction"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structuralconfluence"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
@@ -352,7 +353,7 @@ func (v *view) evaluate(cfg Config, direction market.Direction, r structuralconf
 	if v.price < geo.entryLow-epsilon {
 		return Setup{}, ReasonPriceThroughEntry
 	}
-	if v.price-geo.entryHigh > cfg.MaximumEntryATR*atr+epsilon {
+	if v.price-geo.origEntryHigh > cfg.MaximumEntryATR*atr+epsilon {
 		return Setup{}, ReasonEntryTooFar
 	}
 
@@ -362,6 +363,7 @@ func (v *view) evaluate(cfg Config, direction market.Direction, r structuralconf
 		Reaction: rx.real(v), ATR: atr, RiskPips: geo.risk / pip, RewardRisk: geo.reward / geo.effectiveRisk, TechnicalRewardRisk: geo.reward / geo.risk, TargetRoomATR: geo.reward / atr,
 		IndependentFacts: r.MinGroups, DependencyCount: len(support) - len(r.Groups),
 		OverlapWidthATR: (hi - lo) / atr, OverlapWidthPips: (hi - lo) / pip, Freshness: last - ci,
+		DeepEntry: geo.deepEntry, DeepEntryPips: geo.deepEntryPips,
 	}
 	setup.EntryLow, setup.EntryHigh = v.realBand(geo.entryLow, geo.entryHigh)
 	setup.ProtectedFar, setup.Stop, setup.Target = v.p(far), v.p(geo.stop), v.p(geo.target)
@@ -379,8 +381,12 @@ func (v *view) realBand(low, high float64) (float64, float64) {
 // geometry is the entry band, the honest stop and the target of one reaction.
 type geometry struct {
 	entryLow, entryHigh float64
-	stop, target        float64
-	risk, reward        float64
+	// origEntryHigh is the band's proximal edge before a deep entry cut it; the "price has run away" test stays measured from it.
+	origEntryHigh float64
+	deepEntry     bool
+	deepEntryPips float64
+	stop, target  float64
+	risk, reward  float64
 	// effectiveRisk is the risk the execution layer will really run: the technical
 	// risk, widened to the instrument's stop floor.
 	effectiveRisk float64
@@ -392,16 +398,28 @@ func (v *view) geometry(cfg Config, lo, hi, far, adverse float64, ti, last int, 
 	if slice := cfg.EntryMaxWidthPrice; slice > 0 && hi-lo > slice+epsilon {
 		g.entryLow = hi - slice
 	}
-	ref := g.entryHigh
+	g.origEntryHigh = g.entryHigh
 	// The stop protects the structures that make the confluence and the extreme
 	// the reaction itself traded to, with a buffer: never tightened into either.
 	g.stop = math.Min(far, adverse) - math.Max(pip, cfg.InvalidationBufferATR*atr)
 	if !(g.stop < g.entryLow) {
 		return g, ReasonDegenerateStop
 	}
+	ref := g.entryHigh
 	g.risk = ref - g.stop
 	if cfg.ExecutionStopMaxPips > 0 && g.risk/pip > cfg.ExecutionStopMaxPips+epsilon {
-		return g, ReasonRiskEnvelope
+		// The stop stays where structure puts it. The view is always oriented as a BUY, so Fit cuts the band's upper (proximal) edge to the stop plus the cap; a band
+		// whose lower edge is still beyond the cap, or narrower than the deep-entry minimum, is refused as before.
+		budget := strategyutil.StopBudget{MaxPips: cfg.ExecutionStopMaxPips, PipSize: pip, DeepEntryMinimumWidthPips: cfg.DeepEntryMinimumWidthPips}
+		low, high, code, ok := budget.Fit(market.Buy, g.entryLow, g.entryHigh, g.stop)
+		if !ok {
+			return g, ReasonRiskEnvelope
+		}
+		g.entryLow, g.entryHigh = low, high
+		g.deepEntry = code == strategyutil.StopBudgetDeepEntryEvidence
+		g.deepEntryPips = (g.origEntryHigh - high) / pip
+		ref = g.entryHigh
+		g.risk = ref - g.stop
 	}
 	// The target is the nearest opposing liquidity beyond everything traded since
 	// the touch and at least the minimum distance from the entry; none is made up.
