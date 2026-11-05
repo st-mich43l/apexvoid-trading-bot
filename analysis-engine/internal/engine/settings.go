@@ -74,6 +74,8 @@ type Settings struct {
 	InstrumentStopMinPips            float64
 	InstrumentStopMaxPips            float64
 	InstrumentStopEnvelopeConfigured bool
+	// InstrumentDeepEntryMinimumWidthPips is the instrument's stop_envelope.deep_entry_minimum_width_pips (0 = absent: deep entry off). PR-E1.
+	InstrumentDeepEntryMinimumWidthPips float64
 
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME

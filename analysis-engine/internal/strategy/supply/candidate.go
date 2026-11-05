@@ -44,7 +44,7 @@ func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, stru
 func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Candidate, bool) {
 	v := d.v
 	atr := v.atr
-	low, high := d.res.zone.Low(), d.res.zone.High()
+	low, high := d.entryLow, d.entryHigh
 	structLow, structHigh := d.res.structuralLow, d.res.structuralHigh
 	reference, invalidation := d.reference, d.invalidation
 	target, targetLabel := d.room.Target, d.room.Label
@@ -146,5 +146,18 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Measure("room_reward_risk", rewardRisk)
 	m.Measure("room_r", d.room.RoomR)
 	m.Measure("pd_position", d.inst.PDPosition)
+	m.Measure("deep_entry_pips", deepEntryPips(d))
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
+}
+
+// deepEntryPips is how far the proximal edge of the entry band moved from the zone's own edge to meet the stop cap (0 when the whole zone fits). Informational.
+func deepEntryPips(d *decision) float64 {
+	pip := d.v.cfg.StopBudget.PipSize
+	if !(pip > 0) {
+		pip = d.v.cfg.PipSize
+	}
+	if !(pip > 0) {
+		return 0
+	}
+	return math.Abs(d.entryLow-d.res.zone.Low()) / pip
 }

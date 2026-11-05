@@ -43,6 +43,8 @@ type qualityInputs struct {
 	levelBand float64               // the level's own band (price units)
 	swings    []techniquezone.Swing // the frame's swings, whose members within the band say how the level formed
 	coverage  float64               // share of the window's [low, high] inside any level band at this evaluation
+
+	deepEntryPips float64 // how far the proximal edge of the entry band moved to meet the instrument stop cap (0 when the whole band fits); informational
 }
 
 // scoreQuality is Key Level's technical quality: how strong this level and this reaction are as a Key Level thesis. Six dimensions,
@@ -117,6 +119,7 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 		m.Measure("level_band_atr", in.levelBand/in.atr)
 	}
 	m.Measure("level_coverage", in.coverage)
+	m.Measure("deep_entry_pips", in.deepEntryPips)
 
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
 }

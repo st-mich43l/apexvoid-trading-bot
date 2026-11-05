@@ -69,6 +69,10 @@ type Setup struct {
 
 	ATR      float64
 	RiskPips float64
+	// DeepEntry is true when the entry band was cut to the part from which the stop is within the instrument cap (the stop never moved); DeepEntryPips is how far
+	// the proximal edge moved. PR-E1.
+	DeepEntry     bool
+	DeepEntryPips float64
 	// RewardRisk is reward over the risk the execution layer will run (the technical
 	// risk widened to the instrument floor); TechnicalRewardRisk over the stop itself.
 	RewardRisk          float64

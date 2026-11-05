@@ -52,7 +52,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v6"
+const Version = "v7"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -357,10 +357,6 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	direction := a.direction
 	buffer := s.cfg.InvalidationBufferATR * atr
 	low, high := a.reactLow, a.reactHigh
-	reference := high
-	if direction == market.Sell {
-		reference = low
-	}
 	// Beyond the reaction band and beyond the bars the reaction itself traded (a sweep's wick pierces the band).
 	invalidation, anchored := strategyutil.ReactionAnchoredInvalidation(d.Frame.Bars, a.confirmation, direction, low, high, buffer)
 	// The reaction swept the level exactly when its own extreme lies strictly beyond the band's far edge, which is when the invalidation is anchored to it.
@@ -369,10 +365,16 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		s.SweepRefusalCounter.CountUnswept()
 		return opportunity.Candidate{}, false
 	}
-	// The instrument stop budget refuses a stop wider than the cap and never moves the entry or the invalidation to make a setup fit.
-	budgetCode, publish := s.cfg.StopBudget.Apply(reference, invalidation)
+	// The instrument stop budget never moves the invalidation. A stop wider than the cap from the proximal edge of the reaction band is fitted by cutting the
+	// band to the part within the cap (a deeper entry, stop_budget_deep_entry); a band whose far edge is still beyond the cap is refused.
+	fullLow, fullHigh := low, high
+	low, high, budgetCode, publish := s.cfg.StopBudget.Fit(direction, fullLow, fullHigh, invalidation)
 	if !publish {
 		return opportunity.Candidate{}, false
+	}
+	reference := high
+	if direction == market.Sell {
+		reference = low
 	}
 	target, targetLabel, ok := s.target(d, direction, reference, invalidation, atr)
 	if !ok {
@@ -409,6 +411,7 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		localTrend: d.Frame.Structure, choch: a.detector.RecentCHoCH(maxInt(1, d.Settings.ReactionLookbackBars)), htfAligned: a.detector.HTFAligned(),
 		htfTouches: htfTouches, htfWeight: htfWeight,
 		levelKind: a.level.Kind, levelBand: a.level.Band, swings: d.Frame.Swings, coverage: coverage,
+		deepEntryPips: deepEntryPips(s.cfg.StopBudget.PipSize, direction, fullLow, fullHigh, low, high),
 	})
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
@@ -531,4 +534,15 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// deepEntryPips is how far the proximal edge of the entry band moved from the reaction band's own edge to meet the stop cap (0 when the whole band fits). Informational.
+func deepEntryPips(pip float64, direction market.Direction, fullLow, fullHigh, low, high float64) float64 {
+	if !(pip > 0) {
+		return 0
+	}
+	if direction == market.Sell {
+		return math.Abs(low-fullLow) / pip
+	}
+	return math.Abs(high-fullHigh) / pip
 }

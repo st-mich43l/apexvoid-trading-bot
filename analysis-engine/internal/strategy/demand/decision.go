@@ -180,7 +180,9 @@ type decision struct {
 	conf         *confirmation
 	res          *result
 	id           string
-	reference    float64 // the proximal edge of the entry band
+	reference    float64 // the proximal edge of the entry band (the fitted band's)
+	entryLow     float64 // the published entry band: the zone, or the part of it from which the stop is within the instrument cap (stop_budget_deep_entry)
+	entryHigh    float64
 	invalidation float64
 	anchored     bool   // the reaction's own extreme set the stop
 	budgetCode   string // stop-budget evidence ("" without a budget)
@@ -228,13 +230,14 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 	if res == nil {
 		return nil
 	}
-	reference := res.zone.High()
 	buffer := s.cfg.InvalidationBufferATR * v.atr
 	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, conf, res.structuralLow, buffer)
-	budgetCode, ok := s.cfg.StopBudget.Apply(reference, invalidation)
+	// The stop stays where structure puts it; a band whose proximal edge risks more than the cap is cut to the part within it (a deeper entry).
+	entryLow, entryHigh, budgetCode, ok := s.cfg.StopBudget.Fit(market.Buy, res.zone.Low(), res.zone.High(), invalidation)
 	if !ok {
 		return nil
 	}
+	reference := entryHigh
 	room := v.room(in, reference, math.Abs(reference-invalidation))
 	if room.Refused {
 		refuse(refusedNoTargetRoom)
@@ -242,7 +245,7 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 	}
 	return &decision{
 		inst: in, v: v, conf: conf, res: res, id: v.instanceID(in),
-		reference: reference, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
+		reference: reference, entryLow: entryLow, entryHigh: entryHigh, invalidation: invalidation, anchored: anchored, budgetCode: budgetCode, room: room,
 	}
 }
 
