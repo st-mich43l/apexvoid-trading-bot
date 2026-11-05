@@ -2515,7 +2515,6 @@ f_keyLevels() =>
         int nl = int(array.size(fin) / 4)
         float[] fl = array.new_float()
         string[] tips = array.new_string()
-        float[] drawn = array.new_float(nl, 0.0)
         int up = 0
         int down = 0
         if nl > 0
@@ -2550,7 +2549,6 @@ f_keyLevels() =>
                 if f_scaleOk(p) and (above ? up : down) < keyPerSide
                     up += above ? 1 : 0
                     down += above ? 0 : 1
-                    array.set(drawn, j, 1.0)
                     bool flipped = array.get(fl, j * 4) > 0
                     bool inPlay = array.get(fl, j * 4 + 1) > 0
                     float capP = isRound ? math.round(p / keyStep) * keyStep : p
