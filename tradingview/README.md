@@ -6,7 +6,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.19). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.20). |
 
 ## ApexVoid Price Action
 
@@ -94,6 +94,31 @@ Engine v6 is what the bot trades today. Selective v7 is a preview of the definit
 - **Selectivity readout (tooltip only, nothing on the chart):** the share of the window's [low, high] inside any level band, over all levels: `coverage 69 % of the recent range: low selectivity` above 40 %, `selective` at or below 25 %. On the 3 Nov M5 capture: v6 69 %, v7 36 %.
 - **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count).
 
+### Volume profile (v2.20)
+
+A quiet histogram of where the period traded, with its point of control (POC) and value area (VA). **The volume is tick volume**: on XAUUSD (OANDA, FXCM, cTrader) it counts price updates, a measure of activity, not contracts. Read the profile as "where price spent its time and activity", not as traded size. It is a display tool with **no measured edge**; nothing here trades it.
+
+`Volume profile` = `Auto` (default) needs no setting: everything follows the chart timeframe.
+
+| Chart timeframe | Profile period | Intrabar timeframe | Profiles drawn |
+|---|---|---|---|
+| 5m and below | engine session: Asia start, London start, New York start, next Asia start (contiguous) | 1m (1m charts: the chart bars) | developing + last 2 |
+| 10m to 30m | trading day (XAU rolls 17:00 New York) | 1m (up to 15m), 3m (30m) | developing + last 1 |
+| 1h to 2h | week | 5m | developing + last 1 |
+| 3h to 4h | month | 15m | developing |
+| 1D and above | quarter | 60m | developing |
+
+`Manual` shows the period (Session, Day, Week, Month), the intrabar timeframe, the rows and how many completed profiles to draw. `Off` (and the `Minimal` display profile) draws nothing.
+
+**How it is built.** Each closed chart bar contributes its intrabars (the plain high, low and volume of the lower timeframe, never a structure series). The period's range is split into 16 to 40 equal rows (`range / (0.25 x ATR)`, fixed when the period completes), and each intrabar's volume is spread over the rows its high-low range overlaps, in proportion to the overlap (a doji goes entirely into its row). Where TradingView has no intrabars (older history) the chart bar's own high, low and volume are used and the profile tooltip says `approx (chart bars)`; a profile is "intrabar" only if every bar had intrabars. A completed profile never changes; the developing one is recomputed on the last bar (and includes the forming bar on the realtime bar, tooltip `developing`).
+
+**How to read it.**
+- **POC** (solid line, `dPOC` developing / `POC` last completed): the row with the most activity (the higher row on a tie).
+- **VA** (`VAH` / `VAL`, dotted lines; the darker part of the histogram): the rows around the POC that hold `Value area %` (70) of the volume, built the CBOT way: from the POC, compare the next two rows above with the next two below and add the larger pair, until the share is reached.
+- **nPOC** (`Show naked POCs`): a completed POC that no later bar has traded through yet (a bar with `low <= POC <= high` ends it). Dashed line from the period's end to the right edge; at most 6 are kept, the oldest dropped.
+
+**Drawing.** The histograms are filled **polylines** (not boxes, which the zones, pools and sessions already use); each profile stays inside its own period, anchored at the period's first bar, and its width does not change as the period grows. Captions go to the right label column as category `volume`: when several share a slot they are listed in one label (never `+n`), and next to another label they are appended visibly (`BSL · nPOC 3938.40`). Captions and nPOC lines follow the candle-scale protection.
+
 ### Display profiles
 
 | Profile | Zones drawn | Pools drawn | Other |
@@ -165,6 +190,8 @@ structure window, label and event limits, zone maximum age (600 bars), global te
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
 
+**08 Volume Profile** — `Volume profile` (Auto / Manual / Off), `Value area %` (70), `Show naked POCs` (on), `Volume profile colour`; Manual only: `Manual: period`, `Manual: intrabar timeframe (minutes)`, `Manual: rows`, `Manual: profiles drawn`.
+
 ### Alerts
 
 All fire on bar close. Create them from the indicator's alert dialog.
@@ -206,3 +233,11 @@ All fire on bar close. Create them from the indicator's alert dialog.
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
 - Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
 - The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
+
+### Version history
+
+| Version | Change |
+| --- | --- |
+| 2.20 | Volume profile inside the main indicator (tick volume): POC, value area, naked POCs, polylines, `request.security_lower_tf` of the plain high / low / volume, period and intrabar timeframe follow the chart timeframe (`Auto`). Right-column captions get a category `volume` (listed together, appended next to other labels). New group `08 Volume Profile`, `max_polylines_count` 20. Display only; no measured edge. |
+| 2.19 | The Market Intelligence panel (the table) and the state that only fed it are removed. |
+| 2.18 | The trade plan (inputs, paper tracker, `Trades` row, four alerts) is removed. |
