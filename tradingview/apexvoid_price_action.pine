@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.18", "AV PA v2.18", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.18.1", "AV PA v2.18.1", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -2588,7 +2588,6 @@ f_zig(float[] sw, float[] av, int c, float p, float k) =>
         array.push(sw, k)
     0
 
-string[] keyInfo = array.new_string(2, "")
 
 f_keyLevels() =>
     while array.size(keyLines) > 0
@@ -2681,13 +2680,10 @@ f_keyLevels() =>
             cov := wHi > wLo ? cov / (wHi - wLo) : 0.0
         // Every level gets its flags first (side, origin, flipped, in play), then the nearest keyPerSide per side inside the candle-scale window are drawn: no level is hidden
         // for being broken, and every drawn level shows its price in a label that is never folded (see f_emitCluster).
-        string covTxt = "coverage " + str.tostring(math.round(cov * 100)) + " % of the recent range" + (cov > 0.4 ? ": low selectivity" : cov <= 0.25 ? ": selective" : "")
         int nl = int(array.size(fin) / 4)
+        string covTxt = "coverage " + str.tostring(math.round(cov * 100)) + " % of the recent range" + (cov > 0.4 ? ": low selectivity" : cov <= 0.25 ? ": selective" : "")
         float[] fl = array.new_float()
         string[] tips = array.new_string()
-        float[] drawn = array.new_float(nl, 0.0)
-        string upTxt = ""
-        string downTxt = ""
         int up = 0
         int down = 0
         if nl > 0
@@ -2722,7 +2718,6 @@ f_keyLevels() =>
                 if f_scaleOk(p) and (above ? up : down) < keyPerSide
                     up += above ? 1 : 0
                     down += above ? 0 : 1
-                    array.set(drawn, j, 1.0)
                     bool flipped = array.get(fl, j * 4) > 0
                     bool inPlay = array.get(fl, j * 4 + 1) > 0
                     float capP = isRound ? math.round(p / keyStep) * keyStep : p
@@ -2733,19 +2728,6 @@ f_keyLevels() =>
                     if showKeyBand
                         array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
                     f_regLabel(p, (math.abs(p - capP) < 0.005 and isRound ? str.tostring(capP, "#.##") : f_px(p)) + " ×" + str.tostring(touches, "0") + (inPlay ? " ●" : ""), keyColor, 30, array.get(tips, j), 4, inPlay ? 2 : 3)
-                    string pTxt = f_px(p) + (inPlay ? "●" : "")
-                    if above
-                        upTxt += (up > 1 ? " · " : "") + pTxt
-                    else
-                        downTxt += (down > 1 ? " · " : "") + pTxt
-            // the panel's KL row: the drawn prices by side, and in its tooltip every level found, highest first
-            string rowTxt = (up > 0 ? "▲ " + upTxt : "") + (up > 0 and down > 0 ? "  " : "") + (down > 0 ? "▼ " + downTxt : "")
-            array.set(keyInfo, 0, str.length(rowTxt) > 40 ? str.substring(rowTxt, 0, 39) + "…" : rowTxt)
-            string listTxt = ""
-            for j = nl - 1 to 0
-                float bal = array.get(fl, j * 4 + 3)
-                listTxt += f_px(array.get(fin, j * 4)) + " · " + (array.get(fin, j * 4 + 2) > 0 ? "round" : "reaction") + " · " + str.tostring(array.get(fin, j * 4 + 1), "0") + " touches · formed as " + (bal > 0 ? "resistance" : bal < 0 ? "support" : "mixed") + (array.get(fl, j * 4) > 0 ? " · flipped" : "") + (array.get(fl, j * 4 + 1) > 0 ? " · in play" : "") + (array.get(drawn, j) > 0 ? " · drawn" : " · not drawn") + "\n"
-            array.set(keyInfo, 1, listTxt + covTxt)
     0
 
 if barstate.islast
@@ -2849,7 +2831,7 @@ f_renderPanel() =>
         string dealingHighText = f_px(dealingHigh)
         string dealingLowText = f_px(dealingLow)
         string swingTip = "Dealing range " + dealingLowText + " - " + dealingHighText + ": the confirmed swing range extended to the live extreme of the current leg (the range premium / discount and EQ use).\nConfirmed swings: high " + highText + (na(lastHighTime) ? "" : " · " + f_time(lastHighTime)) + ", low " + lowText + (na(lastLowTime) ? "" : " · " + f_time(lastLowTime)) + " (chart time zone).\nDeveloping extreme " + developingText
-        table.cell(dashboard, 0, 0, "APEXVOID v2.18", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
+        table.cell(dashboard, 0, 0, "APEXVOID v2.18.1", width = dashboardKeyWidth, height = dashboardRowHeight * 1.35, text_color = #F3EAFF, text_size = dashboardTitleSize, text_halign = text.align_left, bgcolor = color.new(#493178, 8))
         table.cell(dashboard, 1, 0, syminfo.ticker + " · " + timeframe.period, width = dashboardValueWidth, height = dashboardRowHeight * 1.35, text_color = color.white, text_size = dashboardValueSize, text_halign = text.align_right, bgcolor = color.new(#493178, 8))
         f_key(2, "Bias")
         f_val(2, biasText, valueColor, "Directional leg: " + legText)
@@ -2869,9 +2851,6 @@ f_renderPanel() =>
         f_val(14, bearPoiDisplay, bearColor, nearestBearPoiText + "\nA actionable · Q qualified · D distant or tested")
         f_key(16, "BSL / SSL")
         f_val(16, liqRowText, liquidityColor, liquidityText + "\n" + barrierLiquidityText)
-        if showKeyLevels
-            f_key(17, "KL")
-            f_val(17, array.get(keyInfo, 0) == "" ? "—" : array.get(keyInfo, 0), color.white, array.get(keyInfo, 1))
         f_key(22, "Zones")
         f_val(22, zonesCompact, color.white, "Visible / active\n" + zoneText + "\nOrder blocks: " + obSummary + "\nSupply / demand: " + sdSummary + "\n" + obTooltip + "\n" + sdTooltip)
     0
