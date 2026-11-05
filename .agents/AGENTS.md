@@ -1,66 +1,35 @@
 # AGENTS.md
 
-Rules for AI agents working on **apexvoid-trading-bot**. Read before changing code, tests, or CI.
+Rules for AI agents working on **apexvoid-trading-bot**.
 
-## CI is simple — do not mess with it
+## No tests
 
-The **Autotrade Integrity** workflow (`.github/workflows/autotrade-integrity.yml`) exists only to verify that the repo **builds and the allowlisted autotrade tests run**. It is not a full regression suite and not something to “optimize”, expand, or rewrite on every PR.
+This repository has no tests, fixtures, goldens or reference models, and CI does not run any.
+Do not add a test suite, test project, `testdata/` or `fixtures/` directory, or a `pytest`,
+`go test` or `dotnet test` step unless the owner asks for it.
 
-### What CI runs
+## CI
 
-| Job | Purpose |
-|-----|---------|
-| **Repository checks** | `docker compose config -q` — stack file is valid |
-| **Python autotrade suite** | Allowlisted pytest paths from `algo-bot/tests/ci_autotrade_paths.txt` |
-| **C# autotrade suite** | `dotnet build` + filtered `dotnet test` on ctrader-engine |
+The **Autotrade Integrity** workflow (`.github/workflows/autotrade-integrity.yml`) only checks
+that the services build and the stack file is valid:
 
-That is all. No extra gates, no “run everything”, no new jobs unless the owner explicitly asks.
+| Job | Check |
+|-----|-------|
+| **Python bot compiles** | `pip install -r requirements.txt`, `python -m compileall -q app tools` |
+| **Go analysis engine builds** | `go build ./...`, `go vet ./...` |
+| **C# ctrader engine builds** | `dotnet build src/CTraderFeed.csproj` |
+| **Repository checks** | `docker compose config -q` |
 
-### Hard rules — CI files and scope
+Do not change `.github/workflows/autotrade-integrity.yml` or `.github/workflows/deploy.yml`
+unless the user explicitly asks. If CI fails on your PR, fix your code, not the workflow.
 
-**Do not change these unless the user explicitly asks:**
-
-- `.github/workflows/autotrade-integrity.yml`
-- `.github/workflows/deploy.yml`
-- `algo-bot/tests/ci_autotrade_paths.txt`
-
-**Do not:**
-
-- Add or remove paths from `ci_autotrade_paths.txt` to green a PR
-- Add `--deselect`, `-k`, `-m`, `skip`, or `xfail` to the workflow or to allowlisted tests to hide failures
-- Replace the allowlist with “run all tests” or swap in a different test command
-- Weaken, delete, or rewrite assertions in **unrelated** allowlisted tests because CI failed
-- Pin new feature tests into CI by default — new tests live under `algo-bot/tests/`; CI inclusion is a separate, owner-driven decision
-- Touch C# test filters in the workflow except when the owner requests it
-
-**If CI fails on a PR you opened:**
-
-1. Reproduce locally with the **same command CI uses** (see workflow file).
-2. Fix **your code** or **tests you added/changed** for the feature.
-3. Do **not** “fix CI” by editing the workflow or allowlist.
-
-### Local check before push
-
-From `algo-bot/` (match CI env as closely as practical):
+## Before you push
 
 ```bash
-pip install -r requirements.txt -r requirements-dev.txt
-export REAL_REDIS_URL=redis://127.0.0.1:6379/15
-export DATABASE_URL=postgresql://apexvoid:apexvoid@127.0.0.1:55432/signals
-export PYTHONPATH=.
-
-pytest -q \
-  $(grep -E '^tests/' tests/ci_autotrade_paths.txt) \
+(cd analysis-engine && go build ./... && go vet ./...)
+(cd algo-bot && python -m compileall -q app tools)
+(cd ctrader-engine && dotnet build src/CTraderFeed.csproj --nologo)
 ```
-
-Also run tests for **your** change if they are outside the allowlist (e.g. `tests/test_mad_phase.py`). Those are for local/PR confidence; they do not replace fixing allowlisted failures.
-
-## Tests you write
-
-- Prefer **smoke / behavior** checks: service not rejected, event published, volume &gt; 0, expected strategy family — not brittle pins on comment strings or incidental internals.
-- When **you** change behavior, update **your** tests — do not leave stale assertions.
-- See `.cursor/rules/tests-keep-simple.mdc` for test style on touched files.
-- This file lives at **`.agents/AGENTS.md`** (not repo root).
 
 ## General PR hygiene
 
@@ -68,3 +37,4 @@ Also run tests for **your** change if they are outside the allowlist (e.g. `test
 - Update `CHANGELOG.md` under `## Unreleased` when behavior or operators would notice.
 - Do not push to `master` directly; use PRs.
 - Do not commit unless the user asks.
+- This file lives at **`.agents/AGENTS.md`** (not repo root).

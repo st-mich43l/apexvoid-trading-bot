@@ -67,8 +67,8 @@ handle + entry_band_pips]` within `retest_max_bars` (12) is the retest; it, or t
   refuses is still that handle's thesis for the day.
 - **Siblings on one bar:** more stars, then the entry nearest the last close (`superseded_by_sibling`).
 - **Stop budget:** an honest stop above the instrument cap is refused (`risk_exceeds_execution_envelope`), never tightened; one below the floor is published with
-  `stop_budget_floor` and widened by execution ([legacy-stop-budget](legacy-stop-budget.md)).
-- **Session momentum** (evidence only, [shared-structure-evidence](shared-structure-evidence.md)): `session_momentum_aligned` / `session_momentum_opposed` when
+  `stop_budget_floor` and widened by execution.
+- **Session momentum** (evidence only): `session_momentum_aligned` / `session_momentum_opposed` when
   confirmed during New York.
 - **Confluence floor:** the shared rubric (`confluence.Evaluate`), refused below `confluence_floor` (`confluence_below_floor`). Quality dimensions: `force`,
   `rejection`, `sweep_depth`, `entry_location`, `structure`, `room`, `major_handle`, plus the measurements `technical_rr`, `technical_risk_pips`,

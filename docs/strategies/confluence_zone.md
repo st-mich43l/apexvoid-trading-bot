@@ -14,7 +14,7 @@ independent structures supporting the same price?": it counted technique *labels
 published the *union* of the members as the entry, let a member be born on the
 reacting candle, hard-coded two quality factors, and invented a 2R target. The XAU forensic audit
 that found this predates v3 and is in the repository history; the full contract, the mathematics and the verification are in
-[confluence-zone-v3-technical-spec.md](confluence-zone-v3-technical-spec.md). This
+the v3 technical contract. This
 page is the summary.
 
 ## Status and execution

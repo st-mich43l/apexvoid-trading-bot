@@ -2,7 +2,7 @@
 
 `order_block`, `v9`. Implemented in `analysis-engine/internal/strategy/orderblock`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.order_block`.
 
-**v9 (causal breaks, 31 Oct 2026).** The package computes its structure breaks itself, causally (`breaks.go`), instead of reading the frame's shared ones. A swing joins the reference set only at the bar that confirms it; a break is the first close beyond the most recent confirmed swing of the other side; BOS against CHoCH is judged by the structure of the swings confirmed BEFORE that bar (the shared labelling dates a break up to `fractal_n` bars early and judges its kind by the trend as of the frame's last bar). The same breaks are used for the block's definition, for the `rejection_choch` confirmation on M5 and for the structure score. The kind of the break that formed the block and the sweep before its leg are measured evidence, never a gate ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)).
+**v9 (causal breaks, 31 Oct 2026).** The package computes its structure breaks itself, causally (`breaks.go`), instead of reading the frame's shared ones. A swing joins the reference set only at the bar that confirms it; a break is the first close beyond the most recent confirmed swing of the other side; BOS against CHoCH is judged by the structure of the swings confirmed BEFORE that bar (the shared labelling dates a break up to `fractal_n` bars early and judges its kind by the trend as of the frame's last bar). The same breaks are used for the block's definition, for the `rejection_choch` confirmation on M5 and for the structure score. The kind of the break that formed the block and the sweep before its leg are measured evidence, never a gate.
 
 **v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
 
@@ -34,7 +34,7 @@ Unchanged from v6, and owned here: after a touch of the entry band, within `reac
 ## Entry, stop, room, target (`decision.go`, `candidate.go`, `geometry.go`)
 
 - **Entry**: price at the band or within `maximum_entry_atr` x the M5 ATR of its proximal edge, not through it.
-- **Stop**: beyond the whole block and beyond the extreme of the M5 bars from the touch to the confirmation, plus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor ([legacy-stop-budget](legacy-stop-budget.md)).
+- **Stop**: beyond the whole block and beyond the extreme of the M5 bars from the touch to the confirmation, plus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor.
 - **Room**: the obstacles in front of the entry, nearest first, are (a) every confirmed fractal swing (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) on M5 and on the structure frame that no M5 close has gone through since it was known, and (b) the extreme of the displacement leg that broke structure, from the leg's first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
 - **No extension rule**: a block sits at the origin of its leg, so the entry is the leg's retracement by construction.
 - **Selection**: among this strategy's confirmed blocks on one bar, the most stars, then the nearest entry.
@@ -49,7 +49,7 @@ The shared confluence rubric (stars, floor `confluence_floor`) with factors the 
 
 ## Lifecycle of a published block (engine, unchanged)
 
-A live opportunity is withdrawn by the first close of its structure's timeframe beyond the structural far edge by `confirmed_break_buffer_atr` (`STRUCTURE_CLOSED_THROUGH`, rule C of [order-block-definition](order-block-definition.md)). The engine reads the same `confirmed_break_buffer_atr` key as the strategy.
+A live opportunity is withdrawn by the first close of its structure's timeframe beyond the structural far edge by `confirmed_break_buffer_atr` (`STRUCTURE_CLOSED_THROUGH`, rule C). The engine reads the same `confirmed_break_buffer_atr` key as the strategy.
 
 ## Configuration
 
@@ -61,11 +61,11 @@ See the pull request that introduced v7: commit A moved the code and was proven 
 
 ## History
 
-- v3-v5: reaction-anchored stop, instrument stop budget, M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
-- v6 (production 28-29 Oct 2026): the close-break rule and the touch limit ([order-block-definition](order-block-definition.md)).
+- v3-v5: reaction-anchored stop, instrument stop budget, M15/H1 structure.
+- v6 (production 28-29 Oct 2026): the close-break rule and the touch limit.
 - v7: the package owns its mechanism; M15/H1 structure only; room refusal.
 - v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
-- v9: causal structure breaks owned by the package; break kind and prior sweep as measured evidence ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)). Rollback: revert the version.
+- v9: causal structure breaks owned by the package; break kind and prior sweep as measured evidence. Rollback: revert the version.
 
 ## Release
 

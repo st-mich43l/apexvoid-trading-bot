@@ -9,7 +9,7 @@ Gold consolidates in Asia; London either raids one side of that range and revers
 clustering as [round_number](round_number.md) (Osler 2003, NY Fed SR 125 and SR 150) puts stop orders just beyond a range edge. The sequence (sweep, reclaim,
 structure shift, retest) is the one CRT uses with a session anchor instead of an H1 anchor. These are published hypotheses; nothing here claims the rules earn.
 
-**Not the purged Session Level / Range Edge strategy** ([shared-structure-evidence](shared-structure-evidence.md)). Those opened an opportunity on a level *touch*.
+**Not the purged Session Level / Range Edge strategy**. Those opened an opportunity on a level *touch*.
 This is a complete thesis with its own structure (the finalized Asia range as of London open, width-qualified), its own manipulation or acceptance test, its own
 confirmation and its own stop, the same shape as CRT.
 

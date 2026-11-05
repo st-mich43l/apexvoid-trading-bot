@@ -4,7 +4,7 @@
 
 `fvg`, `v9`. Implemented in `analysis-engine/internal/strategy/fvg`, self-contained: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.fvg`.
 
-**v9 (sweep gate, 31 Oct 2026).** A gap is traded only when the impulse that made it followed a sweep of resting liquidity in its favour (`require_prior_sweep: true`, refusal `no_prior_sweep`). The structure break (BOS/CHoCH) by the impulse is measured, computed by this package causally, and never a gate. The research, the sweep test and the measurements are in [liquidity-sweep-and-structure](liquidity-sweep-and-structure.md); the gate is on by owner decision on weak evidence and is to be confirmed or removed from forward-labelled outcomes.
+**v9 (sweep gate, 31 Oct 2026).** A gap is traded only when the impulse that made it followed a sweep of resting liquidity in its favour (`require_prior_sweep: true`, refusal `no_prior_sweep`). The structure break (BOS/CHoCH) by the impulse is measured, computed by this package causally, and never a gate. the gate is on by owner decision on weak evidence and is to be confirmed or removed from forward-labelled outcomes.
 
 **v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
 
@@ -73,11 +73,11 @@ See the pull request that introduced v7: commit A moved the code and was proven 
 
 ## History
 
-- v3-v5: reaction-anchored stop, instrument stop budget, M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
+- v3-v5: reaction-anchored stop, instrument stop budget, M15/H1 structure.
 - v6 (owner report 2026-10-28): the gap definition. Trades were labelled FVG where the chart shows no gap; measured on XAU, 68% of M15 gaps and all H1 gaps were under 0.5 ATR of their own frame. The thresholds (0.5 / 0.5 / 0.5) are the iFVG v3 contract, nothing was fitted to results. Of 1,266 replayed v5 candidates over 613 distinct gaps, 453 (36%) were refused.
 - v7: the package owns its mechanism; M15/H1 structure only; close-through death; measured confirmation; room and leg-extension refusals.
 - v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
-- v9: the prior-sweep gate and the causal, measured structure break ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)). Rollback: `require_prior_sweep: false`.
+- v9: the prior-sweep gate and the causal, measured structure break. Rollback: `require_prior_sweep: false`.
 
 ## Contract and card (display only)
 

@@ -33,7 +33,7 @@ Invalidation runs before the new observations, so a setup whose confirmed close
 already broke its threshold cannot be re-observed on that bar. A close only
 invalidates candidates observed on the same timeframe, except an `order_block`
 structure, which only a close of the structure's OWN timeframe (M5, M15 or H1)
-can withdraw ([order-block-definition](strategies/order-block-definition.md)).
+can withdraw.
 
 ## Packages
 

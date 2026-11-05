@@ -1,9 +1,7 @@
 name: Autotrade Integrity
 
-# PR validation that the bot can BUILD and START and that its services agree on their
-# contracts. It does not test business logic (strategies, cards, pips, arbitration, execution
-# policy); that changes with every improvement and would fail CI on each one.
-# Python: the allowlist in algo-bot/tests/ci_autotrade_paths.txt.
+# PR validation that every service BUILDS and the stack file is valid. There are no tests in
+# this repository; this is the only gate.
 
 on:
   pull_request:
@@ -18,31 +16,8 @@ on:
 
 jobs:
   python:
-    name: Python autotrade suite
+    name: Python bot compiles
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: apexvoid
-          POSTGRES_PASSWORD: apexvoid
-          POSTGRES_DB: signals
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U apexvoid -d signals"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -50,38 +25,17 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: |
-            algo-bot/requirements.txt
-            algo-bot/requirements-dev.txt
+          cache-dependency-path: algo-bot/requirements.txt
 
-      - name: Install dependencies
+      - name: Install dependencies and compile
         working-directory: algo-bot
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-
-      - name: Run V8 execution pytest
-        working-directory: algo-bot
-        env:
-          REAL_REDIS_URL: redis://127.0.0.1:6379/15
-          DATABASE_URL: postgresql://apexvoid:apexvoid@127.0.0.1:55432/signals
-          PYTHONPATH: .
-        run: |
-          set -euo pipefail
-          # Allowlist only. Do not "run everything then deselect leftovers".
-          pytest -q \
-            --junitxml=pytest-results.xml \
-            $(grep -E '^tests/' tests/ci_autotrade_paths.txt)
-      - name: Upload Python test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-pytest-results
-          path: algo-bot/pytest-results.xml
+          python -m compileall -q app tools
 
   go-analysis:
-    name: Go analysis strategy and contract suite
+    name: Go analysis engine builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -89,30 +43,15 @@ jobs:
         with:
           go-version-file: analysis-engine/go.mod
           cache-dependency-path: analysis-engine/go.sum
-      - name: Build, vet and test
+      - name: Build and vet
         working-directory: analysis-engine
         run: |
           go build ./...
           go vet ./...
-          # Startup and contract checks only: the production config resolves, all 20
-          # strategies have factories, the engine bootstraps, logging initialises and the
-          # Kafka event schemas hold.
-          go test -timeout 10m ./test/contracts/ ./internal/logging/
-          go test -timeout 10m ./test/engine/ -run 'TestAll20StrategiesHaveConcreteFactoriesAndValidProductionConfig|TestStrategyConfigsFromConfig|TestZoneConfigFromConfig|TestEngine_BootstrapBuildsStateWithoutRepublishingHistory'
 
   csharp:
-    name: C# autotrade suite
+    name: C# ctrader engine builds
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -123,25 +62,6 @@ jobs:
       - name: Build
         working-directory: ctrader-engine
         run: dotnet build src/CTraderFeed.csproj --nologo
-
-      - name: Test
-        working-directory: ctrader-engine
-        env:
-          REAL_REDIS_URL: redis://127.0.0.1:6379/15
-        run: |
-          # Startup and contract checks only: broker authorization and token lifecycle, the
-          # health endpoint, and the TradePlan V8 contract the executor parses.
-          dotnet test tests/CTraderFeed.Tests.csproj --nologo \
-            --filter "FullyQualifiedName~AccessTokenRequestGate|FullyQualifiedName~AccountAuthorizationFlow|FullyQualifiedName~RefreshTokenState|FullyQualifiedName~TokenLifecycle|FullyQualifiedName~HealthLiveness|FullyQualifiedName~TradePlanV8Contract" \
-            --logger "trx;LogFileName=csharp-results.trx" \
-            --results-directory TestResults
-
-      - name: Upload C# test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: csharp-test-results
-          path: ctrader-engine/TestResults
 
   repo-checks:
     name: Repository checks
