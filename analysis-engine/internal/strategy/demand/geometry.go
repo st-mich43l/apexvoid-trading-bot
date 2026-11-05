@@ -59,18 +59,13 @@ func closeAbove(bars []market.Candle, from int, price float64) bool {
 
 // obstacles are the prices a BUY has to get through above reference, nearest first:
 //
-//	(a) every confirmed swing high on the execution frame and on the structure frame that no execution-frame close has gone above since it was confirmed
-//	    (a wick through it and back keeps it alive: that is the rejection);
+//	(a) every confirmed swing high of the zone's structure frame (M15 or H1) that no execution-frame close has gone through since it became knowable (a wick
+//	    through it and back keeps it alive: that is the rejection). Execution-frame (M5) pivots are NOT obstacles: a 2-bar M5 fractal is noise, and M5 only confirms and enters;
 //	(b) the impulse extreme: the highest high since the departure leg began, which needs no confirmation (a spike top may have one bar after it).
 func (v *view) obstacles(in instance, reference float64) []float64 {
 	var found []float64
 	exec := v.frame.Bars
 	n := v.cfg.ObstaclePivotBars
-	for _, p := range pivots(exec, n, true) {
-		if p.Price > reference && !closeAbove(exec, p.Confirmed+1, p.Price) {
-			found = append(found, p.Price)
-		}
-	}
 	if in.Frame != nil {
 		sbars := in.Frame.Bars
 		minutes, _ := in.Timeframe.Minutes()

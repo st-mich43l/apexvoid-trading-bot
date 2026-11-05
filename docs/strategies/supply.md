@@ -1,6 +1,6 @@
 # Supply (supply v9)
 
-`supply`, `v9`. Implemented in `analysis-engine/internal/strategy/supply`, self-contained and SELL only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `demand`; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.supply`.
+`supply`, `v10`. Implemented in `analysis-engine/internal/strategy/supply`, self-contained and SELL only: it reads the closed bars and the facts of the frames in the market context and nothing else (`strategyutil`'s shared confirmation spine, `internal/zone` and `internal/reaction` are not used, and it shares no code with `demand`; `test/architecture/strategy_ownership_test.go` enforces it). Algorithm versions: `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`. The strategy's whole configuration is `analysis.strategies.supply`.
 
 **v8 (candle windows).** A structure stays tradable for as long as its own frame holds it: one whose origin precedes the 150-bar M5 execution window is bound with `OriginIndex` -1, keeps its identity (`StructuralID` and `formed_at` come from the origin bar's time) and has its leg/departure extreme read by time from the structure frame plus the M5 bars since ([analysis-engine-windows](../analysis-engine-windows.md)). Until v7 it was dropped after 12.5 hours. The quality measure `zone_departure_atr` is unknown for such a structure (the M5 bars after its origin are gone).
 
@@ -29,7 +29,7 @@ Unchanged from v6, and owned here: after a touch of the entry band from below, w
 
 - **Entry**: price at the band or within `maximum_entry_atr` x the M5 ATR below its proximal edge, not above it.
 - **Stop**: above the whole zone and above the extreme of the M5 bars from the touch to the confirmation, plus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor.
-- **Room**: the obstacles below the entry, nearest first, are (a) every confirmed fractal swing low (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) on M5 and on the structure frame that no M5 close has gone below since it was known, and (b) the low of the departure, from its first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
+- **Room**: the obstacles below the entry, nearest first, are (a) every confirmed fractal swing low (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) of the structure frame (M15 or H1) that no M5 close has gone below since it was known (M5 pivots are not obstacles since v10: a 2-bar M5 fractal is noise, and M5 only confirms and enters), and (b) the low of the departure, from its first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
 - **No extension rule**: a zone sits at the origin of its departure.
 - **Selection**: among this strategy's confirmed zones on one bar, the most stars, then the nearest entry. The competition is among SELL zones only.
 
@@ -67,6 +67,7 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 - v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure.
 - v7: the package owns its mechanism; M15/H1 structure only; room refusal; no competition with demand.
 - v9: the owned zone score, own higher-timeframe zones, the corrected dealing range ([premium-discount](premium-discount.md)).
+- v10 (5 Nov 2026): room obstacles from the structure frame only (no M5 pivots). Rollback: revert `geometry.go` and the version.
 - v8: a structure older than the M5 execution window stays tradable ([analysis-engine-windows](../analysis-engine-windows.md)).
 
 ## Release
