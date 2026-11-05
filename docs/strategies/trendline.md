@@ -8,9 +8,9 @@ classifier. A line needs the configured validation touches, a valid approach,
 and a reclaimed support/resistance close. Entry is the interaction band,
 invalidation is a close-violation buffer, and the target is the nearest opposing liquidity (see below).
 
-**Reaction-anchored invalidation (v5).** Entry is the interaction band and invalidation is the close-violation buffer beyond the band's far edge, or, if the bars from the touch to the confirmation traded beyond it, beyond that extreme (Buy: `min(structure low, lowest low touch..confirm) - invalidation_buffer_atr*ATR`; Sell mirrored). The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries `invalidation_beyond_reaction_extreme`, and the target, quality geometry and published invalidation follow the new price. Measured in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged; the invalidation differs from the frozen publisher by design.
+**Reaction-anchored invalidation (v5).** Entry is the interaction band and invalidation is the close-violation buffer beyond the band's far edge, or, if the bars from the touch to the confirmation traded beyond it, beyond that extreme (Buy: `min(structure low, lowest low touch..confirm) - invalidation_buffer_atr*ATR`; Sell mirrored). The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries `invalidation_beyond_reaction_extreme`, and the target, quality geometry and published invalidation follow the new price. Decisions and entry are unchanged; the invalidation differs from the frozen publisher by design.
 
-**Instrument stop budget (v6).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
+**Instrument stop budget (v6).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it.
 
 Identity is the anchor pair, never evaluation time. Broken/exhausted lines and
 testing without reclaim reject. It is enabled in the live Go opportunity
@@ -32,8 +32,7 @@ Parity: the frozen oracle took 8 decisions; v4 matches 7 and stays silent on the
 
 A line is built from the two latest adjacent confirmed pivots of the same kind; its second anchor is knowable only from the candle whose close confirmed it (`Trendline.AnchorBConfirmedIndex`). The reaction's touch and confirmation must come
 AFTER that candle (`LegacyDetector.ReactionFrom`): the bars that formed and confirmed an anchor are the line's formation. The line is `price(t) = p1 + slope * (t - t1)` with `slope = (p2 - p1) / (t2 - t1)` over candle positions (the series is a
-continuous M5 feed), the slope bounded in ATR per bar, the touch band `interaction_band_atr` x ATR, a support line only ever BUY and a resistance line only ever SELL, so one line cannot produce both directions. The session context is the measured sweep, not a constant
-(see [shared-structure-evidence.md](shared-structure-evidence.md)): the 16 replayed setups go from 3 stars to 9 x 3 and 7 x 2. A trendline break-and-retest is `break_retest`'s thesis; this strategy publishes rejections only.
+continuous M5 feed), the slope bounded in ATR per bar, the touch band `interaction_band_atr` x ATR, a support line only ever BUY and a resistance line only ever SELL, so one line cannot produce both directions. The session context is the measured sweep, not a constant: the 16 replayed setups go from 3 stars to 9 x 3 and 7 x 2. A trendline break-and-retest is `break_retest`'s thesis; this strategy publishes rejections only.
 
 ## Status and execution
 

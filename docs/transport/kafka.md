@@ -82,16 +82,4 @@ Redis topology is supplied through environment variables.
 idempotently. The KRaft broker uses the persistent `kafkadata` volume and is
 internal-only in both Compose definitions.
 
-Broker-backed producer tests skip unless `KAFKA_TEST_BROKERS` is set. A local
-Compose-network example is:
-
-```bash
-docker compose up -d kafka
-docker compose run --rm kafka-init
-docker run --rm --network apexvoid-trading-bot_default \
-  -e KAFKA_TEST_BROKERS=kafka:9092 \
-  -v "$PWD":/workspace -w /workspace/analysis-engine golang:1.23.12-alpine \
-  go test ./test/kafka -run 'TestProducer_'
-```
-
 This validates the producer against a real broker.

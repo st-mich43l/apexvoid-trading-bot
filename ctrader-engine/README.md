@@ -21,7 +21,6 @@ executes the completed TradePlan contract.
 
 ```bash
 dotnet build src/CTraderFeed.csproj --nologo
-dotnet test tests/CTraderFeed.Tests.csproj --nologo
 ```
 
 See [`../docs/redis-contract.md`](../docs/redis-contract.md),

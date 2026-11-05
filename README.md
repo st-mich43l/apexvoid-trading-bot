@@ -118,7 +118,7 @@ only observes it.
 | `ifvg` | Reaction at an inverted fair value gap | M5 | `strategies.ifvg` (v3) | `GO_NATIVE_VALIDATED` | live |
 | `crt` | Closed H1 range, M5 sweep and reclaim | M5 (H1 range) | `strategies.crt` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v5) | `LEGACY_PARITY_PROVEN` (decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
-| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v6) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions; invalidation anchored beyond the reaction extreme since v5; instrument stop cap applied since v6, see [legacy-stop-budget](docs/strategies/legacy-stop-budget.md)) | live |
+| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v6) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions; invalidation anchored beyond the reaction extreme since v5; instrument stop cap applied since v6, ) | live |
 | `break_retest` | Broken trendline or key level, same-side retest and hold | M5 | `strategies.break_retest` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference, M1 confirmation (XAU only) | M1 (M5 impulse) | `strategies.impulse_pullback` (v3) | `LEGACY_PARITY_PROVEN` on synthetic data only | observe-only on every instrument |
 
@@ -159,22 +159,22 @@ response.
 
 ```bash
 # Go analysis engine
-cd analysis-engine && go build ./... && go vet ./... && go test ./...
+cd analysis-engine && go build ./... && go vet ./...
 
-# Python algo bot (needs Redis and Postgres, see the CI workflow)
-cd algo-bot && PYTHONPATH=. pytest -q $(grep -E '^tests/' tests/ci_autotrade_paths.txt)
+# Python algo bot (compile check)
+cd algo-bot && python -m compileall -q app tools
 
 # .NET execution engine
-cd ctrader-engine && dotnet test tests
+cd ctrader-engine && dotnet build src/CTraderFeed.csproj --nologo
 
 # Validate the configuration tree
 PYTHONPATH=algo-bot python config/scripts/resolve_reference.py --all
 ```
 
-The analysis engine has a deterministic replay command (`cmd/replay`) and committed
-real-capture fixtures and parity goldens under `analysis-engine/testdata/`. Capture fresh
-bars read-only from a running stack with `python -m tools.capture_bars` inside the bot
-container.
+There are no tests in this repository; CI only builds the three services and validates
+`docker-compose.yml`. Capture bars read-only from a running stack with
+`python -m tools.capture_bars` inside the bot container; the analysis engine's
+`cmd/replay` replays such a capture.
 
 ## Documentation
 

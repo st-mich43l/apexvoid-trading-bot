@@ -25,7 +25,7 @@ and every intentional difference from the Python detector.
   candidate inversions start at the candle after C (`for j > c`), and the first close beyond the far bound by the ATR-normalised buffer (known from the candle BEFORE the inverting one) is the inversion.
   `TestTheFormationCandlesNeverInvertTheirOwnGap` pins it, `TestPrefixInvarianceAndNoFutureLeak` proves no later candle changes a decision.
 * **`session_context` is evidence, not a constant.** It was set on every iFVG decision (+2 raw points). It is now true only when a finalized session, previous-day or previous-week level that supports the
-  trade was swept and reclaimed between the gap's first candle and the rejection (`LegacyDetector.SessionSweepBetween`; see [shared-structure-evidence.md](shared-structure-evidence.md)). The level must have been
+  trade was swept and reclaimed between the gap's first candle and the rejection (`LegacyDetector.SessionSweepBetween`). The level must have been
   final before the sweep, its first breach must have been reclaimed, and one event counts once. The candidate then carries the evidence code `session_liquidity_swept`.
 * Effect on the 17-capture replay: 127 -> 104 opportunities (stars 2/3: 68/59 -> 74/30). The 23 removed had only their own candle evidence (touches, wick, inversion force) and no higher-timeframe agreement.
 
