@@ -28,18 +28,13 @@ utility.
 - `internal/opportunity`, `arbitration`, `state`, `engine`: lifecycle and
   orchestration.
 - `internal/transport`: Redis input and Kafka output.
-- `test/`: domain, contract, integration, architecture, and replay tests.
-- `testdata/`: reusable behavioral and replay fixtures.
 
 ## Development
 
 ```bash
 go build ./...
 go vet ./...
-go test ./...
-go test -race ./test/engine ./test/liquidity ./test/strategy
 ```
 
 Keep strategy packages independent of Redis, Kafka, Postgres, Telegram, and
-broker code. Add behavior-protecting fixtures under `testdata/` when a replay
-or contract case needs durable coverage.
+broker code. The repository has no tests; CI only builds and vets.

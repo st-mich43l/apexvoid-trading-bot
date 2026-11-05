@@ -7,7 +7,6 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 | Path | Purpose |
 | --- | --- |
 | `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.19). |
-| `reference/` | Python models of the indicator's structure, order-block, liquidity, supply/demand and key-level logic with rule checks on real XAUUSD closed bars (`python tradingview/reference/test_<name>.py`). They validate the algorithm only; they do not compile or draw the Pine file. |
 
 ## ApexVoid Price Action
 
@@ -68,109 +67,6 @@ the candles when the price axis is dragged or zoomed.
 Colours are inputs. Liquidity uses a neutral grey on purpose so it cannot be
 confused with BOS/CHoCH (teal/rose) or Asian levels (purple).
 
-### How it works
-
-**Structure.** Internal swings use short pivots, external swings long ones; both
-scale with the chart timeframe (internal 3 / 4 / 5 / 6 / 8 bars and external
-12 / 16 / 20 / 24 / 30 bars for charts up to 5m / 15m / 1h / 4h / above; `Manual`
-overrides them). **External swing publication (v2.13):** the candidate is the running
-extreme since the last published swing (a zigzag extreme, not a pivot); it is published
-on the first closed bar where `externalLength` bars have passed without a further
-extreme **and** the counter-leg has reached `Minimum external leg displacement` plus the
-confirmation threshold (1.65 ATR of the candidate bar by default). v2.12 waited for the
-next opposite pivot to confirm, a median of 27 / 34 / 54 bars after the swing on M5 / M15 /
-H1; v2.13 publishes at `externalLength` bars (12 / 16 / 20) when the leg is already
-displaced (`External swing publication`: `Next opposite pivot (v2.12)` restores the old
-rule). Small wiggles still never become major swings. Bias comes from external breaks
-only; internal breaks never change it. All distances are ATR(14)-normalised.
-
-**Protected level and CHoCH (v2.13).** With `Protected level` = `Trailing (internal BOS)`
-(default) the protected high (bear bias) is the pullback high the latest internal bearish
-break came from, and it only ratchets toward price; a newly published swing replaces it
-only when it is nearer. A **confirmed close beyond the protected level is the CHoCH**, even
-when the last confirmed swing is further away: it flips the bias, draws the line from the
-protected bar to the first close beyond it, builds the order block on that event, fires the
-CHoCH alert and sets the new protected level to the leg's extreme since the old one. A
-break of the last confirmed swing in an agreeing bias stays a BOS. `Last confirmed swing
-(v2.12)` reproduces the old assignment. A trailing level flips the bias more often than a
-confirmed swing does: on the committed XAU captures CHoCH counts roughly double.
-
-**Protected level, v2.14.** Two changes in the trailing mode (the v2.12 option is untouched). (1) *The higher low that made a higher high is promoted.* When a major high is
-confirmed in a bull bias, the protected low becomes the most recent **internal** pivot low between the protected bar and that high, if it is higher (bear mirrors with the
-lower high). (2) *A protected-level CHoCH takes the last internal pivot, not the start of the move.* The new protected low is the most recent internal pivot low between the
-broken protected high and the break; only without one does it fall back to the lowest low since the protected high (the v2.13 rule, which could reach two days back and
-left a flip level about 3.7 ATR from price on M30). The script keeps the last 8 internal pivot lows and highs for this; a pivot is used only after its right bars have closed.
-A protected level that moves toward price in the bias direction (an internal BOS, or the promotion) also puts the **developing leg** on the bias side: DEV, the directional
-leg, the phase and the dealing range now describe the same leg (v2.13 could print "Counter-trend rebound" with DEV HIGH sitting on the protected high).
-
-**Order blocks (v2.1).** Built when an internal or external BOS/CHoCH closes (v2.13: searched from the
-bar that really broke, not from the later publication bar). The
-origin is the opposite-colour candle at the extreme of the leg between the broken
-pivot and the break, and it must pass gates for base position, range, net
-displacement and an impulse candle. Fresh → Tested (price entered) → Mitigated
-(your chosen rule) / Invalidated (close beyond the far edge). A partial touch never
-invalidates. Blocks have their own display budget (default 2 bullish + 2 bearish)
-and are never deleted just because they are hidden. No volume is used.
-
-**Base-and-impulse supply / demand (v2.2).** Independent of swing pivots. A base is 1–5
-small candles; a zone is built once price leaves it within 3 bars with a real impulse
-candle and enough net distance (1.5 ATR and 2× the base height) without closing back
-through it. Patterns: `DBR` / `RBD` reversals, `RBR` / `DBD` continuations (filterable).
-Invalidated by a close beyond the far edge; a touch only marks it Tested. A fresh base
-zone on the bias side qualifies as a `Base-impulse zone` POI.
-
-**FVG.** A three-candle gap. `FVG definition` = `Engine (fvg v9)` (default, `docs/strategies/fvg.md`):
-the gap and the middle candle's body are at least 0.5 ATR, the body at least half of its
-own range, and the middle candle closed in the gap's direction. `Loose (v2.12 keys)` uses
-`Minimum gap size` and `Middle-candle body` plus, new in v2.13, the body-direction test (v2.12
-could print a bullish gap from a bearish middle candle). Invalidation follows `Wick`, `Close` or `Midpoint`.
-
-**Supply / demand.** Created at a confirmed external swing that was followed by a
-departure of at least `Supply/demand departure`; width is capped. Invalidated by a
-close beyond the far edge. **Freshness (v2.13):** before a swing zone is drawn the bars
-after its departure (`externalLength + 1` bars after the swing up to now) are scanned: a
-close beyond the far edge means it is not drawn; a touch means it is drawn already
-`Tested` (first touch and measured depth), never Fresh, never actionable and never a
-trade trigger. On the captures, a third to a half of the zones v2.12 drew as Fresh had been
-retested or closed through before they were drawn.
-
-**POI.** A zone is a *qualified* POI only through a named path: `Composite`
-(two different zone kinds overlap, and since v2.13 their origins differ by more than 3 bars: an
-OB and the FVG its own impulse printed are one event), `Structure-origin OB` (a swing OB on the bias
-side near the last break), `Displaced swing zone` (supply/demand on the bias side)
-or `Swept imbalance` (an FVG on the bias side whose impulse followed a sweep: a pool or external sweep in
-the 6 bars up to the gap's first candle; v2.12 also accepted a sweep after the gap). Proximity
-and display rank never qualify a zone. A POI is *actionable* only if it is fresh,
-on the correct side of price, within `Actionable POI distance` and has at least
-1 ATR of room before the nearest opposing barrier.
-
-**Liquidity pools (v2.1).** A pool is a level, not a pivot. It exists for a
-confirmed external swing, for an equal high/low band (two independent tests within
-`EQH / EQL tolerance`, spaced apart with a pullback between them) or, optionally,
-the previous-day high/low. Lone internal pivots are never drawn.
-
-| Event | Rule (defaults) |
-| --- | --- |
-| Sweep / grab | Wick beyond the edge by 0.01 ATR, then a close back inside within 2 bars (or the same bar). Pool becomes *Swept*. |
-| Consumed | 2 consecutive closes beyond the edge by 0.10 ATR, or a structural BOS/CHoCH on the swing the pool rests on. |
-| Retired | Faded for 40 bars after either event (policy is an input), or older than 1500 bars. |
-
-A pool leaves the active state once, so each pool alerts once. A grab never
-changes bias and never creates an entry.
-
-**Sessions.** Defaults follow the engine's session calendar (`analysis.sessions.calendar`): Asia 07:00-17:00
-Tokyo ended early at London open (a bar inside London is never Asia, so the end follows London daylight saving: 07:00 UTC on
-23 Oct 2026, 08:00 UTC on 27 Oct), London 08:00-16:30 London, New York 09:00-17:00 New York. The Asian range is
-drawn on the chart only, live while the session runs and then as the completed range (configurable). The live
-and completed Asian high/low are drawn as levels only. On charts above 5m the session is evaluated on a 5-minute request.
-
-**Multi-timeframe structure (not in this script).** v2.14 first shipped a panel row that requested the chart's own `bias` / `activeProtected` on two other frames
-(`request.security` of a global series). TradingView rejected it: **104,204 compiled tokens against the 100,256 limit (CE10117)** at 33,514 source tokens. A
-`request.security` of a global series compiles that series' whole dependency chain once per call (the structure state machine here), about 3,000 compiled tokens per
-frame, and this script has no room for even one. The row, its inputs and the `chart against M15+H1` tag are therefore removed; the old optional HTF context stays removed
-(it used a different algorithm and could contradict the HTF chart). The aligned multi-frame view is specified and verified in the model (`reference/mtf.py`,
-`reference/test_mtf_v214.py`, `reference/report_v214.py`) for a small companion indicator that carries only the structure algorithm.
-
 ### Key levels (v2.17)
 
 One code path, two definitions (`Key level definition`). Both read what the engine's `key_level` strategy reads, `LegacyFrame.SwingLevels` (the `profit_week` contract): `legacyread.Stage` -> `techniquezone.FindSwings` -> `techniquezone.KeyLevels`
@@ -183,7 +79,7 @@ One code path, two definitions (`Key level definition`). Both read what the engi
 | Dedupe of neighbours within the tolerance | average the prices, touches = max | keep the **stronger member's exact price** (touches, then reaction before round, then the newest member) |
 | Origin | display only | the level's kind for flipped / in play: a flipped level is not "in play" |
 
-Engine v6 is exactly what the bot trades today (parity: zero differences against the Go golden). Selective v7 is the definition engine PR-K2 is heading to; its golden `reference/fixtures/keylevel-golden-v7-scalpwindow-m5.json` is what that PR has to reproduce. Switch the default to v7 when PR-K2 merges.
+Engine v6 is what the bot trades today. Selective v7 is a preview of the definition engine PR-K2 is heading to; switch the default to v7 when PR-K2 merges.
 
 - **When:** on the last bar, from the last `Key level window` CLOSED bars (the forming bar is left out in real time), so levels do not flicker; only the last bar recomputes and nothing is stored per bar.
 - **ATR:** the window's own series: the mean of the last (up to) 14 true ranges, the first bar's true range being high - low; the tolerance is a fraction of the **median** of that series.
@@ -196,7 +92,7 @@ Engine v6 is exactly what the bot trades today (parity: zero differences against
 - **Lines always draw, and every drawn level shows its price:** there is no "near a zone edge: not drawn" rule and no `+n` for a key level. The right-column caption always starts with `KL` and the line's own price: reaction `KL 3949.12 ×3`; round on its step price `KL 3950 ×6`; round where v6 averaging moved the price `KL 3949.12 ×6` (tooltip: `round 3950, engine price merged`); in play adds ` ●`.
 - **Sharing a slot:** several key levels within one label height become one label that lists every price, highest first (`KL 3954.47 ×3 · 3951.42 ×3 · 3949.12 ×6`). A key level within one label height of another category (`PROT`, `BSL` / `SSL` / `EQH` / `EQL`, `EQ`, `MAJOR`, `DEV`, a zone caption, Asia) never replaces that label: the other label keeps its slot, position and colour, and the key-level text is appended visibly (`BSL · KL 3949.12 ×6`) with its tooltip line. Pine labels have one text colour, so the appended text takes the host's colour; the `KL` prefix identifies it. Other categories keep the earlier rule (the lower tier shows as `+n`).
 - **Selectivity readout (tooltip only, nothing on the chart):** the share of the window's [low, high] inside any level band, over all levels: `coverage 69 % of the recent range: low selectivity` above 40 %, `selective` at or below 25 %. On the 3 Nov M5 capture: v6 69 %, v7 36 %.
-- **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count). Python reference: `reference/keylevel_model.py` (`definition_levels`, `display217`), tests `reference/test_keylevel_v217.py`; the v2.16.1 `swing_levels` and the v2.16 `keylevel.Cluster` port stay as earlier references.
+- **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count).
 
 ### Display profiles
 
@@ -305,40 +201,8 @@ All fire on bar close. Create them from the indicator's alert dialog.
 ### Limits
 
 - Compile errors, label placement, object limits and alert behaviour are only checked in
-  TradingView; the reference tests cover the decision logic, not the drawing code.
-- `reference/test_pine_builtins.py` fails if the indicator calls a Pine built-in that has not
-  been confirmed to exist, or if the script body outside functions grows past TradingView's
-  size limit (CE10295).
+  TradingView; nothing in this repository compiles or tests the Pine file.
 - The indicator sends no orders and tracks no trades (the v2.8 paper trade plan was removed in v2.18).
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
 - Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
 - The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
-
-### Version history
-
-| Version | Change |
-| --- | --- |
-| 2.14 | Multi-timeframe coherence: the higher low that made a higher high is the protected low; a protected-level CHoCH takes the last internal pivot instead of the start of the move; the developing leg (DEV, phase, range) follows the protected level; the optional HTF context and its inputs are removed (a first version of an `MTF` panel row exceeded TradingView's token limit and was taken out, see Multi-timeframe structure); the trades row says `Plan off: 70-pip cap < min stop on this frame (use M5/M15)` when the cap is below the smallest possible stop (H1 on XAU) |
-| 2.19 | The Market Intelligence panel (the table at the top right of the chart) is removed with its inputs `Show Market Intelligence panel` and `Dashboard position`, the `KL` row, and all the state that only fed it (zone / pool / order-block / supply-demand counters and outcome texts, the last-break / swing-time variables and the helper functions that formatted them). Everything drawn on the chart, every alert and the label tooltips are unchanged. The key-level coverage readout now lives only in each key level's tooltip. |
-| 2.18.1 | The `KL` row is removed from the Market Intelligence panel (the chart keeps the level lines and their price captions; the coverage line stays in each level tooltip). Superseded by 2.19, which removes the whole panel. |
-| 2.18 | The trade plan is removed: the `08 Trade Plan` settings (all 18 inputs), the paper tracker (entries, stops, targets, results), the `Trades` panel row and its tooltip, and the four alerts `ApexVoid Trade Plan Long / Short / Target Hit / Stop Hit`. Alerts built on those four conditions stop firing; because the alert-condition list changes, open your other alerts for this indicator and re-select the condition if it shows the wrong one. Nothing else changes: structure, zones, liquidity, key levels and the other alerts are as in v2.17. The reference model `trade_model.py` and its tests are gone; the harness the other tests need is `pipeline_model.py` and the session tests are `test_session_model.py`. |
-| 2.17 | Key levels, one code path and two definitions: `Engine (key_level v6)` (what the bot trades, default) and `Selective (v7 preview)` (cluster 0.25 ATR, $10 round step, stronger-member dedupe, origin kind for flipped / in play); `Key levels per side` 3 (up to 10); every drawn level shows its price (`KL 3949.12 ×3`), labels of several key levels or of a key level beside another label list the prices instead of folding to `+n`, and a `KL` panel row lists the drawn prices (tooltip: all levels); flipped levels drawn at transparency 88, major round levels 60; tooltip with origin, definition and a coverage readout (share of the recent range the levels cover). The Python model, a new v7 golden and 200 random capture windows prove the Pine algorithm in both modes. To fit the token budget, after the three cuts the brief listed were already spent in v2.16.1: the `Dashboard display size` option and its `Standard` full panel are removed (the Compact panel is unchanged). |
-| 2.16.1 | Key levels = what the strategy reads (`LegacyFrame.SwingLevels`: zigzag-filtered fractals, median window ATR, ATR at each swing for the round band), computed from the last closed bars on the last bar; no level is hidden for being "broken" (side, origin, flipped, in play instead); lines always drawn, only the caption yields to a stronger label; captions `KL×3` / `KL 3945`; the pivot ring and `Show broken key levels` are gone. To fit the token budget: the Debug `xEH` / `xEL` labels, the `Show historical major classifications` option (and its `M HH` / `M HL` / `M LH` / `M LL` labels) and the `Expanded` panel density (its `Invalidated Level` and `Zone Audit` rows) are removed. |
-| 2.16 | Key levels layer (display only): the engine's `keylevel.Cluster` / `Role` ported (reaction clusters, round levels, dedupe, broken after 2 closes), computed on the last bar from a fractal-pivot ring, dotted and faint behind everything else, nearest 3 per side, yielding to stronger objects; own input group `07 Key Levels`. The premium / discount gauge moves to the very right edge, beyond the zone boxes; the label column starts 4 bars beyond the gutter. The `Label vocabulary` option is removed (long wording is gone). Python port `reference/keylevel_model.py` and Go golden `analysis-engine/test/keylevelgolden`. |
-| 2.15.1 | Readable sizes and stronger contrast (display only): every tier one step larger (Standard normal / normal / small), muted text at 20 % transparency and swing BOS / CHoCH at full colour, session titles off by default, prices of 100 or more print at most 2 decimals on symbols with a tick below 0.01 (`3935.16`, not `3935.158`), label merge distance 1/36 of the candle range instead of 1/48. |
-| 2.15 | Label design (display only): right gutter (`Annotation gutter`) so captions no longer cover live candles; three tiers with `Global text scale` mapping; short vocabulary (`◆ OB+FVG`, `PROT`, `DEV▲`, `pAsia H`, …, `Label vocabulary` = `Long (v2.14)` restores the old words); one caption per overlapping zone cluster; right column merges only within a category; outlined BOS / CHoCH and event labels; session titles on the live and latest completed session only (`Show session titles`); `PREMIUM` / `DISCOUNT` words removed (gauge and panel stay). No detection, qualification, trade or alert change. |
-| 2.14.1 | Pullback leg kept after a confirmed swing; scale.none removal reaches existing charts (upgrade note). A confirmed higher high (lower low) still promotes the higher low (lower high), but only an internal BOS in the bias direction moves the developing leg to the bias side, so the pullback the swing was published after stays visible (14 / 17 / 4 / 17 of 98 / 77 / 26 / 55 swings on M5 / M15 / M30 / H1 had hidden it in v2.14). All RR drawings are removed: the planned preview box (`plan 2.6R`), the position boxes, entry lines and R result labels of real trades, the TP / ENTRY / SL tags, and the inputs `Show a planned RR box`, `Trades drawn on the chart`, `Target box color`, `Stop box color`. The tracker, the `Trades` panel row and its tooltip, and the alerts are unchanged. `scale = scale.none` is gone (zones follow the candles' scale); existing charts keep the old pin until the indicator is re-added or re-pinned, see Install → Upgrading. |
-| 2.13 | External swings published on displacement (lag 12 / 16 / 20 bars instead of 27 / 34 / 54); trailing protected level and CHoCH on it; dealing range = protected leg; swing zones scanned for retests before they are drawn; order blocks searched from the real break bar; engine FVG definition; independent Composite and sweep-before-impulse Swept imbalance; engine session calendar (Asia 07:00 Tokyo to London open, New York 09:00); trade plan: internal swings as obstacles, pip cap, honest preview, refusal histogram. Removed to fit TradingView's 100,256-token limit: the temporary OB debug table (`Debug: OB candidate log and rejection reasons`) and the v2.12 swing-publication option |
-| 2.12 | Range box for each Asia, London and New York session (grows live, freezes at the end) |
-| 2.11 | Asian H/L drawn live on the chart while the session runs; removed from the panel |
-| 2.9.1 | Zone captions join the right-edge label column; consumed pools carry no label |
-| 2.9 | Planned RR box for the nearest qualified POI; trade boxes show only R:R |
-| 2.8 | Trade plan: price-action trigger at a qualified POI, next-key-level take-profit, last 5 trades drawn, paper stats |
-| 2.10 | Premium/discount and EQ use the dealing range (confirmed swing to the live extreme of the leg), not a stale confirmed swing; trade plan uses the same EQ |
-| 2.7 | One right-edge label column; one BOS per candle; slim premium/discount gauge |
-| 2.6 | BOS/CHoCH lines end on the candle that closed beyond the swing |
-| 2.5 | BSL/SSL kept when inside the candle range; nearest unswept internal swing markers |
-| 2.4 | Compact "major only" panel; premium/discount range |
-| 2.3 | Candle-scale protection; lighter zones |
-| 2.2 | Base-and-impulse supply/demand (DBR, RBR, RBD, DBD) |
-| 2.1 | Order blocks (swing + internal, lifecycle) and level-first BSL/SSL pools |

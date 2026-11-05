@@ -98,4 +98,3 @@ only broker-facing service.
 - Redis is the market-data plane and Kafka the durable business-event plane; Kafka never carries bars or ticks.
 - Kafka delivery is at-least-once with idempotent consumers (see [Kafka transport](transport/kafka.md)); the Go client is `twmb/franz-go`, pinned in `analysis-engine/go.mod`.
 - Cross-service contracts live at the repo root in `contracts/`; no service keeps a private copy of a schema another service reads.
-- Go tests live under `analysis-engine/test/`, not beside the code, so cross-package architecture tests have one home.

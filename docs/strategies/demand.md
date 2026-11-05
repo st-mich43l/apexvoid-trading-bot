@@ -24,7 +24,7 @@ Owned here: after a touch of the entry band from above, within `reaction_lookbac
 ## Entry, stop, room, target (`decision.go`, `candidate.go`, `geometry.go`)
 
 - **Entry**: price at the band or within `maximum_entry_atr` x the M5 ATR above its proximal edge, not below it.
-- **Stop**: below the whole zone and below the extreme of the M5 bars from the touch to the confirmation, minus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor ([legacy-stop-budget](legacy-stop-budget.md)).
+- **Stop**: below the whole zone and below the extreme of the M5 bars from the touch to the confirmation, minus `invalidation_buffer_atr` x the M5 ATR (`invalidation_beyond_reaction_extreme` when the reaction's extreme set it). Over the instrument stop cap it is refused, never tightened; `stop_budget_floor` below the floor.
 - **Room**: the obstacles above the entry, nearest first, are (a) every confirmed fractal swing high (`obstacle_pivot_bars` bars on each side, causal: a pivot is known only once its right-hand bars have closed) on M5 and on the structure frame that no M5 close has gone above since it was known, and (b) the high of the departure, from its first candle to the decision bar. The nearest obstacle is the target (`nearest_opposing_structure`) when it is at least `minimum_target_r` x the risk away; closer, the entry has no room and is refused (`no_target_room`). With no obstacle the target is `fallback_target_r` x the risk (`fixed_reward_risk`).
 - **No extension rule**: a zone sits at the origin of its departure.
 - **Selection**: among this strategy's confirmed zones on one bar, the most stars, then the nearest entry. The competition is among BUY zones only.
@@ -60,7 +60,7 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 **Reaction after formation (Q2).** The zone exists once its displacement leg has ended (`Zone.BreakIndex`); a touch or confirmation on the leg's own bars is its formation, not a reaction to it (252 of 1,894 replayed confirmed Demand opportunities were of that kind; a later valid reaction replaced 55).
 
 
-- v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure ([reaction-anchored-stop](reaction-anchored-stop.md), [legacy-stop-budget](legacy-stop-budget.md), [htf-zone-structure](htf-zone-structure.md)).
+- v3: the spent-zone limit; v4: reaction-anchored stop; v5: instrument stop budget; v6: M15/H1 structure.
 - v7: the package owns its mechanism and its zone score; M15/H1 structure only; room refusal; no competition with supply; the corrected dealing range.
 
 ## Release

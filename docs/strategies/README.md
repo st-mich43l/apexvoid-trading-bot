@@ -14,23 +14,23 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 
 ## Catalog
 
-| Strategy | Version | Structure | Thesis | Proof | Spec |
-|---|---|---|---|---|---|
-| `key_level` | v6 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | `test/keylevelparity` golden | [key_level](key_level.md), [sweep first](keylevel-sweep-first.md) |
-| `supply` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | `test/supplyv7` | [supply](supply.md) |
-| `demand` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed bounce from a demand zone with room above; same touch cap; owns its zone score and dealing range | `test/demandv7` | [demand](demand.md), [premium/discount](premium-discount.md) |
-| `order_block` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at the last opposite candle before a displacement that broke structure, with room to the next opposing structure; dead once a close of its own frame goes through its far edge ([order-block-definition](order-block-definition.md)); its structure breaks are computed causally and its break kind and prior sweep are measured evidence ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)) | `test/obv7`, `test/sweepbos` | [order_block](order_block.md) |
-| `fvg` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at a real fair value gap whose impulse followed a liquidity sweep (gate), with room and no leg-extreme entry ([liquidity-sweep-and-structure](liquidity-sweep-and-structure.md)) | `test/fvgv7`, `test/sweepbos` | [fvg](fvg.md) |
-| `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | contract tests, `test/ifvgreplay` | [ifvg](ifvg.md) |
-| `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | fixtures, `test/crtreplay` | [crt](crt.md) |
-| `break_retest` | v3 | M5 | accepted break of its own key level or trendline, fresh retest, rejection | contract tests, `test/brreplay` | [break_retest](break_retest.md) |
-| `flip_zone` | v5 | M5 | zone born of an accepted role flip at a key level, confirmed reaction after the break | `test/legacyparity` golden | [flip_zone](flip_zone.md) |
-| `trendline` | v6 | M5 | causal trendline with healthy anchors, live interaction, reaction | `test/legacyparity` golden | [trendline](trendline.md) |
-| `confluence_zone` | v3 | M5 | two or more genuinely independent structures on one price region, measured rejection | contract tests, `test/czreplay` | [confluence_zone](confluence_zone.md), [spec](confluence-zone-v3-technical-spec.md) |
-| `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | contract tests, real-capture smoke | [round_number](round_number.md) |
-| `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | contract tests, real-capture smoke | [asia_range](asia_range.md) |
-| `shock_retest` | v2 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction; stop behind the retest extreme, target the shock extreme or its 1.272 extension | contract tests, real-capture smoke | [shock_retest](shock_retest.md) |
-| `impulse_pullback` | v3 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | `test/scalpparity` (synthetic M1 only) | [impulse_pullback](impulse_pullback.md) |
+| Strategy | Version | Structure | Thesis | Spec |
+|---|---|---|---|---|
+| `key_level` | v6 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | [key_level](key_level.md), sweep first |
+| `supply` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | [supply](supply.md) |
+| `demand` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed bounce from a demand zone with room above; same touch cap; owns its zone score and dealing range | [demand](demand.md), [premium/discount](premium-discount.md) |
+| `order_block` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at the last opposite candle before a displacement that broke structure, with room to the next opposing structure; dead once a close of its own frame goes through its far edge; its structure breaks are computed causally and its break kind and prior sweep are measured evidence | [order_block](order_block.md) |
+| `fvg` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at a real fair value gap whose impulse followed a liquidity sweep (gate), with room and no leg-extreme entry | [fvg](fvg.md) |
+| `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | [ifvg](ifvg.md) |
+| `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | [crt](crt.md) |
+| `break_retest` | v3 | M5 | accepted break of its own key level or trendline, fresh retest, rejection | [break_retest](break_retest.md) |
+| `flip_zone` | v5 | M5 | zone born of an accepted role flip at a key level, confirmed reaction after the break | [flip_zone](flip_zone.md) |
+| `trendline` | v6 | M5 | causal trendline with healthy anchors, live interaction, reaction | [trendline](trendline.md) |
+| `confluence_zone` | v3 | M5 | two or more genuinely independent structures on one price region, measured rejection | [confluence_zone](confluence_zone.md), spec |
+| `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | [round_number](round_number.md) |
+| `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | [asia_range](asia_range.md) |
+| `shock_retest` | v2 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction; stop behind the retest extreme, target the shock extreme or its 1.272 extension | [shock_retest](shock_retest.md) |
+| `impulse_pullback` | v3 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | [impulse_pullback](impulse_pullback.md) |
 
 "Golden" means the decisions and entry reproduce the frozen Python publisher on
 committed real captures, generated from the oracle and never from Go. The stop,
@@ -64,13 +64,12 @@ not one strategy × direction cell. The zone part of it is drawn in full in
 
 | Rule | Applies to | Spec |
 |---|---|---|
-| Stop beyond the structure and the reaction extreme, plus the ATR buffer | key_level, supply, demand, order_block, fvg, flip_zone, trendline | [reaction-anchored-stop](reaction-anchored-stop.md) |
-| Stop wider than the instrument cap is refused, never tightened | the same seven; CRT, Break & Retest, iFVG and Confluence Zone own their equivalent | [legacy-stop-budget](legacy-stop-budget.md) |
-| Setup found on M15/H1 structure, confirmed and executed on M5 | supply, demand, order_block, fvg | [htf-zone-structure](htf-zone-structure.md) |
-| Sessions, ranges and sweeps are evidence, never strategies | every strategy that cites them | [shared-structure-evidence](shared-structure-evidence.md) |
-| The London session's net move in M15 ATR is evidence (`session_momentum_aligned` / `_opposed`), never a gate or a confluence factor | round_number, asia_range, shock_retest, when confirmed in New York | [shared-structure-evidence](shared-structure-evidence.md) |
-| Stop wider than the instrument cap is refused, never tightened | round_number, asia_range, shock_retest as well | [legacy-stop-budget](legacy-stop-budget.md) |
-
+| Stop beyond the structure and the reaction extreme, plus the ATR buffer | key_level, supply, demand, order_block, fvg, flip_zone, trendline | |
+| Stop wider than the instrument cap is refused, never tightened | the same seven; CRT, Break & Retest, iFVG and Confluence Zone own their equivalent | |
+| Setup found on M15/H1 structure, confirmed and executed on M5 | supply, demand, order_block, fvg | |
+| Sessions, ranges and sweeps are evidence, never strategies | every strategy that cites them | |
+| The London session's net move in M15 ATR is evidence (`session_momentum_aligned` / `_opposed`), never a gate or a confluence factor | round_number, asia_range, shock_retest, when confirmed in New York | |
+| Stop wider than the instrument cap is refused, never tightened | round_number, asia_range, shock_retest as well | |
 ## Candidate contract
 
 Every strategy emits a deterministic identity, direction, entry zone, technical
@@ -82,10 +81,3 @@ closed; Algo Bot never rebuilds it. The lifecycle is in
 
 `Quality.Overall` is informational: it ranks nothing after publication
 ([acceptance and quality](../analysis-engine.md#acceptance-and-quality)).
-
-## Regenerating goldens
-
-`key_level`, `flip_zone`, `trendline` and the technique strategies read the
-detector-contract frame (`internal/legacyread`). Regenerate their golden with
-`test/detectorparity/generate_oracle_golden.py` against the frozen oracle, never
-from Go output.

@@ -68,12 +68,12 @@ Entry is the reaction band; invalidation is beyond its outer edge by
 (`keylevel:<kind>:<price>`), not the confirmation, so a re-confirmation of the
 same level is the same thesis.
 
-**Reaction-anchored invalidation (v4).** A candidate with a confirmed reaction publishes the far edge of the structure or, if the bars from the touch to the confirmation traded beyond it, that extreme, in both cases one `invalidation_buffer_atr*ATR` further out (Buy: `min(structure low, lowest low touch..confirm) - buffer`; Sell: `max(structure high, highest high touch..confirm) + buffer`). A sweep or strong reclaim is confirmed by a wick that pierces the band, and a stop inside that wick has already been traded. The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries the evidence code `invalidation_beyond_reaction_extreme`. A resting candidate (no confirmation) keeps the structural price, and the fixed-reward:risk fallback target, the quality geometry and the published invalidation follow the new price. Measured on the committed captures in [reaction-anchored-stop.md](reaction-anchored-stop.md). Decisions and entry are unchanged (`LEGACY_PARITY_PROVEN`); the invalidation differs from the frozen publisher by design. `DetectorConfluence` carries the stars and the
+**Reaction-anchored invalidation (v4).** A candidate with a confirmed reaction publishes the far edge of the structure or, if the bars from the touch to the confirmation traded beyond it, that extreme, in both cases one `invalidation_buffer_atr*ATR` further out (Buy: `min(structure low, lowest low touch..confirm) - buffer`; Sell: `max(structure high, highest high touch..confirm) + buffer`). A sweep or strong reclaim is confirmed by a wick that pierces the band, and a stop inside that wick has already been traded. The buffer is unchanged and has no pip floor; when the reaction's extreme set the price the candidate carries the evidence code `invalidation_beyond_reaction_extreme`. A resting candidate (no confirmation) keeps the structural price, and the fixed-reward:risk fallback target, the quality geometry and the published invalidation follow the new price. Decisions and entry are unchanged (`LEGACY_PARITY_PROVEN`); the invalidation differs from the frozen publisher by design. `DetectorConfluence` carries the stars and the
 machine-readable factors (`htf_aligned`, `touches`, `wick_rejection`,
 `displacement_grade`, `structural_agreement`, `session_context`, `fib_touch`,
 `choch`).
 
-**Instrument stop budget (v5).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it. Measured, with the Python side, in [legacy-stop-budget.md](legacy-stop-budget.md).
+**Instrument stop budget (v5).** A candidate whose structural stop (distance from the proximal entry edge to the invalidation above) exceeds the instrument stop cap (XAU 70, EURUSD 20, GBPUSD 25, GBPJPY 35, USDJPY 28 pips) is **not published**: refused, never tightened, and neither the entry nor the invalidation is moved to fit. One inside [floor, cap] carries `stop_budget_structural`; one below the floor carries `stop_budget_floor` and execution widens it.
 
 **Forward labels (informational only).** Every candidate also publishes six measurements about its level, so realised outcomes can later be cut by what kind of level it was. They are
 never a score, a gate or a star, and they do not change `Overall`: `level_kind` (0 reaction, 1 round), `level_round_class` (how round the level's *price* is: 0 none, 1 a multiple of 5, 2 of 10,
@@ -81,7 +81,7 @@ never a score, a gate or a star, and they do not change `Overall`: `level_kind` 
 the newest member swing; the bars read when no swing is within the band), `level_band_atr` (the level's own band over the ATR) and `level_coverage` (the share of the window's [low, high] inside any level band
 at the evaluation: the selectivity of the definition). They travel with the candidate: Go `Quality.Components` -> the Kafka `quality.components` payload -> `match.quality_components` in algo-bot ->
 `auto_trade_plan_snapshots.quality_components` (one immutable JSONB row per published trade plan, indexed by `opportunity_id`, which realised trades join on). A candidate that never becomes a published
-plan has no snapshot row. Whether the edge is in the level or the reaction is measured in `keylevel-edge-source.md`.
+plan has no snapshot row. 
 
 ## Evidence
 
@@ -104,7 +104,7 @@ plan has no snapshot row. Whether the edge is in the level or the reaction is me
 ## Q2: the session context is measured
 
 `session_context` was set on every Key Level decision, which made a reaction with no higher-timeframe agreement reach two stars on candle evidence alone (touches 3 + pattern 3 + a constant 2). It is now true only when a finalized
-session, previous-day or previous-week level supporting the trade was swept and reclaimed in the reaction's window (see [shared-structure-evidence.md](shared-structure-evidence.md)). `test/keylevelparity` keeps proving the
+session, previous-day or previous-week level supporting the trade was swept and reclaimed in the reaction's window. `test/keylevelparity` keeps proving the
 frozen detector with `frozen_session_context` set. On the 17-capture replay: 5,444 -> 4,174 opportunities (2/3 stars: 2,890/2,554 -> 3,122/1,052; 257 new ones where the better of two attempts changed). The 1,527 removed were not worse than the rest
 (hypothetical +0.004R against -0.102R), so the change removes an unconditional constant, it is not a performance rule.
 
