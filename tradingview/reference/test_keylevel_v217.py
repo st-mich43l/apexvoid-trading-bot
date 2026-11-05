@@ -266,24 +266,13 @@ def test_without_another_member_the_key_level_is_the_whole_label_and_in_play_mak
   assert [round(x["price"], 2) for x in chosen if x["in_play"]] == [3917.18]
 
 
-def test_the_kl_panel_row_lists_the_drawn_prices_and_its_tooltip_every_level_found():
+def test_every_level_found_is_listed_highest_first_and_the_drawn_ones_are_marked():
   for mode, n in ((kl.V6, 11), (kl.V7, 10)):
     r = kl.definition_levels(H, L, C, WINDOW, mode)
     rows, chosen = kl.levels217(r, C[-WINDOW:], 3, mode)
-    row = kl.panel_row(chosen)
     assert len(r["levels"]) == n and len(rows) == n
-    assert row.startswith("▲ ") and "▼" not in row, "on the golden the close is under every level"
-    assert all(("%.2f" % lv["price"]) in row for lv in chosen) or row.endswith("…")
-    tip = kl.panel_tooltip(rows, r["coverage"])
-    lines = tip.split("\n")
-    assert len(lines) == n + 1 and lines[-1].startswith("coverage ") and ("drawn" in tip)
-    assert [float(x.split(" · ")[0]) for x in lines[:-1]] == [round(x["price"], 2) for x in sorted(rows, key=lambda x: -x["price"])], "highest first"
-    assert sum(1 for x in lines[:-1] if x.endswith(" · drawn")) == len(chosen) and sum(1 for x in lines[:-1] if x.endswith("not drawn")) == n - len(chosen)
-  # both sides, in play marked, truncated with an ellipsis
-  two = [dict(price=3949.12, side="resistance", in_play=False), dict(price=3917.18, side="support", in_play=True)]
-  assert kl.panel_row(two) == "▲ 3949.12  ▼ 3917.18●"
-  long = [dict(price=3900.0 + i, side="resistance", in_play=False) for i in range(9)]
-  assert kl.panel_row(long).endswith("…") and len(kl.panel_row(long)) == 40
+    assert [x["price"] for x in rows] == sorted((x["price"] for x in rows), reverse=True), "highest first"
+    assert sum(1 for x in rows if x["drawn"]) == len(chosen) and all(x["drawn"] for x in chosen)
 
 
 def test_coverage_is_the_union_of_the_bands_over_the_window_range_and_it_is_worded():
@@ -331,7 +320,7 @@ def test_the_pine_source_carries_the_v217_contract():
   assert "carried" not in code and "zoneTops" not in body and "zoneBottoms" not in body, "no rule folds a key level or hides it near another object"
   emit = code[code.index("f_emitCluster("):code.index("f_keyAdd(")]
   assert "topCat != 4" in emit and '"KL " + keyText' in emit and "== 4 ? 1000000.0" in emit, "key levels are appended to the host, never the host, never +n"
-  assert 'f_key(17, "KL")' in code and "keyInfo" in body and "str.length(rowTxt) > 40" in body and ' ×" + str.tostring(touches, "0")' in body
+  assert ' ×" + str.tostring(touches, "0")' in body and "keyInfo" not in code and "table.new" not in code
   assert "dashboardDensity" not in code and "Standard\", \"Dashboard" not in src
 
 
@@ -362,7 +351,7 @@ def measurement():
       shown = [x for x in labels if any(mm["cat"] == 4 for mm in x["members"])]
       appended = [x for x in shown if x["host"]["cat"] != 4]
       rows.append(dict(tf=tf, definition=mode["name"], levels=len(r["levels"]), coverage_pct=round(r["coverage"] * 100), lines=len(chosen), key_labels=len(shown), prices_appended_to_other_labels=sum(sum(1 for mm in x["members"] if mm["cat"] == 4) for x in appended),
-                       flipped=sum(1 for x in chosen if x["flipped"]), in_play=sum(1 for x in chosen if x["in_play"]), panel_row=kl.panel_row(chosen)))
+                       flipped=sum(1 for x in chosen if x["flipped"]), in_play=sum(1 for x in chosen if x["in_play"])))
   return rows
 
 

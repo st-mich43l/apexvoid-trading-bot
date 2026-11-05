@@ -551,20 +551,6 @@ def emit_labels(regs, gap):
   return out
 
 
-def panel_row(chosen, limit=40):
-  """The `KL` panel value: the drawn prices by side, nearest first (in play marked `●`), truncated with `…`. Above price `▲`, below `▼`."""
-  up = " · ".join("%.2f%s" % (lv["price"], "●" if lv["in_play"] else "") for lv in chosen if lv["side"] == "resistance")
-  down = " · ".join("%.2f%s" % (lv["price"], "●" if lv["in_play"] else "") for lv in chosen if lv["side"] == "support")
-  text = ("▲ " + up if up else "") + ("  " if up and down else "") + ("▼ " + down if down else "")
-  return text[:limit - 1] + "…" if len(text) > limit else text
-
-
-def panel_tooltip(rows, cov):
-  """The `KL` panel tooltip: every level found, highest first, one per line, then the coverage line."""
-  lines = ["%.2f · %s · %d touches · formed as %s%s%s · %s" % (lv["price"], lv["kind"], lv["touches"], lv["formed"], " · flipped" if lv["flipped"] else "", " · in play" if lv["in_play"] else "", "drawn" if lv["drawn"] else "not drawn") for lv in rows]
-  return "\n".join(lines + [coverage_text(cov)])
-
-
 def tooltip(lv, tol, mode, window, cov):
   """The tooltip of a key level (the Pine string, in the same order)."""
   side = lv["side"]

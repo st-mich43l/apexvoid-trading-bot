@@ -97,10 +97,6 @@ VETTED = {
     "ta.lowest",
     "ta.pivothigh",
     "ta.pivotlow",
-    "table.cell",
-    "table.clear",
-    "table.merge_cells",
-    "table.new",
     "timeframe.in_seconds",
 }
 
@@ -178,17 +174,10 @@ def test_no_request_security_of_the_charts_own_structure_series():
   assert not re.search(r"request\.security\([^\n]*\[[^\]\n]*(bias|activeProtected|protectedHigh|protectedLow)", code), "request.security of the structure series"
 
 
-def test_every_dashboard_row_is_inside_the_table():
-  """RE10040 at run time ("Row 27 is out of table bounds, number of rows is 23"): a row used by f_key / f_val / table.cell / table.clear / table.merge_cells that the table
-  was not created with. Found after v2.18 shrank the table; the compile cannot see it."""
+def test_the_indicator_draws_no_table():
+  """v2.19 removed the Market Intelligence panel: no table is created, so no RE10040 (row out of table bounds) can come back, and nothing on the chart is a board."""
   src = open(PINE, encoding="utf-8").read()
-  rows = int(re.search(r"table\.new\(dashboardPosition, 2, (\d+)", src).group(1))
-  used = [int(x) for x in re.findall(r"\bf_(?:key|val)\((\d+),", src)]
-  used += [int(x) for x in re.findall(r"table\.cell\(dashboard, \d, (\d+),", src)]
-  used += [int(x) for m in re.findall(r"table\.clear\(dashboard, \d+, \d+, \d+, (\d+)\)", src) for x in [m]]
-  used += [int(x) for m in re.findall(r"table\.merge_cells\(dashboard, \d+, (\d+), \d+, (\d+)\)", src) for x in m]
-  assert used and max(used) < rows, "row %d used, table has %d rows" % (max(used), rows)
-  assert max(used) == rows - 1, "the table has unused rows (%d rows, last used %d)" % (rows, max(used))
+  assert "table." not in src and "showDashboard" not in src and "dashboard" not in src.lower()
 
 
 def test_the_indicator_call_does_not_declare_no_scale():
@@ -263,7 +252,7 @@ def test_key_level_loops_are_guarded_against_empty_arrays():
     assert guard in body, guard
   # every `for ... to nl - 1` / `to ns - 1` sits under its guard (nl = 0 would run it twice): the loops over the levels are all inside `if nl > 0`
   inside = body[body.index("        if nl > 0\n"):]
-  assert inside.count("to nl - 1") == 2 and body.count("to nl - 1") == 2 and "for j = nl - 1 to 0" in inside
+  assert inside.count("to nl - 1") == 2 and body.count("to nl - 1") == 2 and "for j = nl - 1 to 0" not in body
 
 
 def test_no_block_opener_is_left_empty():
