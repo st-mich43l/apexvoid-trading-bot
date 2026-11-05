@@ -2339,8 +2339,9 @@ var line[] vpDevLines = array.new_line()
 var float[] vpLast = array.new_float()
 var string vpLastTip = ""
 var float[] nkP = array.new_float()
-var line[] nkL = array.new_line()
+var int[] nkB = array.new_int()
 var string[] nkT = array.new_string()
+var line[] nkLines = array.new_line()
 
 if vpOn and barstate.isconfirmed
     if vpOpen and array.size(vpH) > 0
@@ -2372,12 +2373,12 @@ if vpOn and barstate.isconfirmed
         vpLastTip := tip
         if vpNaked
             array.push(nkP, pocP)
-            array.push(nkL, f_vpLine(bar_index - 1, bar_index + gutter, pocP, 55, line.style_dashed))
+            array.push(nkB, bar_index - 1)
             array.push(nkT, tip)
             if array.size(nkP) > 6
                 array.shift(nkP)
+                array.shift(nkB)
                 array.shift(nkT)
-                line.delete(array.shift(nkL))
     if vpOpen or barstate.isfirst
         array.clear(vpH)
         array.clear(vpL)
@@ -2390,9 +2391,8 @@ if vpOn and barstate.isconfirmed
     if array.size(nkP) > 0
         for k = array.size(nkP) - 1 to 0
             if low <= array.get(nkP, k) and high >= array.get(nkP, k)
-                line.delete(array.get(nkL, k))
                 array.remove(nkP, k)
-                array.remove(nkL, k)
+                array.remove(nkB, k)
                 array.remove(nkT, k)
 
 if vpOn and barstate.islast and array.size(vpH) > 0
@@ -2432,12 +2432,13 @@ if vpOn and barstate.islast and array.size(vpH) > 0
         for k = 0 to 2
             if f_scaleOk(array.get(vpLast, k))
                 f_regLabel(array.get(vpLast, k), (k == 0 ? "POC " : k == 1 ? "VAH " : "VAL ") + f_px(array.get(vpLast, k)), vpColor, 18, vpLastTip, 5, 3)
+    // A naked POC far from price gets no line at all: a transparent line still counts for the price auto-scale and stretches the chart.
+    while array.size(nkLines) > 0
+        line.delete(array.pop(nkLines))
     if array.size(nkP) > 0
         for k = 0 to array.size(nkP) - 1
-            bool inView = f_scaleOk(array.get(nkP, k))
-            line.set_x2(array.get(nkL, k), bar_index + gutter)
-            line.set_color(array.get(nkL, k), inView ? color.new(vpColor, 55) : na)
-            if inView
+            if f_scaleOk(array.get(nkP, k))
+                array.push(nkLines, f_vpLine(array.get(nkB, k), bar_index + gutter, array.get(nkP, k), 55, line.style_dashed))
                 f_regLabel(array.get(nkP, k), "nPOC " + f_px(array.get(nkP, k)), vpColor, 17, array.get(nkT, k) + " · naked until a later bar trades through it", 5, 3)
 
 
