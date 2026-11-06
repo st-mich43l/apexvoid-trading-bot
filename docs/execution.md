@@ -237,6 +237,10 @@ otherwise the leg is written off as already gone.
   `execution.reaction_risk_leg` holds its switch and sizing table, read by the
   planner; technical provenance never changes the leg set. Manual `/algo` keeps
   its own zone ladder (shallow at the near edge, deep at the midpoint).
+  **An XAU setup never enters its full volume at one price** (owner rule 2026-11-06): a zone narrower than `zone_scaling.fill_min_atr` x ATR is still split
+  with the shallow/deep legs (80% / 20%), and an in-zone market preference becomes market L1 plus a limit L2 halfway to the far edge. The only way back to a
+  single entry is switching `zone_scaling.fill_enabled` off. Because the plan is multi-leg, it carries the risk leg. FX stays single-best-entry; M1 scalps stay
+  single-market.
   `contracts/autotrade/xau-ladder-spec.json` pins the manual entry prices and
   the risk leg in both languages.
 - **The card price is the order price.** Every price on a card (entry zone,
