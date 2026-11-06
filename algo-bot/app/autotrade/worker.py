@@ -79,6 +79,7 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
 )
 from app.autotrade.strategy_taxonomy import (
+  is_m1_scalp_match,
   is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -115,6 +116,7 @@ from app.autotrade.execution_confirmation import (
   parse_bar_timestamp,
   save_execution_confirmation,
   scalp_effective_chase_pips,
+  scalp_stop_headroom_pips,
   scalp_zone_access,
 )
 from app.autotrade.multi_match import (
@@ -1007,6 +1009,12 @@ def _execution_quote_access(
     except (TypeError, ValueError, AttributeError):
       stop_pips = None
     chase_cap = scalp_effective_chase_pips(inst, stop_pips=stop_pips)
+    if is_m1_scalp_strategy(str(match.strategy)):
+      # A chase lengthens the stop from the worst entry; past the scalp stop cap the plan is refused
+      # (stop_exceeds_go_invalidation_envelope), so cap the chase at the headroom and wait for the retest instead.
+      headroom = scalp_stop_headroom_pips(inst, stop_pips=stop_pips)
+      if headroom is not None:
+        chase_cap = min(chase_cap, headroom)
     scalp_access = scalp_zone_access(
       match.direction,
       getattr(spot, "bid", None),
@@ -2784,7 +2792,12 @@ def static_admission_failure(match: StrategyMatch, *, symbol: str) -> _Admission
       terminal=True,
       message="intent symbol does not match worker symbol",
     )
-  if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
+  # The global confluence floor is the zone-reaction rubric's (touches, wick rejection, displacement grade, session). A scalp-lane
+  # strategy (catalog m1_scalp trait) has no zone reaction and judges itself: its own detector, M1 confirmation, location and stop
+  # book. Production 2026-11-05: all 7 Impulse Pullback opportunities since 28 Oct scored 1 star and were refused here.
+  if not is_m1_scalp_match(match) and match.confluence < max(
+    1, runtime_config.auto_algo.actionability.gates.min_confluence,
+  ):
     return _AdmissionFailure(
       reason_code="confluence_below_minimum",
       terminal=True,
@@ -3196,6 +3209,9 @@ async def _handle_event(
           publish_status=failure.terminal,
         )
         if failure.terminal:
+          await _scalp_outcome(
+            client, routed_match, scalp_outcome.ADMISSION_REJECTED, failure.reason_code,
+          )
           setup = await load_setup(client, routed_match.match_id)
           next_state = (
             None

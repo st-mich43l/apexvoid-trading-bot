@@ -14,7 +14,8 @@ For every closed bar of a live symbol, Algo Bot:
    `analysis.opportunity.v1`; terminal events withdraw them).
 2. **Admits** each one: not already terminal or published, auto trading and the
    strategy enabled, instrument not observing the strategy or its structure timeframe (`observe_only_strategies`, `observe_only_structure_timeframes`; checked at match creation and again here),
-   fresh and not expired, confluence at or above the global floor, quote and
+   fresh and not expired, confluence at or above the global floor (not applied to the
+   scalp lane, whose strategies have no zone reaction to score and judge themselves), quote and
    spread inside the entry contract. A failure records a route outcome with a
    reason code; terminal failures also retire the setup.
 3. **Arbitrates** the admitted intents ([below](#same-thesis-arbitration)).
