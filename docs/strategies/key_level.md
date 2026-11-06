@@ -122,3 +122,13 @@ frozen detector with `frozen_session_context` set. On the 17-capture replay: 5,4
 ## Q3 validation
 
 The 5,444 -> 4,174 drop of Q2 removed an unconditional credit, not measurably worse opportunities: the removed set is not worse than the retained one against matched random entries, in either window, with intervals that include zero (FX flips sign), and HTF alignment, now the practical admission criterion, has never shown a positive relation to outcomes. Nothing restores the artificial confluence. Q3 only stops a session-level sweep on the reaction's own candle from earning the session point a second time (4,174 -> 4,165). Details: [quality](../analysis-engine.md#acceptance-and-quality).
+
+## Per-instrument overrides
+
+`config/instruments.yml` can tighten Key Level for one pair (`applyKeyLevelOverrides`): `overrides.analysis.levels.minimum_key_touches` (also raises the touch minimum of the frame levels the other techniques read on that pair), `overrides.auto_algo.strategies.reaction.key_level.require_explicit_role` (skip levels whose role is ambiguous) and `...require_reaction_sweep` (publish a confirmed reaction only when it swept the level: traded strictly beyond the band's far edge).
+
+| Instrument | Override | Why |
+|---|---|---|
+| XAU | `require_reaction_sweep: true` | 28 Oct 2026 owner report: swept setups held their edge in every period, unswept ones lost it (measured on XAU only). |
+| GBPJPY | `minimum_key_touches: 3`, `require_explicit_role: true` | 25 Aug 2026: Key Level was 0/4 (-118 pips). |
+| EURUSD | `minimum_key_touches: 3`, `require_reaction_sweep: true` | 6 Nov 2026 owner decision: 51 live trades, 55% full stops, -6.64 R on the 23 with a net R. Not measured on FX: replay 461 -> 165 setups, stop rate 38% -> 42%, no measured gain. `require_explicit_role` is not used: every EURUSD setup carries `m5_key_level_role_ambiguous`, so it would disable the strategy on the pair. Review after about 100 trades. |
