@@ -191,6 +191,16 @@ instrument_packs:
     # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
     auto_entry:
       mode: scale
+    # Owner decision 2026-11-06: XAU risk per trade follows equity. 5% of equity from $500 to $5,000, tapering linearly to 2% at $6,000 and staying 2% above;
+    # below $500 the owner equity table still applies. The percent is the TOTAL loss at the stop: the separately-sized XAU risk leg (execution.reaction_risk_leg,
+    # its own fixed lots) is taken out of the budget and the 80/20 entry ladder carries the rest. Lots = budget / (stop pips x pip value per lot), floored to
+    # the broker step; a volume too small to split across both legs collapses to one entry (VolumePlanner.SplitEntryVolume).
+    sizing:
+      mode: risk
+      risk_percent_by_equity:
+        - {equity: 500, risk_percent: 5.0}
+        - {equity: 5000, risk_percent: 5.0}
+        - {equity: 6000, risk_percent: 2.0}
     # XAU is not gated by the clock: Asia earned +1240 pips of the profitable week
     # (London +296, NY +1569). No session or kill-zone gate exists; session is
     # analysis context and a quality input only.

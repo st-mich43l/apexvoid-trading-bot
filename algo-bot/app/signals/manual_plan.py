@@ -16,6 +16,7 @@ from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from app.autotrade import xau_ladder
 from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
@@ -34,7 +35,11 @@ from app.autotrade.trade_plan import (
   TradePlanStop,
   TradePlanTarget,
 )
-from app.autotrade.trade_plan_builder import resolve_max_spread_ticks
+from app.autotrade.trade_plan_builder import (
+  fit_entry_legs_to_volume,
+  pack_risk_sizing,
+  resolve_max_spread_ticks,
+)
 from app.core.config import runtime_config
 from app.runtime.instruments import for_instrument
 from app.signals.manual_intent import ManualTradeIntent
@@ -44,8 +49,10 @@ MANUAL_FAMILY = "manual"
 MANUAL_PLAN_PREFIX = "manual:"
 RISK_LEG_DISABLED_TAG = "risk_leg:disabled"
 
-# Shallow / deep split of a zone ladder (owner 2026-09-08: 80/20).
+# Shallow / deep split of a zone ladder on a non-XAU symbol (owner 2026-09-08: 80/20). XAU uses the shared 60/20/20 price ladder (owner 2026-11-06,
+# xau_ladder.price_ladder), the same one the Auto Algo plans use.
 MANUAL_LADDER_RATIOS = (Decimal("0.8"), Decimal("0.2"))
+_XAU_SYMBOLS = frozenset({"XAU", "XAUUSD"})
 _DEFAULT_PLAN_LIFETIME_SECONDS = 24 * 3600
 _BE_BUFFER_TICKS = 6
 
@@ -122,6 +129,28 @@ def _leg_prices(
   return _quantize(shallow, digits), _quantize(deep, digits)
 
 
+def _xau_ladder_legs(
+  intent: ManualTradeIntent, digits: int,
+) -> tuple[tuple[Decimal, ...], tuple[Decimal, ...]]:
+  """The XAU 60/20/20 ladder over the owner's zone: from the shallow edge toward the far edge, one price unit apart.
+
+  A single-price zone has no span, so the ladder runs toward the stop and never goes past halfway to it (the old deep-leg rule).
+  """
+  low = Decimal(str(min(intent.entry_low, intent.entry_high)))
+  high = Decimal(str(max(intent.entry_low, intent.entry_high)))
+  if low != high:
+    start = high if intent.direction == "BUY" else low
+    far = low if intent.direction == "BUY" else high
+  else:
+    start = low
+    far = start + (Decimal(str(intent.sl)) - start) / 2
+  prices, ratios = xau_ladder.price_ladder(intent.direction, start, far, digits=digits)
+  return (
+    tuple(Decimal(str(price)) for price in prices),
+    tuple(Decimal(str(ratio)) for ratio in ratios),
+  )
+
+
 def build_manual_trade_plan(
   intent: ManualTradeIntent,
   *,
@@ -172,16 +201,20 @@ def build_manual_trade_plan(
     )
     leg_ratios: tuple[Decimal, ...] = (Decimal("1"),)
   else:
+    if intent.symbol.upper() in _XAU_SYMBOLS:
+      ladder_prices, ladder_ratios = _xau_ladder_legs(intent, digits)
+    else:
+      ladder_prices, ladder_ratios = (shallow, deep), MANUAL_LADDER_RATIOS
     entry = TradePlanEntry(
       type=ENTRY_TYPE_LIMIT_LADDER,
       expires_at=expires_at,
       max_spread_ticks=max_spread_ticks,
-      legs=(
-        TradePlanEntryLeg("L1", shallow, MANUAL_LADDER_RATIOS[0]),
-        TradePlanEntryLeg("L2", deep, MANUAL_LADDER_RATIOS[1]),
+      legs=tuple(
+        TradePlanEntryLeg(f"L{index + 1}", price, ratio)
+        for index, (price, ratio) in enumerate(zip(ladder_prices, ladder_ratios))
       ),
     )
-    leg_ratios = MANUAL_LADDER_RATIOS
+    leg_ratios = ladder_ratios
     risk_leg = plan_risk_leg(
       symbol=intent.symbol,
       direction=direction,
@@ -194,6 +227,21 @@ def build_manual_trade_plan(
     )
     if risk_leg is not None:
       entry = replace(entry, risk_leg=risk_leg)
+
+  # Owner decision 2026-11-06: manual /algo is sized like Auto Algo when the instrument pack says so (FX 2% of equity; XAU 5% -> 2% by equity, risk leg
+  # inside the total). A pack without a `sizing` leaf keeps the owner equity table.
+  pack_sizing = pack_risk_sizing(
+    effective, account_equity=account_equity, risk_leg=entry.risk_leg, stop_price=stop_price, pip_size=pip_size,
+  )
+  risk_percent = pack_sizing[0] if pack_sizing else Decimal("1.0")
+  group_percent = max(Decimal("2.0"), pack_sizing[1]) if pack_sizing else Decimal("2.0")
+  entry = fit_entry_legs_to_volume(
+    entry, symbol=intent.symbol, direction=direction, stop_price=stop_price, pip_size=pip_size, account_equity=account_equity, cfg=effective,
+    risk_sized=pack_sizing is not None, main_risk_percent=risk_percent, risk_multiplier=Decimal(str(manual.risk_multiplier)),
+    risk_percent=risk_percent,
+  )
+  if entry.legs:
+    leg_ratios = tuple(leg.volume_ratio for leg in entry.legs)
 
   zone_low = Decimal(str(min(intent.entry_low, intent.entry_high)))
   zone_high = Decimal(str(max(intent.entry_low, intent.entry_high)))
@@ -245,10 +293,10 @@ def build_manual_trade_plan(
     ),
     targets=targets,
     risk=TradePlanRisk(
-      risk_percent=Decimal("1.0"),
+      risk_percent=risk_percent,
       risk_multiplier=Decimal(str(manual.risk_multiplier)),
       max_volume=int(effective.units.plan_max_volume()),
-      max_group_risk_percent=Decimal("2.0"),
+      max_group_risk_percent=group_percent,
     ),
     management=TradePlanManagement(
       be_after_target_id="TP1" if len(targets) > 1 else None,
@@ -272,7 +320,7 @@ def build_manual_trade_plan(
       config_fingerprint="",
     ),
     sizing=TradePlanSizing(
-      mode="equity_table",
+      mode="risk" if pack_sizing else "equity_table",
       table_version="owner_equity_v1",
       entry_distribution="single" if single else "zone_scale",
       leg_ratios=leg_ratios,

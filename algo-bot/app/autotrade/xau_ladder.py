@@ -61,6 +61,39 @@ def entry_leg_prices(
   return EntryLegPrices(shallow=round_price(shallow, digits), deep=round_price(deep, digits))
 
 
+# Owner decision 2026-11-06: the XAU entry ladder (Auto Algo and Manual /algo) divides the volume 60% / 20% / 20% over three prices one price unit (1.00 USD = 10
+# pips) apart, from the shallow edge toward the far edge (the zone's far edge; for a single-price manual zone, halfway to the stop). Fewer prices when the depth is
+# short: the step shrinks to half the depth (not below 0.20), two prices (60/40) under 0.40 of depth, one price for a degenerate zone.
+LADDER_STEP = Decimal("1.0")
+LADDER_RATIOS: dict[int, tuple[float, ...]] = {3: (0.6, 0.2, 0.2), 2: (0.6, 0.4), 1: (1.0,)}
+
+
+def price_ladder(
+  direction: str,
+  start: float | Decimal,
+  far: float | Decimal,
+  *,
+  digits: int = XAU_DIGITS,
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+  """Entry prices and volume ratios of the XAU ladder from ``start`` toward ``far`` (BUY steps down, SELL steps up)."""
+  sign = -1 if direction.upper() == "BUY" else 1
+  first, last = _d(start), _d(far)
+  depth = abs(first - last)
+  if depth >= Decimal("0.40"):
+    step = min(LADDER_STEP, depth / 2)
+    prices = (first, first + sign * step, first + sign * 2 * step)
+  elif depth >= Decimal("0.20"):
+    prices = (first, last)
+  else:
+    prices = (first,)
+  rounded: list[float] = []
+  for price in prices:
+    value = round_price(price, digits)
+    if not rounded or value != rounded[-1]:
+      rounded.append(value)
+  return tuple(rounded), LADDER_RATIOS[len(rounded)]
+
+
 def risk_leg_price(
   direction: str,
   stop_loss: float | Decimal,
