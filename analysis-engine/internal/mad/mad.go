@@ -82,7 +82,7 @@ type AffinityScore struct {
 // explicit: substring guesses were a source of silent detector drift.
 func StrategyKey(strategy string) string {
 	switch normalize(strategy) {
-	case "impulse_pullback":
+	case "impulse_pullback", "impulse_retrace":
 		return "impulse_pullback_continuation"
 	case "":
 		return ""

@@ -11,8 +11,10 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/fvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/ifvg"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulsepullback"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/impulseretrace"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/orderblock"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/rangescalp"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/roundnumber"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/shockretest"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/supply"
@@ -50,4 +52,6 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	roundnumber.ID:       roundnumber.New,
 	asiarange.ID:         asiarange.New,
 	shockretest.ID:       shockretest.New,
+	rangescalp.ID:        rangescalp.New,
+	impulseretrace.ID:    impulseretrace.New,
 }

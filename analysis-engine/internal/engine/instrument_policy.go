@@ -264,11 +264,11 @@ func WithoutKeyLevelSweepRequirement(settings *Settings) {
 	}
 }
 
-// applyTradingDay gives Round Number the session calendar's daily rollover hour, so "one episode per handle per side per trading day" rolls over
+// applyTradingDay gives Round Number and Range Scalp (its daily signal cap) the session calendar's daily rollover hour, so "one episode per handle per side per trading day" rolls over
 // where the session levels do. It is idempotent.
 func applyTradingDay(settings *Settings) {
 	for i := range settings.Strategies {
-		if settings.Strategies[i].ID != "round_number" {
+		if settings.Strategies[i].ID != "round_number" && settings.Strategies[i].ID != "range_scalp" {
 			continue
 		}
 		params := make(map[string]any, len(settings.Strategies[i].Parameters)+1)
@@ -503,6 +503,9 @@ var scalpLaneExtras = map[string]map[string]string{
 		"buy_maximum_position":  "auto_algo.strategies.scalping.location.pullback_buy_maximum_position",
 		"sell_minimum_position": "auto_algo.strategies.scalping.location.pullback_sell_minimum_position",
 	},
+	// PR-S4: Range Scalp and Impulse Retrace read the shared scalp book and nothing else from the lane.
+	"range_scalp":     {},
+	"impulse_retrace": {},
 }
 
 // applyScalpLane gives the M5-setup / M1-confirmation scalp (Impulse Pullback) its instrument scale and the shared M1-scalp

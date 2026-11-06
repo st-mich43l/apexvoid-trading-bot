@@ -101,6 +101,8 @@ var knownIDs = []StrategyID{
 	"trendline",
 	"break_retest",
 	"impulse_pullback",
+	"range_scalp",
+	"impulse_retrace",
 	"round_number",
 	"asia_range",
 	"shock_retest",

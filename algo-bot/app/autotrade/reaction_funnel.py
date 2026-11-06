@@ -222,6 +222,12 @@ async def _maybe_log_funnel_snapshot(
     impulse = await client.hgetall(
       scalp_archetype_funnel_key(sym, "impulse_pullback"),
     ) or {}
+    range_scalp = await client.hgetall(
+      scalp_archetype_funnel_key(sym, "range_scalp"),
+    ) or {}
+    impulse_retrace = await client.hgetall(
+      scalp_archetype_funnel_key(sym, "impulse_retrace"),
+    ) or {}
   except Exception:
     return
 
@@ -237,12 +243,14 @@ async def _maybe_log_funnel_snapshot(
 
   log.info(
     "reaction funnel snapshot symbol=%s trigger_bucket=%s reaction=%s "
-    "scalp=%s scalp_impulse=%s",
+    "scalp=%s scalp_impulse=%s scalp_range=%s scalp_impulse_retrace=%s",
     sym,
     bucket,
     json.dumps(_decode(reaction), sort_keys=True),
     json.dumps(_decode(scalp), sort_keys=True),
     json.dumps(_decode(impulse), sort_keys=True),
+    json.dumps(_decode(range_scalp), sort_keys=True),
+    json.dumps(_decode(impulse_retrace), sort_keys=True),
   )
 
 

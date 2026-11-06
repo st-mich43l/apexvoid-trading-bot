@@ -62,7 +62,7 @@ from app.autotrade.route_outcome import (
 from app.autotrade.go_plan_cancel import SOURCE_EXPIRED, SOURCE_INVALIDATED, plan_id_for_match, request_plan_cancel
 from app.autotrade.go_live_opportunities import go_live_opportunity_ids
 from app.autotrade.execution_policy import classify_tier, risk_multiplier_for_tier
-from app.autotrade.strategy_catalog import lookup_profile
+from app.autotrade.strategy_catalog import SCALP_LANE, exposure_lane, lookup_profile
 from app.autotrade.multi_match import deserialize_matches, serialize_matches, strategy_matches_key
 from app.autotrade.setup_lifecycle import (
   EXPIRED,
@@ -138,6 +138,9 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   # confirmation before Candidate creation.  Python must not run a second M1
   # detector after receiving the event.
   "impulse_pullback": ScopeProfile("impulse_pullback", "Impulse Pullback Scalp", "impulse_pullback", None, frozenset({"M1"}), "go_m5_m1_impulse_pullback", evidence_prefixes=("m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger")),
+  # PR-S4: two Go-native XAU scalps observed on closed M5 bars. The Go candidate is already the confirmed thesis, so neither requires a reaction.
+  "range_scalp": ScopeProfile("range_scalp", "Range Scalp", "range_scalp", None, frozenset({"M5"}), "go_m5_range_scalp", evidence_prefixes=("m5_range_",)),
+  "impulse_retrace": ScopeProfile("impulse_retrace", "Impulse Retrace Scalp", "impulse_retrace", None, frozenset({"M5"}), "go_m5_impulse_retrace", evidence_prefixes=("m5_impulse_bar", "m5_retrace_limit")),
 }
 
 if frozenset(REVIEWED_SCOPES) != CATALOG_STRATEGY_IDS:
@@ -190,6 +193,9 @@ def opportunity_id_for_match_id(match_id: str) -> str:
   """Inverse of match_id_for: the Go opportunity ID behind a Go-origin match."""
   return match_id.removeprefix("go_")
 
+
+# One pip: the whole-pip rounding of a published target plus the tick rounding of its stop.
+_SCALP_ROUNDING_TOLERANCE_PIPS = 1.0
 
 _TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900, "H1": 3600, "H4": 14400}
 
@@ -282,11 +288,13 @@ def build_strategy_match(
   if stop_pips <= 0:
     raise AdapterRejection("degenerate_stop")
   scalp_target_r_multiples: tuple[float, ...] = ()
-  if profile.catalog_id == "impulse_pullback":
-    available_r = targets_pips[-1] / stop_pips
+  if exposure_lane(profile.legacy_strategy) == SCALP_LANE:
+    # The target is published rounded to a whole pip (and to the tick), so a 2R target reads 1.99R; the same one-pip
+    # tolerance the execution policy applies to scalp room (execution_policy: room_tolerance_pips) keeps the 2R rung.
+    farthest_pips = targets_pips[-1] + _SCALP_ROUNDING_TOLERANCE_PIPS
     scalp_target_r_multiples = (
-      (1.0, 2.0) if available_r + 1e-9 >= 2.0
-      else (1.0,) if available_r + 1e-9 >= 1.0
+      (1.0, 2.0) if farthest_pips + 1e-9 >= 2.0 * stop_pips
+      else (1.0,) if farthest_pips + 1e-9 >= stop_pips
       else ()
     )
 

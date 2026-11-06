@@ -61,8 +61,10 @@ def is_scalp_lane(strategy: object) -> bool:
 
 
 def strategy_key(strategy: object) -> str:
-  """Stable metric label: ``Impulse Pullback Scalp`` -> ``impulse_pullback``."""
+  """Stable metric label: ``Impulse Pullback Scalp`` -> ``impulse_pullback``, ``Range Scalp`` -> ``range_scalp``."""
   text = re.sub(r"[^a-z0-9]+", "_", str(strategy or "").lower()).strip("_")
+  if text == "range_scalp":
+    return text  # the suffix is part of the id: stripping it would label Range Scalp "range"
   return text.removesuffix("_scalp") or "unknown"
 
 
