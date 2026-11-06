@@ -79,6 +79,7 @@ from app.autotrade.strategy_match import (
   StrategyMatch,
 )
 from app.autotrade.strategy_taxonomy import (
+  is_m1_scalp_match,
   is_m1_scalp_strategy,
   is_reaction_strategy,
   is_scalp_strategy,
@@ -2784,7 +2785,12 @@ def static_admission_failure(match: StrategyMatch, *, symbol: str) -> _Admission
       terminal=True,
       message="intent symbol does not match worker symbol",
     )
-  if match.confluence < max(1, runtime_config.auto_algo.actionability.gates.min_confluence):
+  # The global confluence floor is the zone-reaction rubric's (touches, wick rejection, displacement grade, session). A scalp-lane
+  # strategy (catalog m1_scalp trait) has no zone reaction and judges itself: its own detector, M1 confirmation, location and stop
+  # book. Production 2026-11-05: all 7 Impulse Pullback opportunities since 28 Oct scored 1 star and were refused here.
+  if not is_m1_scalp_match(match) and match.confluence < max(
+    1, runtime_config.auto_algo.actionability.gates.min_confluence,
+  ):
     return _AdmissionFailure(
       reason_code="confluence_below_minimum",
       terminal=True,
@@ -3196,6 +3202,9 @@ async def _handle_event(
           publish_status=failure.terminal,
         )
         if failure.terminal:
+          await _scalp_outcome(
+            client, routed_match, scalp_outcome.ADMISSION_REJECTED, failure.reason_code,
+          )
           setup = await load_setup(client, routed_match.match_id)
           next_state = (
             None

@@ -25,6 +25,7 @@ TradePlan is published.
 - **Certification**: parity proven on synthetic M1 captures only ([catalog](README.md#catalog)).
 - **Symbols**: XAU.
 - **Execution**: live on XAU since the owner rule of 2026-10-14 (no observe-only on any instrument). Before that it was observe-only: net -49 pips over 11 live trades of the earlier simplified thesis.
+- **Confluence floor**: not applied. The global `min_confluence` is the zone-reaction rubric (touches, wick rejection, displacement grade, session); this strategy has no zone reaction and always scored 1 star (all 7 opportunities since 28 Oct), so the floor refused every one at admission. It is judged by its own detector, M1 confirmation, location and stop book. A terminal admission refusal now ends as `scalp_outcome ... terminal=admission_rejected:<code>` (it used to be recorded as `waiting_retest_expired` at expiry).
 - **Arbitration**: opportunities on the same symbol and direction that share a
   thesis group, a structure or an entry corridor compete; the best by execution eligibility, then freshness, then id trades
   (no quality score is part of the order) and the rest are suppressed ([execution](../execution.md#same-thesis-arbitration)).
