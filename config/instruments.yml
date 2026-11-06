@@ -30,6 +30,12 @@ instrument_packs:
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
+    # Owner decision 2026-11-06: FX risks 2% of equity per trade. Lots = equity x risk_percent / (stop pips x pip value per lot), floored to the broker step,
+    # instead of the flat equity table x 1.5 (0.18 lot at $1,000-$2,000, which was 1.7-3.7% depending on the stop). The stop is measured from the worst entry
+    # price to the plan's stop. XAU keeps the equity table (no `sizing` leaf).
+    sizing:
+      mode: risk
+      risk_percent: 2.0
     stop_envelope:
       min_pips: 12
       max_pips: 20
@@ -107,6 +113,12 @@ instrument_packs:
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
+    # Owner decision 2026-11-06: FX risks 2% of equity per trade. Lots = equity x risk_percent / (stop pips x pip value per lot), floored to the broker step,
+    # instead of the flat equity table x 1.5 (0.18 lot at $1,000-$2,000, which was 1.7-3.7% depending on the stop). The stop is measured from the worst entry
+    # price to the plan's stop. XAU keeps the equity table (no `sizing` leaf).
+    sizing:
+      mode: risk
+      risk_percent: 2.0
     activation:
       trigger_maximum_age_bars: 3
     price_scale:

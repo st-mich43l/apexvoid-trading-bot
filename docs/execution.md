@@ -247,6 +247,11 @@ otherwise the leg is written off as already gone.
 - **FX** takes one precise entry per plan with 1R/2R targets closing 50/50 and
   break-even after 1R; the stop envelope is per pair (EURUSD 12-20 pips,
   GBPUSD 15-25, GBPJPY 22-35, USDJPY 18-28).
+  **FX is sized by risk, 2% of equity per trade** (owner decision 2026-11-06, `sizing: {mode: risk, risk_percent: 2.0}` in both FX packs): the executor sizes
+  lots = equity x 2% / (stop pips x pip value per lot), with the stop measured from the worst entry price to the plan's stop, floored to the broker step (never rounded
+  up). EURUSD and GBPUSD use $10 per lot per pip, USDJPY and GBPJPY their `contract.pip_value_per_lot`. Before this, FX used the equity table x 1.5 (0.18 lot at
+  $1,000-$2,000), which risked 1.6-3.7% depending on the stop. XAU keeps the equity table; scalps keep their own sizing. The plan's `risk.risk_percent` and
+  `sizing.mode` carry the rule, so a card shows what the executor will use.
 - **Scalps** (`impulse_pullback`) keep their own M1 stop book and ladder; XAU-only.
 
 ## Operator controls
