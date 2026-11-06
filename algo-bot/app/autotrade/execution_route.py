@@ -334,9 +334,19 @@ def resolve_execution_route_plan(
       stop=structural_stop,
       digits=digits,
     )
-    if manual_xau_ladder and split_ok
+    if manual_xau_ladder
     else None
   )
+  # Owner rule 2026-11-06: an XAU setup always divides its volume (shallow leg + deeper leg) and never enters the full volume at one price. The ATR minimum
+  # (zone_fill_min_atr) used to refuse the split when widening the zone was capped at half the distance to the stop (XAU order block 4041.42-4044.42, M15 ATR
+  # 7.23: minimum 3.61, widened width 3.50), so the setup collapsed to one single-leg market entry with no risk leg. The Manual Algo shallow/deep legs are
+  # used whenever they exist and differ; the zone-fill switch still turns the whole ladder off.
+  if (
+    manual_xau_legs is not None
+    and zone_fill_enabled
+    and manual_xau_legs[0] != manual_xau_legs[1]
+  ):
+    split_ok = True
   manual_xau_ratios = (0.80, 0.20)
   geometry = (
     "inside"
@@ -522,6 +532,22 @@ def resolve_execution_route_plan(
       scaled = _market_with_limit_scale_plan()
       if scaled is not None:
         return scaled
+    # XAU never enters its full volume at one price: market L1 now, limit L2 halfway from the quote to the far edge of the zone.
+    if manual_xau_ladder and split_ok and geometry == "inside":
+      remaining_far = low if side == "BUY" else high
+      l2_price = _round_price((quote + remaining_far) / 2.0, digits)
+      l2_price = min(high, max(low, l2_price)) if side == "BUY" else max(low, min(high, l2_price))
+      l1_price = _round_price(quote, digits)
+      if l1_price != l2_price:
+        return ExecutionRoutePlan(
+          ROUTE_MARKET_WITH_LIMIT_SCALE,
+          l1_price,
+          (l1_price, l2_price),
+          geometry,
+          "execution policy: XAU market ladder (never one full-volume entry)",
+          True,
+          planned_leg_volume_ratios=manual_xau_ratios,
+        )
     if distribution in {"zone_split", "zone_scale"}:
       return ExecutionRoutePlan(
         ROUTE_ZONE_SPLIT,
