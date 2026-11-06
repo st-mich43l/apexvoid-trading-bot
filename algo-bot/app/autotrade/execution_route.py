@@ -219,36 +219,43 @@ def _deeper_second_leg(
   )
 
 
-def _manual_xau_entry_legs(
+# Owner decision 2026-11-06: an XAU setup divides its entry volume 60% / 20% / 20% over three prices one price unit (1.00 USD = 10 pips) apart, from the shallow edge
+# (or the live quote when it is inside the zone) toward the zone's far edge. Manual /algo keeps its own 80/20 shallow/deep ladder (xau_ladder.py).
+XAU_LADDER_STEP_PRICE = 1.0
+XAU_LADDER_RATIOS = {3: (0.6, 0.2, 0.2), 2: (0.6, 0.4), 1: (1.0,)}
+
+
+def _xau_price_ladder(
   *,
   side: str,
+  start: float,
   low: float,
   high: float,
-  stop: float | None,
   digits: int,
-) -> tuple[float, float] | None:
-  """Return the Manual Algo shallow/deep geometry for an XAU ladder.
+) -> tuple[tuple[float, ...], tuple[float, ...]]:
+  """Entry prices and volume ratios of the XAU ladder.
 
-  Manual Algo owns this contract: shallow is the near edge (BUY high, SELL
-  low), deep is the zone midpoint, and both prices use Decimal/AwayFromZero
-  rounding. A degenerate zone needs the stop to derive its deep leg; when it
-  is unavailable, the caller keeps the existing route instead of inventing a
-  stop.
+  Three prices one XAU_LADDER_STEP_PRICE apart when the zone has room (at least 2 steps of depth would be ideal; the step shrinks to depth / 2 when the zone is
+  shallower, down to 0.20 USD per step); two prices (60/40, start and the far edge) when the depth is between 0.20 and 0.40 USD; a single price only for a
+  degenerate zone. Prices are never outside [low, high].
   """
-  if low == high and stop is None:
-    return None
-  from app.autotrade.xau_ladder import entry_leg_prices
-
-  legs = entry_leg_prices(
-    side,
-    low,
-    high,
-    low if stop is None else stop,
-  )
-  return (
-    _round_price(legs.shallow, digits),
-    _round_price(legs.deep, digits),
-  )
+  far = low if side == "BUY" else high
+  sign = -1.0 if side == "BUY" else 1.0
+  start = min(high, max(low, start))
+  depth = abs(start - far)
+  if depth >= 0.40:
+    step = min(XAU_LADDER_STEP_PRICE, depth / 2.0)
+    prices = (start, start + sign * step, start + sign * 2.0 * step)
+  elif depth >= 0.20:
+    prices = (start, far)
+  else:
+    prices = (start,)
+  rounded: list[float] = []
+  for price in prices:
+    value = _round_price(price, digits)
+    if not rounded or value != rounded[-1]:
+      rounded.append(value)
+  return tuple(rounded), XAU_LADDER_RATIOS[len(rounded)]
 
 
 def resolve_execution_route_plan(
@@ -326,28 +333,20 @@ def resolve_execution_route_plan(
   midpoint = _round_price((low + high) / 2.0, digits)
   first_leg_fraction = min(1.0, max(0.0, scale_first_leg_fraction))
   leg_ratios = (first_leg_fraction, round(1.0 - first_leg_fraction, 6))
-  manual_xau_legs = (
-    _manual_xau_entry_legs(
-      side=side,
-      low=low,
-      high=high,
-      stop=structural_stop,
-      digits=digits,
+  manual_xau_legs: tuple[float, ...] | None = None
+  manual_xau_ratios: tuple[float, ...] = (0.80, 0.20)
+  if manual_xau_ladder:
+    ladder_prices, ladder_ratios = _xau_price_ladder(
+      side=side, start=high if side == "BUY" else low, low=low, high=high, digits=digits,
     )
-    if manual_xau_ladder
-    else None
-  )
-  # Owner rule 2026-11-06: an XAU setup always divides its volume (shallow leg + deeper leg) and never enters the full volume at one price. The ATR minimum
-  # (zone_fill_min_atr) used to refuse the split when widening the zone was capped at half the distance to the stop (XAU order block 4041.42-4044.42, M15 ATR
-  # 7.23: minimum 3.61, widened width 3.50), so the setup collapsed to one single-leg market entry with no risk leg. The Manual Algo shallow/deep legs are
-  # used whenever they exist and differ; the zone-fill switch still turns the whole ladder off.
-  if (
-    manual_xau_legs is not None
-    and zone_fill_enabled
-    and manual_xau_legs[0] != manual_xau_legs[1]
-  ):
+    if len(ladder_prices) >= 2:
+      manual_xau_legs, manual_xau_ratios = ladder_prices, ladder_ratios
+  # Owner rule 2026-11-06: an XAU setup always divides its volume (60/20/20 over three prices one price unit apart) and never enters the full volume at one
+  # price. The ATR minimum (zone_fill_min_atr) used to refuse the split when widening the zone was capped at half the distance to the stop (XAU order block
+  # 4041.42-4044.42, M15 ATR 7.23: minimum 3.61, widened width 3.50), so the setup collapsed to one single-leg market entry with no risk leg. The ladder is
+  # used whenever it has at least two prices; the zone-fill switch still turns the whole ladder off.
+  if manual_xau_legs is not None and zone_fill_enabled:
     split_ok = True
-  manual_xau_ratios = (0.80, 0.20)
   geometry = (
     "inside"
     if low <= quote <= high
@@ -418,6 +417,18 @@ def resolve_execution_route_plan(
     # L1 reference price is the live quote (not a limit); L2 is deeper limit.
     l1_price = _round_price(quote, digits)
     if manual_xau_legs is not None:
+      quote_prices, quote_ratios = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits)
+      if len(quote_prices) >= 2:
+        return ExecutionRoutePlan(
+          ROUTE_MARKET_WITH_LIMIT_SCALE,
+          quote_prices[0],
+          quote_prices,
+          geometry,
+          "execution policy: XAU live-zone price ladder",
+          True,
+          planned_leg_volume_ratios=quote_ratios,
+        )
+    if manual_xau_legs is not None:
       # A confirmed XAU reaction can arrive after price has already crossed
       # the manual shallow edge and original midpoint. Reusing either level
       # creates a marketable L2 that fills with L1; a tiny generic ATR step
@@ -477,25 +488,16 @@ def resolve_execution_route_plan(
     # empty ``entry.legs`` array.  M1 chase scalps deliberately remain
     # single-market and are excluded by ``manual_xau_ladder``.
     if manual_xau_ladder and split_ok:
-      remaining_far = low if side == "BUY" else high
-      l2_price = _round_price(
-        (quote + remaining_far) / 2.0,
-        digits,
-      )
-      if side == "BUY":
-        l2_price = min(high, max(low, l2_price))
-      else:
-        l2_price = max(low, min(high, l2_price))
-      l1_price = _round_price(quote, digits)
-      if l1_price != l2_price:
+      quote_prices, quote_ratios = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits)
+      if len(quote_prices) >= 2:
         return ExecutionRoutePlan(
           ROUTE_MARKET_WITH_LIMIT_SCALE,
-          l1_price,
-          (l1_price, l2_price),
+          quote_prices[0],
+          quote_prices,
           geometry,
-          "scalp: XAU Manual Algo shallow/deep ladder",
+          "scalp: XAU price ladder",
           True,
-          planned_leg_volume_ratios=manual_xau_ratios,
+          planned_leg_volume_ratios=quote_ratios,
           immediate_market=True,
         )
     # Scalp: single-leg market only (no micro-grid) - fast, simple
@@ -534,19 +536,16 @@ def resolve_execution_route_plan(
         return scaled
     # XAU never enters its full volume at one price: market L1 now, limit L2 halfway from the quote to the far edge of the zone.
     if manual_xau_ladder and split_ok and geometry == "inside":
-      remaining_far = low if side == "BUY" else high
-      l2_price = _round_price((quote + remaining_far) / 2.0, digits)
-      l2_price = min(high, max(low, l2_price)) if side == "BUY" else max(low, min(high, l2_price))
-      l1_price = _round_price(quote, digits)
-      if l1_price != l2_price:
+      quote_prices, quote_ratios = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits)
+      if len(quote_prices) >= 2:
         return ExecutionRoutePlan(
           ROUTE_MARKET_WITH_LIMIT_SCALE,
-          l1_price,
-          (l1_price, l2_price),
+          quote_prices[0],
+          quote_prices,
           geometry,
           "execution policy: XAU market ladder (never one full-volume entry)",
           True,
-          planned_leg_volume_ratios=manual_xau_ratios,
+          planned_leg_volume_ratios=quote_ratios,
         )
     if distribution in {"zone_split", "zone_scale"}:
       return ExecutionRoutePlan(

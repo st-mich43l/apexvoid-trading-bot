@@ -224,10 +224,10 @@ otherwise the leg is written off as already gone.
 
 ## Entry, stop and targets
 
-- **XAU** scales in: the first leg (80% of the volume) enters at the proximal
-  edge of the zone, either at market when the quote is inside the entry contract
-  or as a resting limit, and the second leg (20%) rests one `scale_step_atr`
-  (0.1 ATR) deeper, capped at the far edge. The structure stop is held to the
+- **XAU** scales in over three prices (owner decision 2026-11-06): 60% / 20% / 20% of the volume, one price unit (1.00 USD = 10 pips) apart. The first leg
+  enters at the proximal edge of the zone (or at market when the quote is inside the entry contract), the others rest 1.00 and 2.00 deeper toward the far edge;
+  when the zone is shallower than two price units the step shrinks to half the depth (not below 0.20), and with less than 0.40 depth the ladder has two prices
+  (60/40). A volume too small to give every leg the broker minimum keeps as many legs as it can fill (`trade_plan_builder`). The structure stop is held to the
   50-70 pip envelope, targets are 1R/2R/3R/4R closing 40/20/20/20 with
   break-even after 1R, and unfilled legs are cancelled after TP. The optional
   XAU risk leg (0.02/0.05 lots by equity, 15 pips inside the stop) is declared
@@ -238,9 +238,14 @@ otherwise the leg is written off as already gone.
   planner; technical provenance never changes the leg set. Manual `/algo` keeps
   its own zone ladder (shallow at the near edge, deep at the midpoint).
   **An XAU setup never enters its full volume at one price** (owner rule 2026-11-06): a zone narrower than `zone_scaling.fill_min_atr` x ATR is still split
-  with the shallow/deep legs (80% / 20%), and an in-zone market preference becomes market L1 plus a limit L2 halfway to the far edge. The only way back to a
+  with the 60/20/20 price ladder, and an in-zone market preference becomes market L1 plus limit L2 and L3 one and two price units deeper. The only way back to a
   single entry is switching `zone_scaling.fill_enabled` off. Because the plan is multi-leg, it carries the risk leg. FX stays single-best-entry; M1 scalps stay
   single-market.
+  **XAU is sized by risk that follows equity** (owner decision 2026-11-06, `sizing.risk_percent_by_equity` in the XAU pack): 5% of equity per trade from $500 to $5,000,
+  tapering linearly to 2% at $6,000 and 2% above; below $500 the owner equity table still applies. The percent is the total loss at the stop: the planner subtracts
+  the separately-sized risk leg's own loss (15 pips from the stop x its fixed lots) from the budget, publishes the remainder as `risk.risk_percent` with
+  `sizing.mode: risk`, and the executor sizes the 60/20/20 entry ladder as budget / (stop pips x pip value per lot), floored to the broker step. The risk leg keeps its
+  fixed lots and is placed as its own order; a volume too small to split across both entry legs collapses to one entry.
   `contracts/autotrade/xau-ladder-spec.json` pins the manual entry prices and
   the risk leg in both languages.
 - **The card price is the order price.** Every price on a card (entry zone,
