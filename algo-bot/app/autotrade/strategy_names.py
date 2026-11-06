@@ -64,6 +64,8 @@ BREAKOUT_CONTINUATION = "Breakout Continuation"
 MAPPED_ZONE_REACTION = "Mapped Zone Reaction"
 IMPULSE_PULLBACK_SCALP = "Impulse Pullback Scalp"
 MOMENTUM_CHASE_SCALP = "Momentum Chase Scalp"
+RANGE_SCALP = "Range Scalp"
+IMPULSE_RETRACE_SCALP = "Impulse Retrace Scalp"
 GOLDEN_FIBO = "Golden Fibo"
 
 
@@ -100,6 +102,8 @@ STRATEGY_NAMES: tuple[StrategyName, ...] = (
   _name(MAPPED_ZONE_REACTION, retired=True),
   _name(IMPULSE_PULLBACK_SCALP, aliases=("impulse pullback", "hfs impulse pullback")),
   _name(MOMENTUM_CHASE_SCALP, aliases=("momentum", "hfs momentum chase"), retired=True),
+  _name(RANGE_SCALP),
+  _name(IMPULSE_RETRACE_SCALP),
   _name(GOLDEN_FIBO, aliases=("golden-fibo",), retired=True),
 )
 

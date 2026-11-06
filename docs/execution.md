@@ -129,7 +129,7 @@ expiry (24 h for the zone strategies) or a withdrawn id does
 Opposite-direction exposure is decided per instrument from `instruments.yml`
 (`exposure.opposite_position`) and by the INCOMING trade's exposure lane. The lane is
 the Algo Bot catalog's (`strategy_catalog.exposure_lane`): `scalp` for a strategy whose
-profile carries the `m1_scalp` trait (today only Impulse Pullback Scalp), `standard` for
+profile carries the `m1_scalp` trait (today Impulse Pullback Scalp, Range Scalp and Impulse Retrace Scalp), `standard` for
 everything else and for a name outside the catalog. The lane of the groups already open
 does not matter. Strategy names are never consulted.
 

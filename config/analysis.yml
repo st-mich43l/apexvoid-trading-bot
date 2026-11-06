@@ -168,8 +168,8 @@ analysis:
   # catalog (three standalone strategies were purged) fails
   # startup too, so a stale configuration cannot revive one.
   #
-  # `confluence_zone` is the one compositional exception, so this has 13
-  # entries: 12 independent strategies plus Confluence Zone. Each strategy owns
+  # `confluence_zone` is the one compositional exception, so this has 15
+  # entries: 14 independent strategies plus Confluence Zone. Each strategy owns
   # its own threshold parsing (internal/strategy/<name>'s own parseConfig) -
   # the registry itself treats these as opaque raw parameters.
   #   minimum_strength/minimum_touches - floors zone.Zone.Strength below which
@@ -650,6 +650,53 @@ analysis:
       displacement_body_fraction: 0.6
       reward_risk_ladder: [2.0, 1.0]
       buffer_m5_atr_multiple: 0.5
+    # Range Scalp (PR-S4, docs/strategies/range_scalp.md): inside an M5 range that is going sideways, a probe of an edge that closes back inside is faded at
+    # market. XAU only. Stop and target are the shared scalp book (auto_algo.strategies.scalping.*, injected): stop 30-70 pips (wider is refused), ladder 2R then 1R.
+    range_scalp:
+      version: v1
+      enabled: true
+      symbols: [XAU]
+      # The range is the high and low of this many closed M5 bars before the signal bar.
+      range_lookback_bars: 24
+      # Sideways: |net move| / path length over the lookback must stay below this.
+      maximum_efficiency_ratio: 0.30
+      # The range must be 2 to 6 ATR (Wilder, M5) wide.
+      minimum_range_atr: 2.0
+      maximum_range_atr: 6.0
+      # An edge probe reaches the outer tenth of the range and closes back inside the inner 80 percent.
+      edge_fraction: 0.10
+      # Stop = beyond the probe extreme or the range edge by this many ATR (then widened to the scalp minimum).
+      stop_buffer_atr: 0.10
+      # Width of the market entry band around the signal close (the XAU deep_entry_minimum_width_pips).
+      entry_width_pips: 3.0
+      # At most one signal per this many M5 bars, and this many per trading day (rolls over with the session calendar, 17:00 New York).
+      cooldown_bars: 6
+      maximum_signals_per_day: 8
+      expiry_minutes: 15
+      atr_length: 14
+      atr_window_bars: 140
+      reward_risk_ladder: [2.0, 1.0]
+    # Impulse Retrace Scalp (PR-S4, docs/strategies/impulse_retrace.md): after one forceful M5 displacement bar, the first retrace to its midpoint is traded in the
+    # direction of the impulse. XAU only, every session: there is no clock, session or MAD-phase condition. Stop and target are the shared scalp book.
+    impulse_retrace:
+      version: v1
+      enabled: true
+      symbols: [XAU]
+      # The impulse bar's body must be at least this many ATR (Wilder, M5, known before the bar).
+      impulse_body_atr: 2.0
+      # At most one impulse per this many M5 bars.
+      cooldown_bars: 12
+      # The entry limit sits this fraction of the impulse bar's range back from its extreme.
+      retrace_fraction: 0.50
+      # Stop = beyond the impulse bar's origin by this many ATR (then widened to the scalp minimum).
+      stop_buffer_atr: 0.10
+      # Width of the limit entry band (the XAU deep_entry_minimum_width_pips).
+      entry_width_pips: 3.0
+      # Unfilled this many minutes after the impulse bar closes, the setup expires.
+      entry_window_minutes: 60
+      atr_length: 14
+      atr_window_bars: 140
+      reward_risk_ladder: [2.0, 1.0]
     round_number:
       # v1 (docs/strategies/round_number.md): stop runs at gold handles (Osler 2003/2005). The stop orders cluster just beyond a round number: a trade
       # through the band that is taken straight back is a stop run to fade, one that is accepted is a cascade to trade on the retest. Scoped to XAU.

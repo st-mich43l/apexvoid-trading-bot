@@ -1,6 +1,6 @@
 # Strategies
 
-Fifteen independent technical theses. Each has one Go package in
+Seventeen independent technical theses. Each has one Go package in
 `analysis-engine/internal/strategy/`, one versioned entry under
 `analysis.strategies` in `config/analysis.yml` and a specification here. All are
 enabled and no instrument contains any of them (`observe_only_strategies: []`
@@ -31,6 +31,8 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | [asia_range](asia_range.md) |
 | `shock_retest` | v2 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction; stop behind the retest extreme, target the shock extreme or its 1.272 extension | [shock_retest](shock_retest.md) |
 | `impulse_pullback` | v3 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | [impulse_pullback](impulse_pullback.md) |
+| `range_scalp` | v1 | M5 | XAU scalp: in a sideways M5 range, the probe of an edge that closes back inside is faded at market | [range_scalp](range_scalp.md) |
+| `impulse_retrace` | v1 | M5 | XAU scalp, every session: the first retrace to the midpoint of a 2 ATR M5 displacement bar, in the impulse direction | [impulse_retrace](impulse_retrace.md) |
 
 "Golden" means the decisions and entry reproduce the frozen Python publisher on
 committed real captures, generated from the oracle and never from Go. The stop,
