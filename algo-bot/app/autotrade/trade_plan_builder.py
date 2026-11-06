@@ -784,8 +784,22 @@ def build_trade_plan_from_strategy_match(
     getattr(scalp_risk, "risk_percent_per_trade", 0.5) or 0.5
   ))
   scalp_sizing_mode = str(getattr(scalp_risk, "sizing_mode", "risk") or "risk")
+  # Owner decision 2026-11-06: an instrument pack can size by risk (`sizing: {mode: risk, risk_percent: N}`): the executor sizes lots = equity x N% /
+  # (stop pips x pip value per lot), floored to the broker step. The FX packs use it (2%); a pack without the leaf (XAU) keeps the owner equity table.
+  pack_sizing = getattr(cfg_resolved, "sizing", None)
+  pack_risk_percent = getattr(pack_sizing, "risk_percent", None)
+  pack_risk_sized = (
+    not is_scalp_plan
+    and str(getattr(pack_sizing, "mode", "") or "") == "risk"
+    and pack_risk_percent is not None
+    and float(pack_risk_percent) > 0
+  )
   risk = TradePlanRisk(
-    risk_percent=scalp_risk_percent if is_scalp_plan else Decimal("1.0"),
+    risk_percent=(
+      scalp_risk_percent if is_scalp_plan
+      else Decimal(str(pack_risk_percent)) if pack_risk_sized
+      else Decimal("1.0")
+    ),
     risk_multiplier=Decimal(str(measured.get(
       "effective_risk_multiplier", match.risk_multiplier,
     ))),
@@ -809,9 +823,9 @@ def build_trade_plan_from_strategy_match(
     leg_ratios = (first_leg_fraction, remainder)
   entry_distribution = str(measured.get("entry_distribution") or "zone_scale")
   sizing = TradePlanSizing(
-    # Owner 2026-09-18: non-scalp stays at its own full equity-table level.
+    # Owner 2026-09-18: non-scalp stays at its own full equity-table level, unless its pack sizes by risk (FX, 2026-11-06).
     # Scalp keeps its configured equity-table volume multiplier.
-    mode=scalp_sizing_mode if is_scalp_plan else "equity_table",
+    mode=scalp_sizing_mode if is_scalp_plan else "risk" if pack_risk_sized else "equity_table",
     table_version="owner_equity_v1",
     entry_distribution=entry_distribution,
     leg_ratios=leg_ratios,
