@@ -235,8 +235,9 @@ otherwise the leg is written off as already gone.
   the executor places exactly the legs the plan declares and never adds one
   (production 2026-10-08: an executor-injected leg the plan did not hold).
   `execution.reaction_risk_leg` holds its switch and sizing table, read by the
-  planner; technical provenance never changes the leg set. Manual `/algo` keeps
-  its own zone ladder (shallow at the near edge, deep at the midpoint).
+  planner; technical provenance never changes the leg set. Manual `/algo` uses the same XAU ladder and the same risk sizing as the Auto Algo (owner decision
+  2026-11-06; `xau_ladder.price_ladder`, `manual_plan.py`): the owner's zone is the ladder's span, a single-price zone runs toward the stop and never past halfway to
+  it, and non-XAU manual ladders keep the 80/20 shallow/deep split. FX manual plans are single-entry and take the FX 2% risk sizing.
   **An XAU setup never enters its full volume at one price** (owner rule 2026-11-06): a zone narrower than `zone_scaling.fill_min_atr` x ATR is still split
   with the 60/20/20 price ladder, and an in-zone market preference becomes market L1 plus limit L2 and L3 one and two price units deeper. The only way back to a
   single entry is switching `zone_scaling.fill_enabled` off. Because the plan is multi-leg, it carries the risk leg. FX stays single-best-entry; M1 scalps stay
@@ -245,9 +246,8 @@ otherwise the leg is written off as already gone.
   tapering linearly to 2% at $6,000 and 2% above; below $500 the owner equity table still applies. The percent is the total loss at the stop: the planner subtracts
   the separately-sized risk leg's own loss (15 pips from the stop x its fixed lots) from the budget, publishes the remainder as `risk.risk_percent` with
   `sizing.mode: risk`, and the executor sizes the 60/20/20 entry ladder as budget / (stop pips x pip value per lot), floored to the broker step. The risk leg keeps its
-  fixed lots and is placed as its own order; a volume too small to split across both entry legs collapses to one entry.
-  `contracts/autotrade/xau-ladder-spec.json` pins the manual entry prices and
-  the risk leg in both languages.
+  fixed lots and is placed as its own order; a volume too small to give every entry leg 0.01 lot keeps as many legs as it can fill.
+  `contracts/autotrade/xau-ladder-spec.json` pins the risk leg and the legacy two-leg prices.
 - **The card price is the order price.** Every price on a card (entry zone,
   stop, targets, risk leg) is what the plan holds and the executor places. A
   setup enters only with the quote inside the card's zone (plus the contract

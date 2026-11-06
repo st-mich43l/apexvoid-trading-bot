@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
+from app.autotrade import xau_ladder
 from app.autotrade.strategy_taxonomy import (
   is_reaction_strategy,
   is_scalp_strategy,
@@ -219,10 +220,9 @@ def _deeper_second_leg(
   )
 
 
-# Owner decision 2026-11-06: an XAU setup divides its entry volume 60% / 20% / 20% over three prices one price unit (1.00 USD = 10 pips) apart, from the shallow edge
-# (or the live quote when it is inside the zone) toward the zone's far edge. Manual /algo keeps its own 80/20 shallow/deep ladder (xau_ladder.py).
-XAU_LADDER_STEP_PRICE = 1.0
-XAU_LADDER_RATIOS = {3: (0.6, 0.2, 0.2), 2: (0.6, 0.4), 1: (1.0,)}
+# Owner decision 2026-11-06: an XAU setup divides its entry volume 60% / 20% / 20% over three prices one price unit apart (xau_ladder.price_ladder, shared with
+# Manual /algo), from the shallow edge (or the live quote when it is inside the zone) toward the zone's far edge.
+XAU_LADDER_RATIOS = xau_ladder.LADDER_RATIOS
 
 
 def _xau_price_ladder(
@@ -233,29 +233,9 @@ def _xau_price_ladder(
   high: float,
   digits: int,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
-  """Entry prices and volume ratios of the XAU ladder.
-
-  Three prices one XAU_LADDER_STEP_PRICE apart when the zone has room (at least 2 steps of depth would be ideal; the step shrinks to depth / 2 when the zone is
-  shallower, down to 0.20 USD per step); two prices (60/40, start and the far edge) when the depth is between 0.20 and 0.40 USD; a single price only for a
-  degenerate zone. Prices are never outside [low, high].
-  """
+  """Entry prices and volume ratios of the XAU ladder inside [low, high] (see xau_ladder.price_ladder)."""
   far = low if side == "BUY" else high
-  sign = -1.0 if side == "BUY" else 1.0
-  start = min(high, max(low, start))
-  depth = abs(start - far)
-  if depth >= 0.40:
-    step = min(XAU_LADDER_STEP_PRICE, depth / 2.0)
-    prices = (start, start + sign * step, start + sign * 2.0 * step)
-  elif depth >= 0.20:
-    prices = (start, far)
-  else:
-    prices = (start,)
-  rounded: list[float] = []
-  for price in prices:
-    value = _round_price(price, digits)
-    if not rounded or value != rounded[-1]:
-      rounded.append(value)
-  return tuple(rounded), XAU_LADDER_RATIOS[len(rounded)]
+  return xau_ladder.price_ladder(side, min(high, max(low, start)), far, digits=digits)
 
 
 def resolve_execution_route_plan(

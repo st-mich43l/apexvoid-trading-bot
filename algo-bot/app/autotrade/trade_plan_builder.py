@@ -130,6 +130,91 @@ def _tiered_risk_percent(tiers: Any, equity: float | None) -> float | None:
   return None
 
 
+def pack_risk_sizing(
+  cfg: Any,
+  *,
+  account_equity: float | None,
+  risk_leg: Any,
+  stop_price: Decimal,
+  pip_size: Any,
+) -> tuple[Decimal, Decimal] | None:
+  """(main risk percent, total risk percent) when the instrument pack sizes by risk, else None (the owner equity table applies).
+
+  The pack's `sizing: {mode: risk, risk_percent: N}` (FX 2%) or `risk_percent_by_equity` (XAU) gives the TOTAL loss at the stop. The separately-sized risk leg's own
+  loss (its lots x the distance from its price to the stop x pip value) is taken out, so the main ladder carries the remainder; the executor sizes lots =
+  equity x main percent / (stop pips x pip value per lot), floored to the broker step.
+  """
+  sizing = getattr(cfg, "sizing", None)
+  if str(getattr(sizing, "mode", "") or "") != "risk":
+    return None
+  tiers = getattr(sizing, "risk_percent_by_equity", None)
+  total = _tiered_risk_percent(tiers, account_equity) if tiers else getattr(sizing, "risk_percent", None)
+  if total is None or float(total) <= 0:
+    return None
+  total_percent = Decimal(str(total))
+  main_percent = total_percent
+  if risk_leg is not None and account_equity and account_equity > 0:
+    pip_value = getattr(getattr(cfg, "units", None), "pip_value_per_lot", None)
+    if pip_value and float(pip_size) > 0:
+      leg_loss = float(risk_leg.lots) * abs(float(risk_leg.price) - float(stop_price)) / float(pip_size) * float(pip_value)
+      main_percent = max(Decimal("0.1"), total_percent - Decimal(str(round(100.0 * leg_loss / float(account_equity), 4))))
+  return main_percent, total_percent
+
+
+def fit_entry_legs_to_volume(
+  entry: Any,
+  *,
+  symbol: str,
+  direction: str,
+  stop_price: Decimal,
+  pip_size: Any,
+  account_equity: float | None,
+  cfg: Any,
+  risk_sized: bool,
+  main_risk_percent: Decimal,
+  risk_multiplier: Decimal,
+  risk_percent: Decimal,
+) -> Any:
+  """Keep as many entry legs as the estimated volume can fill (0.01 lot each).
+
+  A volume that cannot give every leg the broker minimum collapses to ONE full-volume entry in the executor (VolumePlanner.SplitEntryVolume). A 3-leg XAU ladder
+  (60/20/20) becomes 60/40 at two legs; other counts renormalise their ratios. Nothing changes when the volume is unknown or fills every leg.
+  """
+  if len(entry.legs) < 3 or not account_equity or account_equity <= 0:
+    return entry
+  leg_pip_value = float(getattr(getattr(cfg, "units", None), "pip_value_per_lot", 0) or 0)
+  leg_prices = [float(leg.price) for leg in entry.legs]
+  worst_leg = max(leg_prices) if direction == "BUY" else min(leg_prices)
+  leg_stop_pips = abs(worst_leg - float(stop_price)) / float(pip_size) if float(pip_size) else 0.0
+  if leg_pip_value <= 0 or leg_stop_pips <= 0:
+    return entry
+  if risk_sized:
+    estimated_lots = math.floor(
+      float(account_equity) * float(main_risk_percent) / 100.0 / (leg_stop_pips * leg_pip_value) * 100.0
+    ) / 100.0
+  else:
+    from app.autotrade.group_exposure import planned_lots
+    estimated_lots = planned_lots(
+      symbol=symbol, equity=float(account_equity), sizing_mode="equity_table",
+      risk_multiplier=float(risk_multiplier), risk_percent=float(risk_percent),
+      stop_pips=leg_stop_pips, pip_value_per_lot=leg_pip_value,
+    )
+  if estimated_lots is None or estimated_lots <= 0:
+    return entry
+  fillable = max(1, int(round(estimated_lots * 100.0 + 1e-6)))
+  if not 2 <= fillable < len(entry.legs):
+    return entry
+  kept = entry.legs[:fillable]
+  if len(entry.legs) == 3 and fillable == 2:
+    new_ratios = (Decimal("0.6"), Decimal("0.4"))
+  else:
+    total_ratio = sum(leg.volume_ratio for leg in kept)
+    new_ratios = tuple(leg.volume_ratio / total_ratio for leg in kept)
+  kept = tuple(replace(leg, volume_ratio=ratio) for leg, ratio in zip(kept, new_ratios))
+  kept = kept[:-1] + (replace(kept[-1], volume_ratio=Decimal("1") - sum(leg.volume_ratio for leg in kept[:-1])),)
+  return replace(entry, legs=kept)
+
+
 def _equal_close_ratios(count: int) -> tuple[Decimal, ...]:
   if count == 0:
     return ()
@@ -802,32 +887,16 @@ def build_trade_plan_from_strategy_match(
     getattr(scalp_risk, "risk_percent_per_trade", 0.5) or 0.5
   ))
   scalp_sizing_mode = str(getattr(scalp_risk, "sizing_mode", "risk") or "risk")
-  # Owner decision 2026-11-06: an instrument pack can size by risk (`sizing: {mode: risk, risk_percent: N}`): the executor sizes lots = equity x N% /
-  # (stop pips x pip value per lot), floored to the broker step. The FX packs use it (2%); a pack without the leaf (XAU) keeps the owner equity table.
-  # A pack can also give `risk_percent_by_equity` (XAU: 5% from $500 to $5,000, falling to 2% at $6,000; below $500 the equity table stays). That percent is the
-  # TOTAL loss at the stop: the separately-sized risk leg's own loss is taken out of the budget, so the main legs carry the rest.
-  pack_sizing = getattr(cfg_resolved, "sizing", None)
-  pack_tiers = getattr(pack_sizing, "risk_percent_by_equity", None)
-  pack_risk_percent = (
-    _tiered_risk_percent(pack_tiers, account_equity)
-    if pack_tiers
-    else getattr(pack_sizing, "risk_percent", None)
+  # Owner decision 2026-11-06: an instrument pack can size by risk (FX 2%, XAU 5% -> 2% by equity); see pack_risk_sizing.
+  pack_sizing_result = (
+    None if is_scalp_plan
+    else pack_risk_sizing(
+      cfg_resolved, account_equity=account_equity, risk_leg=risk_leg, stop_price=stop.price, pip_size=pip_size,
+    )
   )
-  pack_risk_sized = (
-    not is_scalp_plan
-    and str(getattr(pack_sizing, "mode", "") or "") == "risk"
-    and pack_risk_percent is not None
-    and float(pack_risk_percent) > 0
-  )
-  pack_main_percent = Decimal(str(pack_risk_percent)) if pack_risk_sized else Decimal("1.0")
-  if pack_risk_sized and risk_leg is not None and account_equity and account_equity > 0:
-    leg_pip_value = getattr(getattr(cfg_resolved, "units", None), "pip_value_per_lot", None)
-    if leg_pip_value:
-      leg_loss = float(risk_leg.lots) * abs(float(risk_leg.price) - float(stop.price)) / float(pip_size) * float(leg_pip_value)
-      pack_main_percent = max(
-        Decimal("0.1"),
-        pack_main_percent - Decimal(str(round(100.0 * leg_loss / float(account_equity), 4))),
-      )
+  pack_risk_sized = pack_sizing_result is not None
+  pack_risk_percent = pack_sizing_result[1] if pack_sizing_result else None
+  pack_main_percent = pack_sizing_result[0] if pack_sizing_result else Decimal("1.0")
   risk = TradePlanRisk(
     risk_percent=(
       scalp_risk_percent if is_scalp_plan
@@ -842,39 +911,10 @@ def build_trade_plan_from_strategy_match(
     ),
   )
 
-  # A volume that cannot give every entry leg the broker minimum (0.01 lot on XAU) collapses to ONE full-volume entry in the executor
-  # (VolumePlanner.SplitEntryVolume). Keep as many legs as the estimated volume can fill (XAU 60/20/20 -> 60/40 at two legs) so a small account still divides.
-  if len(entry.legs) >= 3 and account_equity and account_equity > 0:
-    units_cfg = getattr(cfg_resolved, "units", None)
-    leg_pip_value = float(getattr(units_cfg, "pip_value_per_lot", 0) or 0)
-    leg_prices = [float(leg.price) for leg in entry.legs]
-    worst_leg = max(leg_prices) if direction == "BUY" else min(leg_prices)
-    leg_stop_pips = abs(worst_leg - float(stop.price)) / float(pip_size) if pip_size else 0.0
-    estimated_lots: float | None = None
-    if leg_pip_value > 0 and leg_stop_pips > 0:
-      if pack_risk_sized:
-        estimated_lots = math.floor(
-          float(account_equity) * float(pack_main_percent) / 100.0 / (leg_stop_pips * leg_pip_value) * 100.0
-        ) / 100.0
-      else:
-        from app.autotrade.group_exposure import planned_lots
-        estimated_lots = planned_lots(
-          symbol=match.symbol, equity=float(account_equity), sizing_mode="equity_table",
-          risk_multiplier=float(risk.risk_multiplier), risk_percent=float(risk.risk_percent),
-          stop_pips=leg_stop_pips, pip_value_per_lot=leg_pip_value,
-        )
-    if estimated_lots is not None and estimated_lots > 0:
-      fillable = max(1, int(round(estimated_lots * 100.0 + 1e-6)))
-      if 2 <= fillable < len(entry.legs):
-        kept = entry.legs[:fillable]
-        if len(entry.legs) == 3 and fillable == 2:
-          new_ratios = (Decimal("0.6"), Decimal("0.4"))
-        else:
-          total_ratio = sum(leg.volume_ratio for leg in kept)
-          new_ratios = tuple(leg.volume_ratio / total_ratio for leg in kept)
-        kept = tuple(replace(leg, volume_ratio=ratio) for leg, ratio in zip(kept, new_ratios))
-        kept = kept[:-1] + (replace(kept[-1], volume_ratio=Decimal("1") - sum(leg.volume_ratio for leg in kept[:-1])),)
-        entry = replace(entry, legs=kept)
+  entry = fit_entry_legs_to_volume(
+    entry, symbol=match.symbol, direction=direction, stop_price=stop.price, pip_size=pip_size, account_equity=account_equity, cfg=cfg_resolved,
+    risk_sized=pack_risk_sized, main_risk_percent=pack_main_percent, risk_multiplier=risk.risk_multiplier, risk_percent=risk.risk_percent,
+  )
 
   if cfg is None:
     cfg_for_fraction = cfg_resolved
