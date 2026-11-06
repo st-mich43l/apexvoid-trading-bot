@@ -116,6 +116,7 @@ from app.autotrade.execution_confirmation import (
   parse_bar_timestamp,
   save_execution_confirmation,
   scalp_effective_chase_pips,
+  scalp_stop_headroom_pips,
   scalp_zone_access,
 )
 from app.autotrade.multi_match import (
@@ -1008,6 +1009,12 @@ def _execution_quote_access(
     except (TypeError, ValueError, AttributeError):
       stop_pips = None
     chase_cap = scalp_effective_chase_pips(inst, stop_pips=stop_pips)
+    if is_m1_scalp_strategy(str(match.strategy)):
+      # A chase lengthens the stop from the worst entry; past the scalp stop cap the plan is refused
+      # (stop_exceeds_go_invalidation_envelope), so cap the chase at the headroom and wait for the retest instead.
+      headroom = scalp_stop_headroom_pips(inst, stop_pips=stop_pips)
+      if headroom is not None:
+        chase_cap = min(chase_cap, headroom)
     scalp_access = scalp_zone_access(
       match.direction,
       getattr(spot, "bid", None),

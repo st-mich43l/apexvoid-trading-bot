@@ -515,6 +515,29 @@ def scalp_effective_chase_pips(
   return min(flat, stop * frac)
 
 
+def scalp_stop_headroom_pips(cfg: Any | None, *, stop_pips: float | None) -> float | None:
+  """Pips an M1 scalp may chase past its band before the stop exceeds ``strategies.scalping.stop.maximum_pips``.
+
+  The stop is measured from the worst entry price, so a chase in the trade direction lengthens it pip for pip. ``None``
+  when the stop or the cap is unknown (no limit applies here).
+  """
+  if cfg is None:
+    try:
+      from app.core.config import runtime_config
+      cfg = runtime_config
+    except Exception:
+      return None
+  stop_cfg = getattr(getattr(getattr(cfg, "strategies", None), "scalping", None), "stop", None)
+  try:
+    cap = float(getattr(stop_cfg, "maximum_pips", None))
+    stop = float(stop_pips)
+  except (TypeError, ValueError):
+    return None
+  if not math.isfinite(cap) or not math.isfinite(stop) or cap <= 0 or stop <= 0:
+    return None
+  return max(0.0, cap - stop)
+
+
 def scalp_zone_access(
   direction: str,
   bid: Any,
