@@ -335,7 +335,7 @@ instruments:
           reaction:
             key_level:
               # Owner decision 2026-11-06 (EURUSD Key Level: 51 live trades since 2 Oct, 55% full stops, -6.64 R on the 23 with a net R; every setup carries
-              # m5_key_level_role_ambiguous, so require_explicit_role is NOT used: it would disable the strategy on this pair). Publish a confirmed reaction only
+              # m5_key_level_role_ambiguous until Key Level v9 read the role from structure; require_explicit_role was and is NOT used on this pair). Publish a confirmed reaction only
               # when it swept the level (the XAU rule, docs/strategies/key_level.md); that rule was measured on XAU only. Replay on 28 Oct - 6 Nov EURUSD bars
               # (sequential, one position at a time, M5): setups 461 -> 165, stop rate 38% -> 42% of 36 trades, i.e. fewer trades, no measured gain. Review
               # after about 100 trades; roll back by deleting this block and the touches line below.

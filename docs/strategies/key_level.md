@@ -3,9 +3,11 @@
 
 ## Strategy ID / version
 
-`key_level`, `v8`. Implemented in
+`key_level`, `v9`. Implemented in
 `analysis-engine/internal/strategy/keylevel`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
+
+**Role from structure (T1.2, v9).** Until v8 every level was ambiguous: `keylevel.Role` read the role from the level's kind label by substring ("support", "resist", "high", "low"), and the level primitive only ever produces `reaction` and `round`. Every published opportunity carried `m5_key_level_role_ambiguous` (1,474 of 1,474 since 1 Nov), the direction fell back to which side of the level price stood on (302 of 1,142 replayed candidates were a BUY at a level made only of swing highs or a SELL at a level made only of swing lows), and `require_explicit_role` could never be satisfied (GBPJPY published nothing). v9 reads the role from the market structure that formed the level (`keylevel.StructuralRole`; section "Role contract"). The level's kind, band, touches, the reaction confirmation, invalidation, entry band, target (T1.1), stop budget, `StructuralID` and the quality model are unchanged. This is a deliberate difference from the frozen Python detector (which had no explicit roles either): Key Level now trades the direction its structure implies.
 
 **Target basis (T1.1, v8).** The target is read from the opposing liquidity ahead of the entry, and only from liquidity that is still there. An opposing pool is a pool on the side the trade runs toward that (a) lies strictly ahead of the proximal edge of the entry band (a pool within a tick or 5% of an ATR of the edge shares its boundary and is the same wall), (b) has not been swept: no closed frame bar after the swing that last defined it has traded beyond its outer edge (a high above `level + band` for a buy-side pool, a low below `level - band` for a sell-side one; the sweep test liquidity grabs use), and (c) is not the candidate's own wall (inside the full reaction band, before any deep-entry cut, or the level's own cluster). The nearest such pool is the target (`nearest_opposing_liquidity`) at whatever distance: a close pool leaves little room and the candidate now says so. Only when no such pool stands in the way is the target `fallback_target_r` times the **effective** risk beyond the entry (`fixed_reward_risk`, meaning "nothing ahead"). Effective risk is the structural distance from the proximal edge to the invalidation, or the instrument stop floor when that is tighter (`StopBudget.EffectiveRisk`): execution widens a tighter stop to the floor, so an FX candidate with a 5-pip structural stop carries 15 pips of risk. v7 skipped pools nearer than `minimum_target_distance_atr` and treated pools already swept as live, so a close obstacle could be passed over for a farther pool or for the fixed fallback, and liquidity that had been taken could be the objective. `minimum_target_distance_atr` is removed (no consumer). The invalidation, the entry band, the stop budget, the confirmation, `StructuralID` and the quality dimensions are unchanged; the quality model gains one measurement, `room_r_effective` (the target's distance in effective risks), outside `Overall`. Nothing is refused for room. Orders are unchanged: for the fixed-ratio instrument packs the Go target is provenance and the ladder comes from the pack (`docs/execution.md`); the execution policy reads it only for an advisory room note that denies nothing.
 
@@ -25,13 +27,10 @@ and entry.
    `minimum_touches` touches is skipped.
 2. The reaction band is the wider of the level's own band and the proximal band
    (`proximal_band_atr · ATR`).
-3. The closed-bar **role** (`internal/keylevel.Role`, ported 1:1 from
-   `key_level_role.py`) decides the direction tried: support → BUY,
-   resistance → SELL; an ambiguous level is bought when price is above it, sold
-   when below and, when price is inside the band, tried both ways. An accepted
-   break (`breakout_accept_bars` consecutive closes beyond the band) is
-   `broken_*` and skipped — Break & Retest owns it. `require_explicit_role`
-   (an instrument override) skips ambiguous levels.
+3. The **role** (`internal/keylevel.StructuralRole`, v9: from the confirmed swings in the level's band and the closed bars since, see "Role contract") decides the
+   direction tried: support → BUY, resistance → SELL; an ambiguous level is bought when price is above it, sold when below and, when price is inside the band,
+   tried both ways. A role broken by acceptance (`breakout_accept_bars` consecutive closes beyond the band on the side it defends) is `broken_*` and skipped, and so
+   is an ambiguous level price has accepted beyond: Break & Retest owns it. `require_explicit_role` (an instrument override) skips ambiguous levels.
 4. A live opposing zone overlapping the band of an ambiguous level contradicts
    the naive reading: both sides are tried over the widened window and the zone's
    edge is the level the opposite side reacts off.
@@ -97,13 +96,40 @@ plan has no snapshot row.
   touches, direction, entry band, confluence stars and reaction bars. The
   golden is produced by running the Python (`generate_oracle_golden.py`), never
   by Go. (GBPJPY has no decisions: its instrument rule requires an explicit
-  support/resistance role, which the level primitive never produces, so Key Level
-  was already silent there in Python and stays so.)
+  support/resistance role, which the level primitive never produced, so Key Level
+  was silent there in Python. Since v9 the Go role is structural and GBPJPY publishes; the parity contract no longer
+  applies to the role, by design.)
 - `internal/strategy/keylevel` unit tests: support BUY, resistance SELL,
   broken support/resistance skipped, ambiguous resolution by price, opposing-zone
   contradiction and widened window, both-sides discard, best-of-several (and the
   nearest on a tie), counter-bias, entry too far, confluence floor, minimum
   touches, explicit-role requirement, target selection, contract selection.
+
+## Role contract (T1.2, v9)
+
+Input at the decision bar `n`: the level's price and band (`level.Band`, the cluster tolerance that formed it), the frame's swings **confirmed at `n`** (a fractal swing is known
+only when its right-hand bars have closed, `ConfirmedIndex <= n`: a pivot still forming cannot give a level its role), and the closed bars up to `n`. A swing is a member
+of the level when its price is within the level's band. `minimum_touches` is the fewest swings of one kind that make a role.
+
+| Role | Evidence | Direction |
+|---|---|---|
+| `support` | at least `minimum_touches` confirmed swing lows in the band and **no** swing high: price reacted up from it, and only from it | BUY |
+| `resistance` | at least `minimum_touches` confirmed swing highs and no swing low | SELL |
+| `ambiguous` | anything else: highs and lows in one band (a level price has reacted to from both sides, including a level flipped earlier), fewer than `minimum_touches` swings of one kind, or a round number with no swing structure | the old fallback, only where `require_explicit_role` is off: the side price stands on, tried both ways inside the band, a contradiction (both sides confirmed) discarded |
+| `broken_support` | a support with `breakout_accept_bars` consecutive closed-bar closes **below** the band | none (skipped; Break & Retest owns it) |
+| `broken_resistance` | a resistance with that many closes **above** the band | none (skipped) |
+
+Transitions: a role changes only by acceptance, on the side it defends. A wick beyond the band, or a sweep that closes back inside, accepts nothing and leaves the role. One close
+beyond the band accepts nothing. Closes on the *other* side (a support with price closing above it) are price moving away from the level, not through it: the role stands.
+A broken role is reported and never flipped into its opposite: a flip needs the retest confirmation that Break & Retest (and Trendline) own. A level whose swings change (a new
+confirmed swing of the other kind arrives) is re-read on the next bar: support plus a confirmed swing high in its band becomes ambiguous, which is the honest reading of a level
+price now reacts to from both sides. No confidence value exists; no threshold was added (`minimum_touches` and `breakout_accept_bars` are the existing parameters).
+
+Invariants (checked on a scenario table and on replay): BUY and SELL are exact mirrors (swap lows and highs, reflect the closes about the band: the mirrored role comes back);
+every published `support` is a BUY and every `resistance` a SELL; no role uses information confirmed after the decision bar (a replay on data truncated at a cutoff reproduces
+every earlier decision exactly); `keylevel.Role` (the kind-label classifier) is unchanged and still serves Flip Zone and Impulse Pullback.
+
+`m5_key_level_role_support`, `_resistance` or `_ambiguous` on a published candidate now describes the structure; `level_origin` (a quality measurement) is not the rule and is unchanged.
 
 ## Q2: the session context is measured
 
@@ -132,5 +158,5 @@ The 5,444 -> 4,174 drop of Q2 removed an unconditional credit, not measurably wo
 | Instrument | Override | Why |
 |---|---|---|
 | XAU | `require_reaction_sweep: true` | 28 Oct 2026 owner report: swept setups held their edge in every period, unswept ones lost it (measured on XAU only). |
-| GBPJPY | `minimum_key_touches: 3`, `require_explicit_role: true` | 25 Aug 2026: Key Level was 0/4 (-118 pips). |
+| GBPJPY | `minimum_key_touches: 3`, `require_explicit_role: true` | 25 Aug 2026: Key Level was 0/4 (-118 pips). Silent until v9 (no level had an explicit role); since v9 it publishes levels whose structure is pure swing lows (BUY) or pure swing highs (SELL), 63 candidates in a 7-day replay. |
 | EURUSD | `minimum_key_touches: 3`, `require_reaction_sweep: true` | 6 Nov 2026 owner decision: 51 live trades, 55% full stops, -6.64 R on the 23 with a net R. Not measured on FX: replay 461 -> 165 setups, stop rate 38% -> 42%, no measured gain. `require_explicit_role` is not used: every EURUSD setup carries `m5_key_level_role_ambiguous`, so it would disable the strategy on the pair. Review after about 100 trades. |

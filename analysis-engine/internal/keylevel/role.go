@@ -87,6 +87,49 @@ func Role(kind string, bandLow, bandHigh market.Price, closes []float64, breakou
 	}
 }
 
+// StructuralRole classifies a level from the market structure that formed it and from what closed price has done since, not from a label.
+//
+// swingLows and swingHighs are the CONFIRMED swing lows and swing highs lying inside the level's own band as known at the decision bar (the caller counts only
+// swings whose confirmation bar has closed), and minimumSwings is the fewest swings of one kind that make a level (the strategy's minimum_touches).
+//
+//	SUPPORT     at least minimumSwings confirmed swing lows in the band and no swing high: price reacted up from it, and only from it.
+//	RESISTANCE  at least minimumSwings confirmed swing highs in the band and no swing low: price reacted down from it, and only from it.
+//	AMBIGUOUS   anything else: highs and lows in one band (a level price has reacted to from both sides), or too few swings of one kind.
+//	            Ambiguity is never resolved by where price happens to stand.
+//
+// A role breaks only on the side it defends, and only on acceptance, the closed-bar rule Role already used: breakoutAcceptBars consecutive closes beyond the band
+// ending at the latest closed bar (a wick, or a sweep that closes back inside, accepts nothing). SUPPORT breaks to BROKEN_SUPPORT only when the closes are below the
+// band, RESISTANCE to BROKEN_RESISTANCE only when they are above it: closes on the other side are price moving away from the level, not through it. A broken role is
+// reported, never flipped: a flip belongs to Break & Retest (and Trendline), and Key Level does not trade it.
+//
+// acceptedBeyond reports acceptance on either side of the band whatever the role. An AMBIGUOUS level has no side to break, so the caller keeps the long-standing rule for
+// it: a level price has accepted beyond is not a level to react off (Break & Retest's), and Key Level skips it.
+func StructuralRole(swingLows, swingHighs, minimumSwings int, bandLow, bandHigh market.Price, closes []float64, breakoutAcceptBars int) (role RoleKind, acceptedBeyond bool) {
+	required := breakoutAcceptBars
+	if required < 1 {
+		required = 1
+	}
+	if minimumSwings < 1 {
+		minimumSwings = 1
+	}
+	above := acceptedCount(closes, func(c float64) bool { return c > float64(bandHigh) }) >= required
+	below := acceptedCount(closes, func(c float64) bool { return c < float64(bandLow) }) >= required
+	switch {
+	case swingLows >= minimumSwings && swingHighs == 0:
+		if below {
+			return RoleBrokenSupport, true
+		}
+		return RoleSupport, above
+	case swingHighs >= minimumSwings && swingLows == 0:
+		if above {
+			return RoleBrokenResistance, true
+		}
+		return RoleResistance, below
+	default:
+		return RoleAmbiguous, above || below
+	}
+}
+
 // acceptedCount ports _accepted_count: consecutive qualifying closes
 // counted from the END of the slice backward, stopping at the first
 // non-qualifying one — closes must be Time-ascending (oldest first, most

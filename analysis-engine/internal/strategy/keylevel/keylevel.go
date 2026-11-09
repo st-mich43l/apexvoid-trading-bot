@@ -55,7 +55,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v8"
+const Version = "v9"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -248,10 +248,17 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		}
 		band := math.Max(level.Band, zoneBandFloor)
 		bandLow, bandHigh := level.Price-band, level.Price+band
-		role := keylevel.Role(level.Kind, market.Price(bandLow), market.Price(bandHigh), closes, s.cfg.BreakoutAcceptBars)
+		// The role is read from the confirmed swings that formed the level and from the closed bars since (keylevel.StructuralRole), never from its kind label.
+		lows, highs := confirmedSwingsInBand(frame, level.Price, level.Band)
+		role, acceptedBeyond := keylevel.StructuralRole(lows, highs, s.cfg.MinimumTouches, market.Price(bandLow), market.Price(bandHigh), closes, s.cfg.BreakoutAcceptBars)
 		// An accepted role flip belongs to Break & Retest; Key Level never
 		// reinterprets it in the opposite direction.
 		if role == keylevel.RoleBrokenSupport || role == keylevel.RoleBrokenResistance {
+			continue
+		}
+		// A level of mixed or insufficient structure has no side to break; price that has accepted beyond it is no longer reacting off it (the rule every level
+		// followed before v9, when none had a role).
+		if role == keylevel.RoleAmbiguous && acceptedBeyond {
 			continue
 		}
 		if role == keylevel.RoleAmbiguous && s.cfg.RequireExplicitRole {
@@ -434,6 +441,23 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		ConfigVersion: configVersion, ConfigFingerprint: s.fingerprint,
 	}
 	return candidate, true
+}
+
+// confirmedSwingsInBand counts the frame's swing lows and swing highs inside the level's band that are CONFIRMED at the decision bar: a fractal swing is known only
+// once its right-hand bars have closed (ConfirmedIndex), so a pivot that is still forming cannot give a level its role earlier than it could have been known.
+func confirmedSwingsInBand(frame *context.LegacyFrame, price, band float64) (lows, highs int) {
+	last := len(frame.Bars) - 1
+	for _, sw := range frame.Swings {
+		if sw.ConfirmedIndex > last || math.Abs(sw.Price-price) > band {
+			continue
+		}
+		if sw.Kind == "high" {
+			highs++
+		} else {
+			lows++
+		}
+	}
+	return lows, highs
 }
 
 // ownWall is the candidate's own structure: the full reaction band the entry was read in (before any deep-entry cut) and the level's own cluster. A
