@@ -152,6 +152,12 @@ func applyIFVGGeometry(settings *Settings) {
 			params[k] = v
 		}
 		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		// The floor and the pip size it is measured in are read by the quality score only (room against the stop execution widens a tighter structural stop
+		// to); the detector decides on the structural stop and the cap alone.
+		if settings.InstrumentStopMinPips > 0 && settings.Geometry.PipSize > 0 {
+			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
+			params["execution_pip_size"] = settings.Geometry.PipSize
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }

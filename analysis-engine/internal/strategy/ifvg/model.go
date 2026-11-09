@@ -93,6 +93,7 @@ type Retest struct {
 	Extreme            float64 // the retest's adverse extreme, oriented to the trade (lowest low for a buy)
 	PenetrationATR     float64 // how far the retest pierced into the gap from its near bound, in ATR
 	WickRatio          float64
+	BodyRatio          float64 // the rejection candle's body as a share of its range
 	CloseStrength      float64
 	BarsAfterInversion int
 	Touches            int // distinct touches of the inverted gap since the inversion, this one included

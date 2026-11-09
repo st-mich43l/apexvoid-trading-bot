@@ -34,6 +34,7 @@ const Version = "v3"
 type Strategy struct {
 	cfg         Config
 	detector    strategyutil.LegacyDetectorSettings
+	budget      strategyutil.StopBudget // the instrument stop envelope the engine injects; read only to score room against the risk execution takes
 	fingerprint string
 }
 
@@ -53,7 +54,11 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Strategy{cfg: cfg, detector: detector, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}, nil
+	budget, err := strategyutil.ParseStopBudget(c.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("ifvg: %w", err)
+	}
+	return &Strategy{cfg: cfg, detector: detector, budget: budget, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}, nil
 }
 
 func (s *Strategy) ID() strategy.StrategyID                { return ID }
@@ -167,6 +172,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		"retest_penetration_atr":     setup.Retest.PenetrationATR,
 		"rejection_strength":         setup.Retest.CloseStrength,
 		"rejection_wick_ratio":       setup.Retest.WickRatio,
+		"rejection_body_ratio":       setup.Retest.BodyRatio,
 		"retest_touches":             float64(setup.Retest.Touches),
 		"target_room_r":              setup.RewardRisk,
 		"target_room_atr":            setup.TargetRoomATR,
@@ -191,9 +197,14 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 		qc.bars, qc.localTrend = m5.Legacy.Bars, m5.Legacy.Structure
 	}
 	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
-		qc.choch = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars))
+		qc.choch = setupCHoCH(d, setup)
 		qc.price = d.Price
 	}
+	reference := setup.EntryHigh
+	if setup.Direction == market.Sell {
+		reference = setup.EntryLow
+	}
+	qc.effectiveRisk = s.budget.EffectiveRisk(reference, setup.Stop)
 	s.score(model, setup, qc)
 	pattern := "strong_reclaim"
 	if setup.WickRejection {
@@ -224,6 +235,25 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	}
 	candidate.DetectorConfluence = confluenceContext(score)
 	return candidate, true
+}
+
+// setupCHoCH reports whether the engine's frame broke character in the trade's direction on a bar that belongs to this setup: after the inversion candle and no later
+// than the rejection candle. A break before the inversion happened in the move that made the gap, and one ON the inversion candle is the inversion itself, which
+// inversion_strength already credits; the window the earlier rule used (the last reaction_lookback_bars before the decision bar) credited both.
+func setupCHoCH(d *strategyutil.LegacyDetector, setup Setup) bool {
+	wanted := "down"
+	if setup.Direction == market.Buy {
+		wanted = "up"
+	}
+	for _, brk := range d.Frame.Breaks {
+		if brk.Kind != "CHoCH" || brk.Direction != wanted || brk.Index < 0 || brk.Index >= len(d.Frame.Bars) {
+			continue
+		}
+		if t := d.Frame.Bars[brk.Index].Time; t > setup.Inversion.Time && t <= setup.ConfirmedAt {
+			return true
+		}
+	}
+	return false
 }
 
 func confluenceContext(score confluence.Score) *opportunity.ConfluenceContext {
