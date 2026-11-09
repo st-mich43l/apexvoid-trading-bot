@@ -16,7 +16,7 @@ and every intentional difference from the Python detector.
   engine's HTF alignment, M5 structure bias and confluence rubric as *measured
   evidence*.
 - **Contract version**: `v3`. `Quality.Overall` is the mean of nine
-  `score_*` dimensions (`ifvg.quality.v1`, [quality](../analysis-engine.md#acceptance-and-quality)); the stars are a diagnostic
+  `score_*` dimensions (`ifvg.quality.v2`, [quality](../analysis-engine.md#acceptance-and-quality)); the stars are a diagnostic
   ([Quality](#quality-and-arbitration)).
 
 ## Q2: measured session context and the causal inversion proof
@@ -196,7 +196,7 @@ risk           = entry_high - stop
 
 ## Quality and arbitration
 
-`Quality.Overall` is no longer `stars / 3`: it is the mean of the `score_*` dimensions of `ifvg.quality.v1`
+`Quality.Overall` is no longer `stars / 3`: it is the mean of the `score_*` dimensions of `ifvg.quality.v2`
 ([quality](../analysis-engine.md#acceptance-and-quality)). The *inputs* of the confluence stars (a diagnostic and the floor) are measured:
 
 | Factor | Measured as |
@@ -212,9 +212,9 @@ The floor is the shared `min_confluence` the Algo Bot also applies. Published
 `Quality.Components`: `gap_width_atr`, `origin_displacement_atr`,
 `inversion_body_ratio`, `inversion_close_strength`, `inversion_displacement_atr`,
 `inversion_close_beyond_atr`, `bars_gap_to_inversion`, `retest_age_bars`,
-`retest_penetration_atr`, `rejection_strength`, `rejection_wick_ratio`,
+`retest_penetration_atr`, `rejection_strength`, `rejection_wick_ratio`, `rejection_body_ratio`,
 `retest_touches`, `target_room_r`, `target_room_atr`, `zone_integrity`,
-`technical_risk_pips`, `confluence_stars`, and `structure_alignment` **only when the
+`technical_risk_pips`, `room_r_effective`, `confluence_stars`, and `structure_alignment` **only when the
 engine has a structural read** (an unavailable fact is left out, never replaced by a
 neutral value). The v2 `inversion_strength` / `freshness` components are gone: they
 were not measurements of the thing they named.
@@ -223,6 +223,22 @@ Arbitration is unchanged and was compared (replay, below): v2 confirmed setups w
 one-star, 68 % two-star and 32 % three-star; v3 is on the same two-value scale
 (0.67 / 1.0) with a mix of 53 % / 47 % (37 and 33 setups), so selection among strategies is not shifted by a new
 scale.
+
+## Quality model v2 (Q-iFVG1)
+
+`ifvg.quality.v2` (published as `quality_model_version` 2) keeps the nine dimensions in [0, 1] and the unweighted mean (`Overall` is informational: `quality_ranking: false`, no gate, no star reads it). The technical contract (v3) is unchanged: gap, inversion, retest, rejection, stop, target, entry band and every refusal are exactly as above, and `gap_imbalance`, `inversion_timing`, `retest_freshness` and `zone_integrity` are byte-identical to v1. Quality is judged after validity, so no score can publish or rescue a setup.
+
+| Dimension | v2 | v1 defect (real replay: 5 symbols, 7 days of M5, 96 geometry-valid setups, 55 published) |
+|---|---|---|
+| `inversion_strength` | a third each: `Peak(close beyond the far bound in ATR; 0.05, 0.5, 2.0, 3.5)`, `Peak(body in ATR; 0.3, 0.8, 2.0, 3.5)`, and the candle's directness, half `Ramp(body share; 0.5, 0.9)` and half `Ramp(close location; 0.5, 0.9)` | The detector requires a body share and a close location but the score read neither: a 1.20 ATR inversion with body share 0.60 / close location 0.65 scored 1.00, the same as one with 0.91 / 0.95 (v2: 0.77 and 1.00). The documented exhaustion limit (2.0 to 3.5 ATR) bounded only the body, not the penetration: a candle that closed 2.4 ATR through the gap kept the full penetration half. |
+| `retest_rejection` | half `Ramp(close location; 0.5, 0.9)`, half the refusal that confirmed it: the better of `Ramp(wick; 0.2, 0.6)` and `Ramp(body share; 0.5, 0.9)` | The detector accepts a wick OR a body-led candle (`rejection_body_ratio` 0.6). 56 of 96 setups were confirmed by a body with a wick under 0.25 and could never score above 0.56 (a 0.93 body share, close at the extreme: 0.50). Mean 0.43 for body-led against 0.69 for wick-led before; 0.73 and 0.69 now. |
+| `entry_location` | `Fall(max(0, how far the close ran from the proximal edge in the trade's favour) / ATR; 0.25, 1.5)` | `abs()` penalised price back inside the band (a better fill than the edge): a close 0.59 ATR deep scored 0.73. Rare in iFVG (11 of 96 inside the band, 1 changed) because the confirming candle usually closes above the entry; BUY and SELL are mirror images. |
+| `structure` | unchanged mapping (`quality.StructureScore`), but a change of character counts only on a bar after the inversion candle up to the rejection candle | The credit read the last `reaction_lookback_bars` before the decision bar and went to 14 setups: 9 of them had only a break before the gap formed or on the inversion candle itself (that candle is `inversion_strength`'s event) and lose it, 5 had one after the inversion and keep it; 2 setups gain it (a break after the inversion that the window had already passed). 11 of 96 structure scores change, by -0.38 on average. A CHoCH is still not required. |
+| `room` | `Ramp(reward / effective risk; 1, 3)`, effective risk = `max(structural stop, instrument floor)` (the floor the engine injects as `execution_stop_min_pips`, the same one the published `stop_envelope` carries) | Execution widens a stop tighter than the floor, and iFVG's structural stop is 4-12 pips against floors of 12-22 (XAU 50). 100 percent of FX setups and 71 percent of XAU are widened; 44 of 96 pass the detector's 1.15R on the structural stop and are below 1R as executed (a 6.6R GBPJPY SELL executes at 1.26R: room 1.00 to 0.13). |
+
+The structural `target_room_r` is still published, next to the new `room_r_effective` and `rejection_body_ratio` measurements. The detector's `minimum_reward_risk` still tests the structural stop; making it test the executed stop would be a change of the trading contract, not of its score, and is not made here.
+
+Not changed, on the evidence: no dimension had missing evidence in the replay (every input is finite at publication), so no missing-vs-weak distinction was needed; `retest_freshness` and `zone_integrity` overlap (raw touches against integrity -0.65: a retest that closed back into the gap is usually also a repeat retest) but measure a count and a depth and are kept separate; the unweighted mean has no evidence for weights (one dimension at 0.1 hid behind eight good ones in 4 of the top 24 setups, which is the model's definition, not a defect). Whether a higher `Overall` predicts outcomes is untested: no iFVG plan snapshot has been written yet, so executed trades (27 since 30 Sep) cannot be joined to a score.
 
 ## Valid and invalid, at a glance
 

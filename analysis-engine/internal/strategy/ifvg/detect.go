@@ -436,7 +436,7 @@ func (d *detector) finish(ep Episode, g gap, inv Inversion, j, touch, confirm, t
 		Retest: Retest{
 			TouchTime: bars[touch].Time, ConfirmedAt: cb.Time, Extreme: retestLow,
 			PenetrationATR: math.Max(0, g.High-retestLow) / atrC,
-			WickRatio:      lowerWickRatio(cb), CloseStrength: closeStrength(cb),
+			WickRatio:      lowerWickRatio(cb), BodyRatio: bodyRatio(cb), CloseStrength: closeStrength(cb),
 			BarsAfterInversion: d.barsBetween(j, confirm), Touches: touches,
 		},
 		EntryLow: entryLow, EntryHigh: entryHigh, Stop: stop, Target: target,
