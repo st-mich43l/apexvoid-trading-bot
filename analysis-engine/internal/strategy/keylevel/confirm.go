@@ -123,6 +123,22 @@ func chochBetween(indexes []int, touchIndex, confirmationIndex int) bool {
 	return false
 }
 
+// reactionCHoCH reports whether the detector's frame broke character in the trade's direction on a bar of the reaction itself, from the touch bar to the confirmation
+// bar: the same attribution that names a rejection_choch pattern. A break before the touch preceded the reaction and one after the confirmation followed it; neither is
+// evidence this reaction reversed the market.
+func reactionCHoCH(d *strategyutil.LegacyDetector, touchIndex, confirmationIndex int) bool {
+	wanted := "down"
+	if d.Direction == market.Buy {
+		wanted = "up"
+	}
+	for _, brk := range d.Frame.Breaks {
+		if brk.Kind == "CHoCH" && brk.Direction == wanted && brk.Index >= touchIndex && brk.Index <= confirmationIndex {
+			return true
+		}
+	}
+	return false
+}
+
 // confirmReaction is the Key Level reaction off the band [low, high] of a level that became known on bar knownFrom, in the detector's direction. grab is this
 // level's own liquidity grab (strategyutil.LevelGrab: a pool within the level's tolerance), if any.
 func (s *Strategy) confirmReaction(d *strategyutil.LegacyDetector, low, high float64, grab *techniquezone.Grab, knownFrom int) *strategyutil.LegacyConfirmation {

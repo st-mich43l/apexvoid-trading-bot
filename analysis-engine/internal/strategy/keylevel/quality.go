@@ -13,7 +13,7 @@ import (
 )
 
 // QualityModel is the version of the scoring rule below. A change to a dimension or a range is a new version.
-const QualityModel = "key_level.quality.v1"
+const QualityModel = "key_level.quality.v2"
 
 // minimumLevelHistory is the fewest bars between a level's first visit and the reaction for its integrity to be measured at all.
 const minimumLevelHistory = 10
@@ -34,7 +34,7 @@ type qualityInputs struct {
 	effectiveRisk float64 // the stop distance the trade is exposed to: the structural one, or the instrument floor when that is wider (StopBudget.EffectiveRisk)
 	structural    bool    // the target is a real opposing liquidity, not a fixed reward:risk
 	localTrend    string  // the frame's structure: "up", "down" or "range"
-	choch         bool    // a change of character in the trade's direction within the reaction window
+	choch         bool    // a change of character in the trade's direction on a bar from the touch bar to the confirmation bar (reactionCHoCH)
 	htfAligned    bool
 	htfTouches    int     // touches of the best higher-timeframe level at this price (H1 weighted fully, M15 by half), 0 when none/unavailable
 	htfWeight     float64 // 1 for an H1 level, 0.5 for an M15 level
@@ -60,11 +60,15 @@ type qualityInputs struct {
 //	                    not defended; what price did before it ever reached the level is not counted.
 //	rejection           the reaction candles: half the refusal wick of the touch bar Ramp(wick; 0.2, 0.6), half the close strength
 //	                    of the confirmation bar Ramp(close; 0.5, 0.9).
-//	entry_location      how far price has already left the proximal edge, in ATR: Fall(d; 0.25, 1.5). A late entry is a worse one.
+//	entry_location      how far price has already run away from the proximal edge in the trade's favour, in ATR: Fall(d; 0.25, 1.5).
+//	                    A late entry is a worse one; price back inside the band is a better fill, not a late one, and scores in full (v2).
 //	structure           the direction of the market, graded, not added: with the local structure and the higher timeframe 1.0;
 //	                    with the structure only 0.7; a confirmed reversal (change of character) 0.9 with the higher timeframe and
-//	                    0.7 without; a range 0.6 / 0.5; against the structure with no reversal evidence 0.3 / 0.1.
-//	room                reward:risk to the nearest opposing liquidity, 1R scoring 0 and 3R scoring 1; 0 for a fixed-ratio target.
+//	                    0.7 without; a range 0.6 / 0.5; against the structure with no reversal evidence 0.3 / 0.1. The change of
+//	                    character counts only when it broke on a bar of the reaction itself, from the touch to the confirmation (v2).
+//	room                reward:risk to the nearest opposing liquidity against the risk the trade is actually exposed to (the structural
+//	                    stop distance, or the instrument's floor when execution widens it), 1R scoring 0 and 3R scoring 1; 0 for a
+//	                    fixed-ratio target, which is a reward the strategy chose, not one the market offers (v2).
 func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 	m := quality.New(QualityModel)
 
@@ -95,21 +99,26 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 
 	m.Score("rejection", quality.RejectionScore(in.bars, in.touchIndex, in.confirmIndex, in.buy))
 
-	m.Score("entry_location", quality.LocationScore(in.price, in.reference, in.atr))
+	m.Score("entry_location", entryLocation(in.buy, in.price, in.reference, in.atr))
 	if in.atr > 0 {
 		m.Measure("entry_chase_atr", math.Abs(in.price-in.reference)/in.atr)
 	}
 
 	m.Score("structure", quality.StructureScore(in.buy, in.localTrend, in.choch, in.htfAligned))
 
-	room, rewardRisk := quality.GeometryRoom(in.reference, in.invalidation, in.target, in.structural)
-	m.Score("room", room)
-	m.Measure("room_reward_risk", rewardRisk)
-	// The same room against the effective risk: what the room is worth when execution widens a tight stop to the instrument floor. A measurement only; it is
-	// not a dimension and never enters Overall.
-	if in.effectiveRisk > 0 {
-		m.Measure("room_r_effective", math.Abs(in.target-in.reference)/in.effectiveRisk)
+	// Room is scored against the risk execution takes: the structural stop distance, widened to the instrument floor where the structure is tighter. The structural
+	// ratio is still published, as a measurement.
+	_, structuralRR := quality.GeometryRoom(in.reference, in.invalidation, in.target, in.structural)
+	m.Measure("room_reward_risk", structuralRR)
+	risk := in.effectiveRisk
+	if !(risk > 0) {
+		risk = math.Abs(in.reference - in.invalidation)
 	}
+	reward := math.Abs(in.target - in.reference)
+	if risk > 0 {
+		m.Measure("room_r_effective", reward/risk)
+	}
+	m.Score("room", quality.Room(reward, risk, in.structural))
 
 	// Forward labels: what kind of level this was, so realised outcomes can later be cut by it. Measurements only.
 	if in.levelKind == "round" {
@@ -128,6 +137,20 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 	m.Measure("deep_entry_pips", in.deepEntryPips)
 
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
+}
+
+// entryLocation is how far the latest close has already run away from the proximal edge in the trade's favour (above it for a buy, below it for a sell), in ATR,
+// Fall(d; 0.25, 1.5). Price that has left the edge is a late entry. Price back inside the band, on the far side of the edge, is a better fill than the edge and is
+// not late: it scores in full (its cost, a stop that is nearer, is room's, not location's). Without a volatility there is no measurement (0).
+func entryLocation(buy bool, price, reference, atr float64) float64 {
+	if !(atr > 0) || math.IsNaN(price) || math.IsInf(price, 0) || math.IsNaN(reference) || math.IsInf(reference, 0) {
+		return 0
+	}
+	ran := price - reference
+	if !buy {
+		ran = reference - price
+	}
+	return quality.Fall(math.Max(0, ran)/atr, 0.25, 1.5)
 }
 
 // higherTimeframeLevel finds the best higher-timeframe level at this price: the touches of an H1 level (weight 1) or an M15 level
