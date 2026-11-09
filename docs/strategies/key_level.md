@@ -88,6 +88,20 @@ at the evaluation: the selectivity of the definition). They travel with the cand
 `auto_trade_plan_snapshots.quality_components` (one immutable JSONB row per published trade plan, indexed by `opportunity_id`, which realised trades join on). A candidate that never becomes a published
 plan has no snapshot row. 
 
+## Quality model v2 (Q-KL1)
+
+`key_level.quality.v2` (published as `quality_model_version` 2). Seven dimensions in [0, 1], `Overall` is their unweighted mean, informational: no gate, ranking or star reads it (`quality_ranking: false`). Entry, invalidation, target, ladder, evidence and every other published field are unchanged, and so is the strategy version (v10): only the three dimensions below changed, the four others (`level_significance`, `htf_level`, `level_integrity`, `rejection`) are byte-identical to v1. The shared `quality` helpers other strategies use are untouched.
+
+| Dimension | v1 | v2 | Demonstrated defect |
+|---|---|---|---|
+| `room` | `Ramp(reward / structural risk; 1, 3)` | `Ramp(reward / effective risk; 1, 3)`, effective risk = `max(structural stop, instrument floor)` (`StopBudget.EffectiveRisk`); 0 for a fixed-ratio target as before | Execution widens a stop tighter than the instrument floor, so the trade risks the floor, not the structure. 84-98 percent of FX candidates are widened (XAU 1 percent). A GBPUSD BUY scored `room` 1.00 for 3.08R to structure while the executed trade has 1.03R. |
+| `entry_location` | `Fall(abs(price - proximal edge) / ATR; 0.25, 1.5)` | `Fall(max(0, ran away from the proximal edge in the trade's favour) / ATR; 0.25, 1.5)` | The absolute value penalised price that had come back *into* the band, a better fill than the edge (550 of 907 replayed candidates; in all of them price was inside the published band, median 0.31 ATR, at most 0.47 of the stop distance). |
+| `structure` | change of character anywhere in the last `reaction_lookback_bars` bars before the decision bar | change of character on a bar from the touch bar to the confirmation bar (the attribution `rejection_choch` uses) | The v1 window credited a reversal that broke before the touch (preceded the reaction) or after the confirmation (followed it): 41 of 948 candidates. |
+
+Not changed, on the evidence: an unmeasured integrity (fewer than 10 bars of history) and an unavailable higher-timeframe frame score 0, as the quality model defines for missing evidence; neither occurred in the replay in a way that moved a ranking (integrity was never unmeasured, 18 of 907 candidates lacked an HTF frame). `level_significance` is 1.0 for 75 percent of candidates (sd 0.08): uninformative but not wrong, and not retuned. A clear-path (`fixed_reward_risk`) target still scores 0 for `room` (3 of 907 candidates): the ratio is chosen by the strategy and the market's room is unmeasured; an evidence-backed value needs outcome labels (`docs/research-data.md`).
+
+The measurements `room_reward_risk` (structural) and `room_r_effective` are both still published. The unweighted mean has no tuned weights; no weight was introduced.
+
 ## Evidence
 
 - `test/keylevelparity`: replays six committed real captures — XAU of the
