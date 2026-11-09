@@ -165,8 +165,9 @@ func wickRejection(c market.Candle, direction string) bool {
 	return lower >= body && c.Close > c.Open && c.Close >= upperThird
 }
 
-// strongReclaim: the wick pierces the band's far edge, then the bar closes
-// back through the near edge in the reaction direction.
+// strongReclaim: the wick pierces the band's far edge (the lower edge for a BUY,
+// the upper for a SELL), then the bar closes back at or inside that edge in the
+// reaction direction: a reclaim of the far edge, not of the whole band.
 func strongReclaim(c market.Candle, direction string, low, high float64) bool {
 	if direction == "BUY" {
 		swept := c.Low < low-epsilon

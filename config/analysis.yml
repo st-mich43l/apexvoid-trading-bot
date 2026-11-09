@@ -190,7 +190,9 @@ analysis:
       # distance; only with none in the way is it fallback_target_r x the EFFECTIVE risk (the structural stop, or the instrument floor when wider). Nothing is refused for room.
       # v9 (docs/strategies/key_level.md): the level's role is read from the confirmed swings that formed it (pure swing lows: support, pure swing highs: resistance,
       # mixed or too few: ambiguous) and breaks only on closed-bar acceptance beyond the side it defends; it is no longer read from the level's kind label.
-      version: v9
+      # v10 (docs/strategies/key_level.md): Key Level owns its reaction confirmation: the level must be known before the touch, a rejection_choch needs a CHoCH from the touch
+      # to the confirmation, and a wick rejection or engulfing must happen at the band. The patterns, windows and thresholds are unchanged.
+      version: v10
       enabled: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of

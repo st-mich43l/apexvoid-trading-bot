@@ -3,9 +3,11 @@
 
 ## Strategy ID / version
 
-`key_level`, `v9`. Implemented in
+`key_level`, `v10`. Implemented in
 `analysis-engine/internal/strategy/keylevel`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
+
+**Reaction confirmation (T1.3, v10).** Key Level owns its reaction confirmation (`keylevel/confirm.go`); the shared evaluation (`internal/reaction`) is unchanged and serves the other strategies. The five patterns, their priority, the touch and confirmation windows (`reaction_lookback_bars`), the latest-valid-confirmation rule and every candle threshold are the same as before (a control run with the three corrections switched off reproduces v9 exactly). Three requirements make the confirmation belong to this level and this reaction: (1) the level exists before it is reacted to: the touch and the confirmation are bars at or after the bar on which the level became known, the confirmation bar of the swing that brought its band to `minimum_touches` swings (a bar that is itself what completes the level cannot also be the reaction off it); (2) `rejection_choch` needs a CHoCH in the reaction direction on a bar from the touch bar to the confirmation bar, so one that broke before the touch (the trend the price arrived in) or after the confirmation bar (evidence the confirmation did not have) no longer upgrades a wick rejection, and the candidate is the pattern the bar shows (`strong_reclaim` or `wick_rejection`); (3) a rejection happens at the level: a wick rejection needs the confirmation bar to reach the band, an engulfing needs the engulfing bar or the bar it engulfs to reach it. `sweep_reclaim` (a grab of this level's own pool on the confirmation bar) and `strong_reclaim` are unchanged. `strong_reclaim` is a candle that pierces the band's far edge (the lower edge for a BUY) and closes back at or inside that edge in the reaction direction: a reclaim of the far edge, not of the whole band (the close may lie inside the band or beyond its near edge); the older comment, "back through the near edge", described something the code never did, and the behaviour is kept. A confirmation can still be published one or two bars after its confirmation bar (the window is three bars and entry validity is checked at publication): that is the lookback, not a defect, and is unchanged. Evidence and timestamps are unchanged: `ConfirmedAt` and the confirmation bar time are the bar of the pattern, and the pattern named is the event that happened.
 
 **Role from structure (T1.2, v9).** Until v8 every level was ambiguous: `keylevel.Role` read the role from the level's kind label by substring ("support", "resist", "high", "low"), and the level primitive only ever produces `reaction` and `round`. Every published opportunity carried `m5_key_level_role_ambiguous` (1,474 of 1,474 since 1 Nov), the direction fell back to which side of the level price stood on (302 of 1,142 replayed candidates were a BUY at a level made only of swing highs or a SELL at a level made only of swing lows), and `require_explicit_role` could never be satisfied (GBPJPY published nothing). v9 reads the role from the market structure that formed the level (`keylevel.StructuralRole`; section "Role contract"). The level's kind, band, touches, the reaction confirmation, invalidation, entry band, target (T1.1), stop budget, `StructuralID` and the quality model are unchanged. This is a deliberate difference from the frozen Python detector (which had no explicit roles either): Key Level now trades the direction its structure implies.
 
@@ -35,7 +37,7 @@ and entry.
    the naive reading: both sides are tried over the widened window and the zone's
    edge is the level the opposite side reacts off.
 5. A direction needs a confirmed structural reaction off the band
-   (`evaluate_structural_reaction`: sweep reclaim, CHoCH rejection, strong
+   (`confirmReaction`, v10, see "Reaction confirmation": sweep reclaim, CHoCH rejection, strong
    reclaim, wick rejection, engulfing). A level both sides confirm is a
    contradiction and yields nothing.
 6. The reaction passes the shared qualification (`_finish`): the level on the

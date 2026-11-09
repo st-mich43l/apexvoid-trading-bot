@@ -55,7 +55,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v9"
+const Version = "v10"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -298,6 +298,8 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		}
 
 		var confirmed []attempt
+		// The reaction can only be at a level that already exists: the touch and the confirmation are bars on or after the one on which the level became known.
+		knownFrom := levelKnownFrom(frame, level.Price, level.Band, s.cfg.MinimumTouches)
 		for _, direction := range directions {
 			if direction == market.Sell && s.cfg.MinimumSellZoneScore > 0 {
 				score, found := nearestSameSideZoneScore(zones, price, "supply")
@@ -310,7 +312,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 				levelPrice = contraLevel
 			}
 			d := base.WithDirection(direction)
-			conf := d.Reaction(reactLow, reactHigh, d.LevelGrab(level.Price, level.Band))
+			conf := s.confirmReaction(d, reactLow, reactHigh, d.LevelGrab(level.Price, level.Band), knownFrom)
 			if conf == nil {
 				continue
 			}
