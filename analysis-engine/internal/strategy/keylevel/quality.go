@@ -21,22 +21,23 @@ const minimumLevelHistory = 10
 // qualityInputs are the facts of one qualified Key Level reaction that the score reads. Everything here exists when the
 // opportunity is created: closed bars up to the confirmation, the level, the engine's structural read, the entry and the target.
 type qualityInputs struct {
-	bars         []market.Candle // the frame's closed bars, the last being the latest closed bar
-	touchIndex   int             // bar that first reached the band
-	confirmIndex int             // bar that confirmed the rejection
-	level, band  float64
-	atr          float64
-	buy          bool
-	price        float64 // latest close
-	reference    float64 // proximal edge of the entry band
-	invalidation float64
-	target       float64
-	structural   bool   // the target is a real opposing liquidity, not a fixed reward:risk
-	localTrend   string // the frame's structure: "up", "down" or "range"
-	choch        bool   // a change of character in the trade's direction within the reaction window
-	htfAligned   bool
-	htfTouches   int     // touches of the best higher-timeframe level at this price (H1 weighted fully, M15 by half), 0 when none/unavailable
-	htfWeight    float64 // 1 for an H1 level, 0.5 for an M15 level
+	bars          []market.Candle // the frame's closed bars, the last being the latest closed bar
+	touchIndex    int             // bar that first reached the band
+	confirmIndex  int             // bar that confirmed the rejection
+	level, band   float64
+	atr           float64
+	buy           bool
+	price         float64 // latest close
+	reference     float64 // proximal edge of the entry band
+	invalidation  float64
+	target        float64
+	effectiveRisk float64 // the stop distance the trade is exposed to: the structural one, or the instrument floor when that is wider (StopBudget.EffectiveRisk)
+	structural    bool    // the target is a real opposing liquidity, not a fixed reward:risk
+	localTrend    string  // the frame's structure: "up", "down" or "range"
+	choch         bool    // a change of character in the trade's direction within the reaction window
+	htfAligned    bool
+	htfTouches    int     // touches of the best higher-timeframe level at this price (H1 weighted fully, M15 by half), 0 when none/unavailable
+	htfWeight     float64 // 1 for an H1 level, 0.5 for an M15 level
 
 	// The level's own facts, published as measurements only (forward labels for a later decision; never a score, a gate or a star).
 	levelKind string                // the level's kind as the strategy read it ("reaction", "round")
@@ -104,6 +105,11 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 	room, rewardRisk := quality.GeometryRoom(in.reference, in.invalidation, in.target, in.structural)
 	m.Score("room", room)
 	m.Measure("room_reward_risk", rewardRisk)
+	// The same room against the effective risk: what the room is worth when execution widens a tight stop to the instrument floor. A measurement only; it is
+	// not a dimension and never enters Overall.
+	if in.effectiveRisk > 0 {
+		m.Measure("room_r_effective", math.Abs(in.target-in.reference)/in.effectiveRisk)
+	}
 
 	// Forward labels: what kind of level this was, so realised outcomes can later be cut by it. Measurements only.
 	if in.levelKind == "round" {

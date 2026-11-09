@@ -16,7 +16,7 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 
 | Strategy | Version | Structure | Thesis | Spec |
 |---|---|---|---|---|
-| `key_level` | v6 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | [key_level](key_level.md), sweep first |
+| `key_level` | v8 | M5 | reaction at a clustered key level in the direction its role implies; on XAU only after the level was swept | [key_level](key_level.md), sweep first |
 | `supply` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed rejection of a supply zone with room below; zones touched more than 2 times are spent | [supply](supply.md) |
 | `demand` | v7 | M5 (confirms, executes), M15, H1 (structure) | confirmed bounce from a demand zone with room above; same touch cap; owns its zone score and dealing range | [demand](demand.md), [premium/discount](premium-discount.md) |
 | `order_block` | v9 | M5 (confirms, executes), M15, H1 (structure) | confirmed reaction at the last opposite candle before a displacement that broke structure, with room to the next opposing structure; dead once a close of its own frame goes through its far edge; its structure breaks are computed causally and its break kind and prior sweep are measured evidence | [order_block](order_block.md) |

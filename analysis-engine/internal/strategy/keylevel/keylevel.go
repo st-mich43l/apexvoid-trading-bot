@@ -31,9 +31,12 @@
 // Key Level carries no strength, proximity or target-room filter of its own:
 // the frozen detector had none (its quality gates were confluence and the
 // execution policy), and each one measurably removed decisions the profitable
-// system took. The candidate's target is the nearest opposing liquidity when
-// there is one, else a fixed reward:risk beyond the entry; whether the room is
-// enough is the execution policy's decision, as it was.
+// system took. The candidate's target is the nearest UNSWEPT opposing liquidity
+// pool ahead of the entry (the candidate's own wall excluded) at whatever
+// distance, and only when none stands in the way a fixed reward:risk of the
+// EFFECTIVE risk beyond the entry (v8: a pool nearer than the old minimum
+// distance, or already swept, no longer decides whether the path is "clear");
+// whether the room is enough is the execution policy's decision, as it was.
 package keylevel
 
 import (
@@ -52,7 +55,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v7"
+const Version = "v8"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -75,12 +78,11 @@ type Config struct {
 	// MinimumSellZoneScore is the optional floor on the nearest supply zone's
 	// score for a SELL (0 disables it); the frozen detector carried it as an
 	// instrument quality knob.
-	MinimumSellZoneScore     float64
-	InvalidationBufferATR    float64
-	MinimumTargetDistanceATR float64
-	FallbackTargetR          float64
-	ExpiryHours              float64
-	PriceDigits              int
+	MinimumSellZoneScore  float64
+	InvalidationBufferATR float64
+	FallbackTargetR       float64
+	ExpiryHours           float64
+	PriceDigits           int
 	// RequireExplicitRole skips levels whose support/resistance role is still
 	// ambiguous (legacy per-instrument Key Level quality rule).
 	RequireExplicitRole bool
@@ -137,9 +139,6 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, err
 	}
 	if cfg.InvalidationBufferATR, err = strategyutil.Float(params, "invalidation_buffer_atr"); err != nil {
-		return Config{}, err
-	}
-	if cfg.MinimumTargetDistanceATR, err = strategyutil.Float(params, "minimum_target_distance_atr"); err != nil {
 		return Config{}, err
 	}
 	if cfg.FallbackTargetR, err = strategyutil.Float(params, "fallback_target_r"); err != nil {
@@ -376,7 +375,7 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	if direction == market.Sell {
 		reference = low
 	}
-	target, targetLabel, ok := s.target(d, direction, reference, invalidation, atr)
+	target, targetLabel, ok := s.target(d, direction, reference, invalidation, atr, ownWall{low: fullLow, high: fullHigh, levelPrice: a.level.Price, levelBand: a.level.Band})
 	if !ok {
 		return opportunity.Candidate{}, false
 	}
@@ -407,7 +406,7 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	quality := scoreQuality(qualityInputs{
 		bars: d.Frame.Bars, touchIndex: conf.TouchIndex, confirmIndex: conf.ConfirmationIndex,
 		level: a.level.Price, band: effectiveBand, atr: atr, buy: direction == market.Buy, price: d.Price, reference: reference,
-		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity",
+		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity", effectiveRisk: s.cfg.StopBudget.EffectiveRisk(reference, invalidation),
 		localTrend: d.Frame.Structure, choch: a.detector.RecentCHoCH(maxInt(1, d.Settings.ReactionLookbackBars)), htfAligned: a.detector.HTFAligned(),
 		htfTouches: htfTouches, htfWeight: htfWeight,
 		levelKind: a.level.Kind, levelBand: a.level.Band, swings: d.Frame.Swings, coverage: coverage,
@@ -437,15 +436,48 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	return candidate, true
 }
 
-// target is the nearest unswept opposing liquidity at least the configured
-// distance from the entry; without one, a fixed reward:risk beyond it. Whether
-// the room is enough is the execution policy's decision, not a filter here.
-func (s *Strategy) target(d *strategyutil.LegacyDetector, direction market.Direction, reference, invalidation, atr float64) (float64, string, bool) {
+// ownWall is the candidate's own structure: the full reaction band the entry was read in (before any deep-entry cut) and the level's own cluster. A
+// liquidity pool inside it is the wall the trade rests on, never an opposing obstacle.
+type ownWall struct {
+	low, high, levelPrice, levelBand float64
+}
+
+func (w ownWall) contains(pool techniquezone.Pool) bool {
+	return pool.Level >= w.low-pool.Band && pool.Level <= w.high+pool.Band ||
+		math.Abs(pool.Level-w.levelPrice) <= math.Max(w.levelBand, pool.Band)
+}
+
+// poolSwept reports whether price has already traded beyond the pool's outer edge after the swing that last defined it: the liquidity resting there has
+// been taken, so it is neither an objective nor an obstacle. It is the sweep test liquidity grabs use (techniquezone.LiquidityGrabs): a high beyond
+// level + band for a buy-side pool, a low beyond level - band for a sell-side one. Closed frame bars only.
+func poolSwept(bars []market.Candle, pool techniquezone.Pool) bool {
+	for i := pool.LastIndex + 1; i < len(bars); i++ {
+		if pool.Side == "buy" && bars[i].High > pool.Level+pool.Band || pool.Side == "sell" && bars[i].Low < pool.Level-pool.Band {
+			return true
+		}
+	}
+	return false
+}
+
+// target is the candidate's objective, from the opposing liquidity ahead of the entry.
+//
+// Opposing liquidity is a pool on the side the trade runs toward that is strictly ahead of the proximal entry edge, has not been swept since its last
+// defining swing, and is not the candidate's own wall. The nearest such pool is the target (nearest_opposing_liquidity) at whatever distance: a pool that
+// is close leaves little room, and that is what the candidate then says. Only when no such pool stands in the way is the target a fixed
+// fallback_target_r times the EFFECTIVE risk beyond the entry (fixed_reward_risk): the risk the trade is actually exposed to, the structural distance or the
+// instrument stop floor when that is wider (StopBudget.EffectiveRisk), because execution widens a tighter stop to the floor. Whether the room is enough
+// stays the execution policy's decision: nothing here refuses a candidate for its room.
+func (s *Strategy) target(d *strategyutil.LegacyDetector, direction market.Direction, reference, invalidation, atr float64, wall ownWall) (float64, string, bool) {
+	risk := s.cfg.StopBudget.EffectiveRisk(reference, invalidation)
+	if !(risk > 0) {
+		return 0, "", false
+	}
 	want := "buy"
 	if direction == market.Sell {
 		want = "sell"
 	}
-	minimum := s.cfg.MinimumTargetDistanceATR * atr
+	// A pool within a tick or 5% of an ATR of the entry edge shares its boundary: it is the same wall, as the execution's shared-boundary tolerance reads it.
+	glue := math.Max(s.cfg.StopBudget.PipSize, 0.05*math.Max(0, atr))
 	best, bestDistance := 0.0, math.Inf(1)
 	for _, pool := range d.Frame.Pools {
 		if pool.Side != want {
@@ -455,16 +487,13 @@ func (s *Strategy) target(d *strategyutil.LegacyDetector, direction market.Direc
 		if direction == market.Sell {
 			distance = reference - pool.Level
 		}
-		if distance >= minimum && distance < bestDistance {
-			best, bestDistance = pool.Level, distance
+		if distance <= glue || distance >= bestDistance || wall.contains(pool) || poolSwept(d.Frame.Bars, pool) {
+			continue
 		}
+		best, bestDistance = pool.Level, distance
 	}
 	if !math.IsInf(bestDistance, 1) {
 		return best, "nearest_opposing_liquidity", true
-	}
-	risk := math.Abs(reference - invalidation)
-	if risk <= 0 {
-		return 0, "", false
 	}
 	if direction == market.Sell {
 		return reference - s.cfg.FallbackTargetR*risk, "fixed_reward_risk", true

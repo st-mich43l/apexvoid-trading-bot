@@ -3,9 +3,11 @@
 
 ## Strategy ID / version
 
-`key_level`, `v7`. Implemented in
+`key_level`, `v8`. Implemented in
 `analysis-engine/internal/strategy/keylevel`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
+
+**Target basis (T1.1, v8).** The target is read from the opposing liquidity ahead of the entry, and only from liquidity that is still there. An opposing pool is a pool on the side the trade runs toward that (a) lies strictly ahead of the proximal edge of the entry band (a pool within a tick or 5% of an ATR of the edge shares its boundary and is the same wall), (b) has not been swept: no closed frame bar after the swing that last defined it has traded beyond its outer edge (a high above `level + band` for a buy-side pool, a low below `level - band` for a sell-side one; the sweep test liquidity grabs use), and (c) is not the candidate's own wall (inside the full reaction band, before any deep-entry cut, or the level's own cluster). The nearest such pool is the target (`nearest_opposing_liquidity`) at whatever distance: a close pool leaves little room and the candidate now says so. Only when no such pool stands in the way is the target `fallback_target_r` times the **effective** risk beyond the entry (`fixed_reward_risk`, meaning "nothing ahead"). Effective risk is the structural distance from the proximal edge to the invalidation, or the instrument stop floor when that is tighter (`StopBudget.EffectiveRisk`): execution widens a tighter stop to the floor, so an FX candidate with a 5-pip structural stop carries 15 pips of risk. v7 skipped pools nearer than `minimum_target_distance_atr` and treated pools already swept as live, so a close obstacle could be passed over for a farther pool or for the fixed fallback, and liquidity that had been taken could be the objective. `minimum_target_distance_atr` is removed (no consumer). The invalidation, the entry band, the stop budget, the confirmation, `StructuralID` and the quality dimensions are unchanged; the quality model gains one measurement, `room_r_effective` (the target's distance in effective risks), outside `Overall`. Nothing is refused for room. Orders are unchanged: for the fixed-ratio instrument packs the Go target is provenance and the ladder comes from the pack (`docs/execution.md`); the execution policy reads it only for an advisory room note that denies nothing.
 
 **Deep entry (PR-E1, v7).** When the structural stop from the proximal edge of the entry band is wider than the instrument cap, the strategy no longer refuses at once: `strategyutil.StopBudget.Fit` keeps the invalidation where structure puts it and cuts the entry band to the part from which the stop is within the cap (BUY: prices <= invalidation + cap; SELL: prices >= invalidation - cap, the cut edge rounded to the tick toward the inside). The candidate's entry band is the cut band (evidence `stop_budget_deep_entry`, quality measure `deep_entry_pips` = how far the proximal edge moved); room and target are recomputed from the new proximal edge. A band whose far edge is still beyond the cap, or a cut band narrower than `deep_entry_minimum_width_pips` (instrument, XAU 3.0, FX 0.5), is refused and counted as before. The identity (`StructuralID`, `SetupKey`) does not contain the entry band, so it is unchanged. The band cut is the reaction band; Key Level publishes no `Structure`, so the card shows the cut band only.
 
@@ -58,10 +60,10 @@ parity test fails if `current` is selected.
 ## Gates
 
 `minimum_strength`, `proximity_atr` and an opposing liquidity pool as a
-prerequisite are not gates. The reported target is the nearest opposing
-liquidity pool at least `minimum_target_distance_atr · ATR` away, else
-`fallback_target_r` times the risk beyond the entry; whether the available room
-suffices is the execution policy's decision.
+prerequisite are not gates. The reported target is the nearest unswept opposing
+liquidity pool ahead of the entry (own wall excluded), else `fallback_target_r`
+times the effective risk beyond the entry (see "Target basis"); whether the
+available room suffices is the execution policy's decision.
 
 ## Candidate
 

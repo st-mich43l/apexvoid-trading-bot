@@ -98,6 +98,19 @@ func (b StopBudget) Active() bool {
 	return b.PipSize > 0 && (b.MaxPips > 0 || b.MinPips > 0)
 }
 
+// EffectiveRisk is the distance from the proximal entry edge (reference) to the stop the trade is actually exposed to: the structural distance to the
+// invalidation, or the instrument floor when that is tighter (the invalidation is published as it is and execution widens the stop to the floor, which is
+// what an FX Key Level trade does when its structural stop is a few pips). Without a floor it is the structural distance. It never moves either price.
+func (b StopBudget) EffectiveRisk(reference, invalidation float64) float64 {
+	risk := math.Abs(reference - invalidation)
+	if b.Active() && b.MinPips > 0 {
+		if floor := b.MinPips * b.PipSize; risk < floor {
+			return floor
+		}
+	}
+	return risk
+}
+
 // Apply classifies the structural stop measured from the proximal entry edge (reference) to the invalidation. It never moves either price.
 //
 //	no budget                    -> ("", true): today's behaviour, no evidence code

@@ -186,7 +186,9 @@ analysis:
   # consumes those events and applies execution policy before publishing V8.
   strategies:
     key_level:
-      version: v7
+      # v8 (docs/strategies/key_level.md): the target is the nearest UNSWEPT opposing liquidity pool ahead of the entry (the candidate's own wall excluded), at any
+      # distance; only with none in the way is it fallback_target_r x the EFFECTIVE risk (the structural stop, or the instrument floor when wider). Nothing is refused for room.
+      version: v8
       enabled: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of
@@ -195,9 +197,8 @@ analysis:
       # the other detectors read (wick touches counted, CHoCH order blocks).
       detector_contract: profit_week
       invalidation_buffer_atr: 0.5
-      minimum_target_distance_atr: 1.0
-      # Reported target when no opposing liquidity pool exists: a fixed reward:risk
-      # beyond the entry. Whether the room is enough is the execution policy's call.
+      # Reported target when no unswept opposing liquidity pool stands in the way: this many times the effective risk beyond the entry (a fixed reward:risk).
+      # Whether the room is enough is the execution policy's call.
       fallback_target_r: 2.0
       expiry_hours: 24.0
       # Ported from the legacy Python detector's key_level_role.py::
