@@ -139,3 +139,44 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- Research data foundation (docs/research-data.md). Created on demand by `python -m tools.research_data init-schema` or by the opt-in bar archiver
+-- (algo-bot/app/research/), NOT by init_db(): deploying the code with runtime.market_data_archive.enabled false creates none of these.
+
+-- The feed's closed bars exactly as published (open_ts = bar open, epoch seconds).
+CREATE TABLE IF NOT EXISTS market_bars (
+  symbol TEXT NOT NULL, timeframe TEXT NOT NULL, open_ts BIGINT NOT NULL,
+  open DOUBLE PRECISION NOT NULL, high DOUBLE PRECISION NOT NULL, low DOUBLE PRECISION NOT NULL, close DOUBLE PRECISION NOT NULL,
+  volume DOUBLE PRECISION NOT NULL, ohlc_hash TEXT NOT NULL, source TEXT NOT NULL, ingest_path TEXT NOT NULL,
+  normalized BOOLEAN NOT NULL DEFAULT FALSE, revisions INTEGER NOT NULL DEFAULT 0, first_seen_at BIGINT NOT NULL,
+  PRIMARY KEY (symbol, timeframe, open_ts)
+);
+CREATE INDEX IF NOT EXISTS idx_market_bars_tf_ts ON market_bars(timeframe, open_ts);
+
+-- Superseded values of a bar the feed re-published with different values.
+CREATE TABLE IF NOT EXISTS market_bar_revisions (
+  symbol TEXT NOT NULL, timeframe TEXT NOT NULL, open_ts BIGINT NOT NULL, revision INTEGER NOT NULL,
+  open DOUBLE PRECISION NOT NULL, high DOUBLE PRECISION NOT NULL, low DOUBLE PRECISION NOT NULL, close DOUBLE PRECISION NOT NULL,
+  volume DOUBLE PRECISION NOT NULL, ohlc_hash TEXT NOT NULL, superseded_at BIGINT NOT NULL,
+  PRIMARY KEY (symbol, timeframe, open_ts, revision)
+);
+
+-- Per UTC minute quote statistics (spread in price units).
+CREATE TABLE IF NOT EXISTS market_quote_minutes (
+  symbol TEXT NOT NULL, minute_ts BIGINT NOT NULL, quote_count INTEGER NOT NULL, bid_last DOUBLE PRECISION NOT NULL,
+  ask_last DOUBLE PRECISION NOT NULL, spread_min DOUBLE PRECISION NOT NULL, spread_max DOUBLE PRECISION NOT NULL,
+  spread_mean DOUBLE PRECISION NOT NULL, first_ts BIGINT NOT NULL, last_ts BIGINT NOT NULL, recorded_at BIGINT NOT NULL,
+  PRIMARY KEY (symbol, minute_ts)
+);
+CREATE INDEX IF NOT EXISTS idx_market_quote_minutes_ts ON market_quote_minutes(minute_ts);
+
+-- Replay-derived (hypothetical) outcome of every published Go opportunity; never mixed with auto_trade_results. Authoritative DDL:
+-- algo-bot/app/research/outcome_store.py (columns: geometry, provenance, fill_state, outcome, r_low/r_high, touches, ladder_*, data_quality, assumptions).
+CREATE TABLE IF NOT EXISTS opportunity_outcome_labels (
+  opportunity_id TEXT NOT NULL, label_set TEXT NOT NULL, strategy TEXT NOT NULL, symbol TEXT NOT NULL, created_at BIGINT NOT NULL,
+  thesis_key TEXT NOT NULL, quality_overall DOUBLE PRECISION, quality_model_version INTEGER, quality_components JSONB,
+  config_fingerprint TEXT, fill_state TEXT NOT NULL, outcome TEXT NOT NULL, r_low DOUBLE PRECISION, r_high DOUBLE PRECISION,
+  touches JSONB, ladder_outcome TEXT, complete BOOLEAN NOT NULL, assumptions JSONB NOT NULL,
+  PRIMARY KEY (opportunity_id, label_set)
+);
+

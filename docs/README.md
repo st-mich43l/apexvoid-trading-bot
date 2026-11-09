@@ -26,6 +26,7 @@ flowchart TD
 | [transport/kafka](transport/kafka.md) | the opportunity event topics and delivery guarantees |
 | [configuration](configuration.md) | `config/*.yml`, how production loads it, containment |
 | [operations](operations.md) | deployment, routine checks, backups, incident response |
+| [research-data](research-data.md) | durable bar archive and forward outcome labels for evaluating every opportunity (opt-in, not installed) |
 | [bot-commands](bot-commands.md) | Telegram commands and channel features |
 | [security](security.md) | threat model and controls |
 | [schema.sql](schema.sql) | PostgreSQL schema reference |

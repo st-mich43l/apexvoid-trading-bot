@@ -30,6 +30,7 @@ from app.bot.client import edit_scanner_message_text
 from app.bot.telegram_actor import start_telegram_actor
 from app.signals.manual_execution import bridge_intents_loop, reconcile_events_loop
 from app.persistence import redis_state
+from app.research.bar_archive import bar_archive_loop, load_config as load_bar_archive_config
 
 _log_info = configure_logging(
   level=runtime_config.runtime.logging.level,
@@ -117,6 +118,10 @@ async def main() -> None:
   # The durable Go opportunity consumer and the bar worker are the only
   # automatic setup path.
   _spawn_supervised("setup_expiry_sweeper_loop", setup_expiry_sweeper_loop)
+  # Research data foundation (docs/research-data.md): copies closed bars and quote statistics from Redis into Postgres. Read-only toward the
+  # trading plane and off unless runtime.market_data_archive.enabled is true.
+  if load_bar_archive_config().enabled:
+    _spawn_supervised("bar_archive_loop", bar_archive_loop)
   # market_map_scan_loop removed from production startup 2026-09
   # (owner-directed Market Map purge): the periodic owner digest push is
   # retired along with Market Map's role as a trading-decision input.
