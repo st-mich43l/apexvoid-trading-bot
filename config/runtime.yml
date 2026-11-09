@@ -44,6 +44,31 @@ runtime:
     bars_channel: bars:new
     reconciliation_interval_seconds: 30
 
+  # Research data foundation (docs/research-data.md). Off: nothing below runs until `enabled` is true, which is a separate rollout decision.
+  # Copies the feed's closed bars (and per-minute quote statistics) from Redis into Postgres so any Go opportunity can be replayed later.
+  market_data_archive:
+    enabled: false
+    symbols: [XAU, EURUSD, GBPUSD, GBPJPY, USDJPY]
+    timeframes: [M1, M5, M15, H1]
+    quotes_enabled: true
+    # The notification only marks a series dirty; this is how often dirty series, quotes, reconcile and the health record are processed.
+    flush_interval_seconds: 2
+    # Read every series from the last stored bar on (catches lost notifications), and re-read the whole Redis window (catches revised bars).
+    reconcile_interval_seconds: 120
+    full_reconcile_interval_seconds: 3600
+    # Rows older than this many days are deleted once a day. quote_minutes is the per-minute spread statistics table, outcome_labels the
+    # replay-derived labels (written only by tools.outcome_labeller).
+    retention_days:
+      M1: 180
+      M5: 730
+      M15: 730
+      H1: 1825
+      quote_minutes: 180
+      outcome_labels: 730
+    prune_interval_seconds: 86400
+    # tools.research_data status exits non-zero when the health record is older than this.
+    stale_after_seconds: 600
+
   redis_streams:
     events: auto_trade:events
     trade_plans: execution:trade_plans

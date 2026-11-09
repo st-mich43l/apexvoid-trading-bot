@@ -150,6 +150,13 @@ per symbol/timeframe, reads every bar newer than that cursor chronologically,
 and periodically reconciles the ZSET. A missed notification can delay work;
 it cannot create a permanent candle gap.
 
+## Research archive health (opt-in)
+
+`research:bar_archive:health` is a hash written only by the optional bar archiver (`runtime.market_data_archive.enabled`, off by default; see
+[research-data](research-data.md)): `updated_at`, `state` (`running` / `degraded`), `consecutive_errors`, `last_error`, `dirty_series`, `open_quote_minutes`,
+`quote_minutes_dropped`, `gaps_unexplained`, `last_reconcile_at`, `last_prune_at`, row counters and a per-series JSON of last bar and lag. The archiver only
+reads the bar ZSETs, `price:{SYM}:spot` and the `bars:new` / `spots:new` channels; it writes nothing else to Redis.
+
 ## Live Spot Key
 
 `ctrader-engine` also writes the latest bid/ask spot as a plain Redis string,
