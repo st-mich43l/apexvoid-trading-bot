@@ -106,6 +106,11 @@ func applyCRTGeometry(settings *Settings) {
 		if settings.InstrumentStopMaxPips > 0 {
 			params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
 		}
+		// The floor is read by the quality score only (room against the stop execution widens a tighter structural stop to); the detector decides on the
+		// structural stop and the cap alone.
+		if settings.InstrumentStopMinPips > 0 {
+			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
+		}
 		params["reaction_lookback_bars"] = 3.0
 		params["engulfing_minimum_range_atr"] = 0.5
 		settings.Strategies[i].Parameters = params

@@ -12,7 +12,6 @@ package crt
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
@@ -130,12 +129,11 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		evidence = append(evidence, "m5_crt_double_raid_resolved")
 	}
 	measurements := map[string]float64{
-		"h1_range_atr":         setup.Anchor.RangeATR,
-		"entry_range_position": (setup.EntryHigh - setup.Anchor.Low) / math.Max(setup.Anchor.Width(), 1e-12),
-		"sweep_depth_atr":      setup.Sweep.DepthATR,
-		"reclaim_depth_atr":    setup.Reclaim.DepthATR,
-		"technical_rr":         setup.TechnicalRR,
-		"technical_risk_pips":  setup.RiskPips,
+		"h1_range_atr":        setup.Anchor.RangeATR,
+		"sweep_depth_atr":     setup.Sweep.DepthATR,
+		"reclaim_depth_atr":   setup.Reclaim.DepthATR,
+		"technical_rr":        setup.TechnicalRR,
+		"technical_risk_pips": setup.RiskPips,
 	}
 	if setup.Shift != nil {
 		measurements["mss_displacement_atr"] = setup.Shift.DisplacementATR
@@ -151,7 +149,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		qc.localTrend = m5.Legacy.Structure
 	}
 	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
-		qc.choch, qc.price = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars)), d.Price
+		qc.choch, qc.price = setupCHoCH(d, setup), d.Price
 	}
 	s.score(model, setup, qc)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
@@ -190,11 +188,4 @@ func confluenceContext(score confluence.Score) *opportunity.ConfluenceContext {
 			StructuralAgreement: score.Factors.StructuralAgreement, FibTouch: score.Factors.FibTouch, CHoCH: score.Factors.CHoCH,
 		},
 	}
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

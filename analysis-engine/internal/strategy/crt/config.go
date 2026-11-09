@@ -59,8 +59,11 @@ type Config struct {
 	MinimumTargetRoomATR    float64
 	MinimumRewardRisk       float64
 	ExecutionStopMaxPips    float64
-	ExpiryHours             float64
-	PipSize                 float64
+	// ExecutionStopMinPips is the instrument's execution stop floor: execution widens a tighter stop to it. The quality score reads it to measure room against
+	// the risk the trade is actually exposed to; the detector decides on the structural stop and the cap alone. 0 = no floor known.
+	ExecutionStopMinPips float64
+	ExpiryHours          float64
+	PipSize              float64
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -127,6 +130,16 @@ func parseConfig(params map[string]any) (Config, error) {
 			return c, fmt.Errorf("crt: execution_stop_max_pips must be > 0 when set (omit it to disable the pre-check)")
 		}
 		c.ExecutionStopMaxPips = v
+	}
+	if _, present := params["execution_stop_min_pips"]; present {
+		v, err := strategyutil.Float(params, "execution_stop_min_pips")
+		if err != nil {
+			return c, fmt.Errorf("crt: %w", err)
+		}
+		if v < 0 {
+			return c, fmt.Errorf("crt: execution_stop_min_pips must be >= 0")
+		}
+		c.ExecutionStopMinPips = v
 	}
 	return c, c.validate()
 }
