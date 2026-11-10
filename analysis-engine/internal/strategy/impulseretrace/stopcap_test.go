@@ -9,13 +9,19 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 )
 
-func testStrategy(t *testing.T) *Strategy {
-	t.Helper()
-	params := map[string]any{
+// validParams is a complete Impulse Retrace configuration (the engine injects the pip size, the scalp book and the barrier policy).
+func validParams() map[string]any {
+	return map[string]any{
 		"pip_size": 0.1, "stop_minimum_pips": 30.0, "stop_maximum_pips": 40.0, "minimum_net_target_pips": 10.0, "impulse_body_atr": 1.5,
 		"retrace_fraction": 0.5, "stop_buffer_atr": 0.0, "entry_width_pips": 4.0, "entry_window_minutes": 30.0,
 		"cooldown_bars": 6, "atr_length": 14, "atr_window_bars": 140, "symbols": []any{"XAU"}, "reward_risk_ladder": []any{2.0, 1.0},
+		"room_projection": 1.0, "barrier_buffer_atr": 0.15, "barrier_max_width_atr": 2.0, "barrier_max_width_pips": 100.0,
 	}
+}
+
+func testStrategy(t *testing.T) *Strategy {
+	t.Helper()
+	params := validParams()
 	s, err := New(strategy.Config{ID: ID, Version: Version, Parameters: params})
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +48,8 @@ func TestImpulseRetraceStopCap(t *testing.T) {
 	}{{24, 30}, {35, 35}, {40, 40}, {40.5, 0}, {48, 0}}
 	for _, direction := range []market.Direction{market.Buy, market.Sell} {
 		for _, c := range cases {
-			candidate, ok := s.candidate(ctx, "", impulseBar(direction, c.pips, s.cfg), direction, 1)
+			candidate, reason := s.candidate(ctx, "", impulseBar(direction, c.pips, s.cfg), direction, 1)
+			ok := reason == ""
 			if c.want == 0 {
 				if ok {
 					t.Errorf("%s %.1f pips: published, want refused (a wider structural stop is never compressed)", direction, c.pips)

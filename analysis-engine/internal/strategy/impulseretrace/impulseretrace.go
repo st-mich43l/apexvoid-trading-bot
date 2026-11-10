@@ -8,22 +8,21 @@ import (
 	"fmt"
 	"math"
 	"strings"
-	"time"
+	"sync"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
-	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
 const ID strategy.StrategyID = "impulse_retrace"
-const Version = "v1"
+const Version = "v2"
 
 // QualityModel is the version of the ranking score below.
-const QualityModel = "impulse_retrace.quality.v1"
+const QualityModel = "impulse_retrace.quality.v2"
 
 // m5Minutes is the duration of the bar the strategy observes: the entry window runs from that bar's close.
 const m5Minutes = 5
@@ -46,11 +45,60 @@ type Config struct {
 	CooldownBars                     int
 	ATRLength, ATRWindowBars         int
 	RewardRiskLadder                 []float64
+	// RoomProjection is how far beyond the impulse bar's extreme, as a multiple of the bar's range, the horizon of the room lies when no opposing barrier is
+	// nearer: the equal-leg (1.0) measured move of the impulse. The impulse extreme itself is the first objective, not the end of the room: an entry at the
+	// retrace with the stop beyond the origin has less than 1R to the extreme by construction.
+	RoomProjection float64
+	// The opposing-barrier policy the room is measured with (SQ-1), injected by the engine from the leaves the Algo Bot's target-room check reads.
+	BarrierBufferATR, BarrierMaxWidthATR, BarrierMaxWidthPips float64
 }
+
+// Refusals of a real impulse, by reason (strategy_refused{strategy="impulse_retrace", reason}).
+const (
+	ReasonStopOverCap        = "stop_over_cap"
+	ReasonDegenerateGeometry = "degenerate_geometry"
+	ReasonNoOpposingRoom     = "no_opposing_room"
+	ReasonNoLadderTargetFits = "no_ladder_target_fits_room"
+	ReasonBuildFailed        = "candidate_build_failed"
+)
+
+// maxCountedRefusals bounds the dedupe memory of the refusal counter: an impulse is only re-read for a few bars.
+const maxCountedRefusals = 4096
 
 type Strategy struct {
 	cfg         Config
 	fingerprint string
+
+	// Every refused impulse is counted once, by its reason, for the engine's strategy_refused counter (strategy.RefusalReporter).
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
+	counted  map[string]struct{}
+}
+
+func (s *Strategy) countRefusal(reason string, bar market.Candle, direction market.Direction) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counted == nil || len(s.counted) > maxCountedRefusals {
+		s.counted = map[string]struct{}{}
+	}
+	id := fmt.Sprintf("%s|%s|%d", reason, direction, bar.Time)
+	if _, seen := s.counted[id]; seen {
+		return
+	}
+	s.counted[id] = struct{}{}
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	s.refusals[strategy.Refusal{Reason: reason, Timeframe: market.M5}]++
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
 }
 
 func New(c strategy.Config) (strategy.Strategy, error) {
@@ -118,53 +166,66 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	if k-lastFired < cfg.CooldownBars {
 		return nil
 	}
-	candidate, built := s.candidate(ctx, m5tf.Session.Active, bars[k], direction, a)
-	if !built {
+	candidate, reason := s.candidate(ctx, m5tf.Session.Active, bars[k], direction, a)
+	if reason != "" {
+		s.countRefusal(reason, bars[k], direction)
 		return nil
 	}
 	return []opportunity.Candidate{candidate}
 }
 
-func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, activeSession string, bar market.Candle, direction market.Direction, atr float64) (opportunity.Candidate, bool) {
+// candidate builds the opportunity of one impulse, or names why it is refused. The room is measured from the planned (worst) entry: the horizon is the
+// equal-leg projection of the impulse beyond its extreme, and the nearest valid opposing barrier ahead of the entry limits it when it is nearer
+// (strategyutil.MeasureScalpRoom). Barriers born of the impulse itself or later are not its opposing structure. The stop is the structural stop and is not touched.
+func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, activeSession string, bar market.Candle, direction market.Direction, atr float64) (opportunity.Candidate, string) {
 	cfg := s.cfg
 	pip := cfg.PipSize
 	width := cfg.EntryWidthPips * pip
 	span := bar.High - bar.Low
 	if span <= 0 {
-		return opportunity.Candidate{}, false
+		return opportunity.Candidate{}, ReasonDegenerateGeometry
 	}
-	var origin, extreme, zoneLow, zoneHigh, worst, structural float64
+	var origin, extreme, zoneLow, zoneHigh, worst, structural, horizon float64
 	if direction == market.Buy {
 		origin, extreme = bar.Low, bar.High
 		limit := extreme - cfg.RetraceFraction*span
 		zoneLow, zoneHigh = limit, limit+width
 		worst = zoneHigh
 		structural = (worst - (origin - cfg.StopBufferATR*atr)) / pip
+		horizon = extreme + cfg.RoomProjection*span
 	} else {
 		origin, extreme = bar.High, bar.Low
 		limit := extreme + cfg.RetraceFraction*span
 		zoneLow, zoneHigh = limit-width, limit
 		worst = zoneLow
 		structural = ((origin + cfg.StopBufferATR*atr) - worst) / pip
+		horizon = extreme - cfg.RoomProjection*span
 	}
 	// Narrower than the minimum is widened to it; wider than the maximum is refused, never tightened.
 	stop, ok := strategyutil.ScalpStopPips(structural, cfg.StopMinimumPips, cfg.StopMaximumPips)
 	if !ok {
-		return opportunity.Candidate{}, false
+		return opportunity.Candidate{}, ReasonStopOverCap
 	}
 	invalidation := worst - stop*pip
 	if direction == market.Sell {
 		invalidation = worst + stop*pip
 	}
 	if direction == market.Buy && !(invalidation < zoneLow && zoneLow < zoneHigh) || direction == market.Sell && !(invalidation > zoneHigh && zoneHigh > zoneLow) {
-		return opportunity.Candidate{}, false
+		return opportunity.Candidate{}, ReasonDegenerateGeometry
 	}
-	// No room cap: the target is the first rung of the ladder that clears the minimum net target.
-	targetPrice, _, ok := strategyutil.ScalpTarget(direction, worst, math.Inf(1), stop, cfg.MinimumNetTargetPips, pip, cfg.RewardRiskLadder)
+	params := strategyutil.ScalpRoomParams{
+		PipSize: pip, ATR: strategyutil.ScalpRoomATR(ctx, atr), BarrierBufferATR: cfg.BarrierBufferATR,
+		BarrierMaxWidthATR: cfg.BarrierMaxWidthATR, BarrierMaxWidthPips: cfg.BarrierMaxWidthPips,
+	}
+	room := strategyutil.MeasureScalpRoom(ctx, direction, worst, horizon, bar.Time, params)
+	if !(room.Pips > 0) {
+		return opportunity.Candidate{}, ReasonNoOpposingRoom
+	}
+	// The target is the first rung of the ladder that clears the minimum net target AND fits the room.
+	targetPrice, targetPips, ok := strategyutil.ScalpTarget(direction, worst, room.Pips, stop, cfg.MinimumNetTargetPips, pip, cfg.RewardRiskLadder)
 	if !ok {
-		return opportunity.Candidate{}, false
+		return opportunity.Candidate{}, ReasonNoLadderTargetFits
 	}
-	bodyATR := math.Abs(bar.Close-bar.Open) / atr
 	side := "buy"
 	if direction == market.Sell {
 		side = "sell"
@@ -173,11 +234,11 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, activeSession s
 	if label := strings.ToLower(activeSession); label != "" {
 		evidence = append(evidence, "session_"+label) // a label only: nothing reads it
 	}
-	model := quality.New(QualityModel)
-	model.Score("impulse_strength", (bodyATR-cfg.ImpulseBodyATR)/2.0)
-	model.Measure("impulse_body_atr", bodyATR)
-	model.Measure("retrace_fraction", cfg.RetraceFraction)
-	model.Measure("utc_hour", float64(time.Unix(bar.Time, 0).UTC().Hour()))
+	extremeRoom := (extreme - worst) / pip
+	if direction == market.Sell {
+		extremeRoom = (worst - extreme) / pip
+	}
+	model := s.score(bar, atr, stop, targetPips, extremeRoom, room)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("impulse_retrace:%s:%d", side, bar.Time), Symbol: ctx.Symbol, Direction: direction,
 		EntryLow: zoneLow, EntryHigh: zoneHigh, Invalidation: invalidation, InvalidationLabel: "impulse_origin_lost",
@@ -186,7 +247,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, activeSession s
 		FormedAt: bar.Time, ConfirmedAt: bar.Time, ExpiryHours: (cfg.EntryWindowMinutes + m5Minutes) / 60, Fingerprint: s.fingerprint,
 	})
 	if err != nil {
-		return opportunity.Candidate{}, false
+		return opportunity.Candidate{}, ReasonBuildFailed
 	}
-	return candidate, true
+	return candidate, ""
 }

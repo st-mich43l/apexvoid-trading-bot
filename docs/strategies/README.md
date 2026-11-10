@@ -30,9 +30,9 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | [round_number](round_number.md) |
 | `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | [asia_range](asia_range.md) |
 | `shock_retest` | v2 | M5 | XAU: the first pullback into the 50 to 61.8 percent retracement of a price-defined volatility shock, rejected in the shock direction; stop behind the retest extreme, target the shock extreme or its 1.272 extension | [shock_retest](shock_retest.md) |
-| `impulse_pullback` | v3 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | [impulse_pullback](impulse_pullback.md) |
-| `range_scalp` | v1 | M5 | XAU scalp: in a sideways M5 range, the probe of an edge that closes back inside is faded at market | [range_scalp](range_scalp.md) |
-| `impulse_retrace` | v1 | M5 | XAU scalp, every session: the first retrace to the midpoint of a 2 ATR M5 displacement bar, in the impulse direction | [impulse_retrace](impulse_retrace.md) |
+| `impulse_pullback` | v5 | M5, M1 | XAU scalp: M5 impulse, corrective pullback to structure, M1 confirmation | [impulse_pullback](impulse_pullback.md) |
+| `range_scalp` | v2 | M5 | XAU scalp: in a sideways M5 range, the probe of an edge that closes back inside is faded at market | [range_scalp](range_scalp.md) |
+| `impulse_retrace` | v2 | M5 | XAU scalp, every session: the first retrace to the midpoint of a 2 ATR M5 displacement bar, in the impulse direction | [impulse_retrace](impulse_retrace.md) |
 
 Whether a strategy also needs its own confirmation candle is one execution condition for all of them,
 `analysis.require_candle_confirmation` ([candle-confirmation](candle-confirmation.md)).

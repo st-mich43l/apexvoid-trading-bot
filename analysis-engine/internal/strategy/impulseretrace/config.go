@@ -13,6 +13,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		"pip_size": &cfg.PipSize, "stop_minimum_pips": &cfg.StopMinimumPips, "stop_maximum_pips": &cfg.StopMaximumPips,
 		"minimum_net_target_pips": &cfg.MinimumNetTargetPips, "impulse_body_atr": &cfg.ImpulseBodyATR, "retrace_fraction": &cfg.RetraceFraction,
 		"stop_buffer_atr": &cfg.StopBufferATR, "entry_width_pips": &cfg.EntryWidthPips, "entry_window_minutes": &cfg.EntryWindowMinutes,
+		"room_projection": &cfg.RoomProjection, "barrier_buffer_atr": &cfg.BarrierBufferATR, "barrier_max_width_atr": &cfg.BarrierMaxWidthATR,
+		"barrier_max_width_pips": &cfg.BarrierMaxWidthPips,
 	}, map[string]*int{
 		"cooldown_bars": &cfg.CooldownBars, "atr_length": &cfg.ATRLength, "atr_window_bars": &cfg.ATRWindowBars,
 	})
@@ -52,6 +54,10 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("impulse_body_atr must be positive")
 	case cfg.RetraceFraction <= 0 || cfg.RetraceFraction >= 1:
 		return Config{}, fmt.Errorf("retrace_fraction must be in (0, 1)")
+	case cfg.RoomProjection <= 0:
+		return Config{}, fmt.Errorf("room_projection must be positive")
+	case cfg.BarrierBufferATR < 0 || cfg.BarrierMaxWidthATR <= 0 || cfg.BarrierMaxWidthPips <= 0:
+		return Config{}, fmt.Errorf("barrier_buffer_atr must not be negative and barrier_max_width_atr and barrier_max_width_pips must be positive")
 	case cfg.StopBufferATR < 0:
 		return Config{}, fmt.Errorf("stop_buffer_atr must not be negative")
 	case cfg.EntryWidthPips <= 0:

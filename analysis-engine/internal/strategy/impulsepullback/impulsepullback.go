@@ -23,7 +23,10 @@ import (
 )
 
 const ID strategy.StrategyID = "impulse_pullback"
-const Version = "v4"
+const Version = "v5"
+
+// corridorUsableRoom is the share of the corridor's room a target may use: the last tenth is the edge itself, where price turns.
+const corridorUsableRoom = 0.9
 
 // Config is the strategy's parameters: the lane's window and context shape, the
 // setup-window structure, the archetype's qualification and the shared stop and
@@ -272,13 +275,14 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		worst := zoneHigh
 		stopPrice := math.Min(ref.Level, ev.PullbackExtreme) - stopBuffer
 		structural := (worst - stopPrice) / cfg.PipSize
-		room := c.BuyRoomPips
+		// The corridor is the active M5 range. Its room is measured from the worst planned entry, the price the trade is actually entered at, and not from the
+		// context snapshot's price (the first M1 close after the M5 boundary), which can sit anywhere in or beside the entry zone.
 		if direction == market.Sell {
 			worst = zoneLow
 			stopPrice = math.Max(ref.Level, ev.PullbackExtreme) + stopBuffer
 			structural = (stopPrice - worst) / cfg.PipSize
-			room = c.SellRoomPips
 		}
+		room := corridorRoomPips(direction, worst, c.ActiveLow, c.ActiveHigh, cfg.PipSize)
 		stop, ok := strategyutil.ScalpStopPips(structural, cfg.StopMinimumPips, cfg.StopMaximumPips)
 		if !ok {
 			continue
@@ -291,13 +295,13 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			continue
 		}
 		targetPrice, targetPips, ok := strategyutil.ScalpTarget(direction, worst, room, stop, cfg.MinimumNetTargetPips, cfg.PipSize, cfg.RewardRiskLadder)
-		if !ok || targetPips > room*0.9 {
+		if !ok || targetPips > room*corridorUsableRoom {
 			continue
 		}
 		model := scoreQuality(qualityInputs{
 			displacementATR: displacement, minDisplacementATR: cfg.ImpulseDisplacementATR, bodyDominance: ev.BodyDominance, minBodyDominance: cfg.ImpulseBodyDominance,
 			pullbackRatio: ev.MeanPullbackBody / ev.MeanImpulseBody, maxPullbackRatio: cfg.PullbackCorrectiveRatio, referenceTouches: ref.Touches,
-			price: c.Price, reference: worst, atr: structureATR, rewardPips: targetPips, stop: stop,
+			price: c.Price, reference: worst, atr: structureATR, rewardPips: targetPips, corridorRoomPips: room * corridorUsableRoom, stop: stop,
 		})
 		evidence := []string{"m5_qualified_impulse", "m1_bounded_pullback"}
 		if confirmed {
@@ -318,6 +322,16 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		out = append(out, candidate)
 	}
 	return out
+}
+
+// corridorRoomPips is the room of the scalp corridor (the active M5 range) ahead of the worst planned entry: up to its high for a BUY, down to its low for a
+// SELL. It is measured from the entry the trade is made at, not from the context snapshot's price, so a snapshot taken above or below the zone cannot
+// create or remove room. Zero or negative: the entry is at or beyond the corridor edge.
+func corridorRoomPips(direction market.Direction, worst, activeLow, activeHigh, pip float64) float64 {
+	if direction == market.Sell {
+		return (worst - activeLow) / pip
+	}
+	return (activeHigh - worst) / pip
 }
 
 func expectedRole(direction market.Direction) keylevel.RoleKind {

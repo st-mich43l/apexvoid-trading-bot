@@ -17,6 +17,7 @@ func testStrategy(t *testing.T) *Strategy {
 		"entry_width_pips": 4.0, "expiry_minutes": 30.0, "range_lookback_bars": 12, "cooldown_bars": 6, "maximum_signals_per_day": 3,
 		"atr_length": 14, "atr_window_bars": 140, "trading_day_rollover_utc_hour": 22, "symbols": []any{"XAU"},
 		"reward_risk_ladder": []any{2.0, 1.0},
+		"barrier_buffer_atr": 0.15, "barrier_max_width_atr": 2.0, "barrier_max_width_pips": 100.0,
 	}
 	s, err := New(strategy.Config{ID: ID, Version: Version, Parameters: params})
 	if err != nil {
@@ -35,10 +36,14 @@ func signalFor(direction market.Direction, structuralPips float64, cfg Config) s
 		worst := close - half
 		sig.SignalHigh = worst + structuralPips*pip
 		sig.High = sig.SignalHigh
+		sig.Low = worst - 300*pip // the far edge of the range: plenty of room
+		sig.Width = sig.High - sig.Low
 	} else {
 		worst := close + half
 		sig.SignalLow = worst - structuralPips*pip
 		sig.Low = sig.SignalLow
+		sig.High = worst + 300*pip
+		sig.Width = sig.High - sig.Low
 	}
 	return sig
 }
@@ -53,7 +58,8 @@ func TestRangeScalpStopCap(t *testing.T) {
 	}{{24, 30}, {35, 35}, {40, 40}, {40.5, 0}, {48, 0}}
 	for _, direction := range []market.Direction{market.Buy, market.Sell} {
 		for _, c := range cases {
-			candidate, ok := s.candidate(ctx, bars, signalFor(direction, c.pips, s.cfg))
+			candidate, reason := s.candidate(ctx, bars, signalFor(direction, c.pips, s.cfg))
+			ok := reason == ""
 			if c.want == 0 {
 				if ok {
 					t.Errorf("%s %.1f pips: published, want refused (a wider structural stop is never compressed)", direction, c.pips)

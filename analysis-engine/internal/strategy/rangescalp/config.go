@@ -14,6 +14,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		"minimum_net_target_pips": &cfg.MinimumNetTargetPips, "maximum_efficiency_ratio": &cfg.MaximumEfficiencyRatio,
 		"minimum_range_atr": &cfg.MinimumRangeATR, "maximum_range_atr": &cfg.MaximumRangeATR, "edge_fraction": &cfg.EdgeFraction,
 		"stop_buffer_atr": &cfg.StopBufferATR, "entry_width_pips": &cfg.EntryWidthPips, "expiry_minutes": &cfg.ExpiryMinutes,
+		"barrier_buffer_atr": &cfg.BarrierBufferATR, "barrier_max_width_atr": &cfg.BarrierMaxWidthATR, "barrier_max_width_pips": &cfg.BarrierMaxWidthPips,
 	}, map[string]*int{
 		"range_lookback_bars": &cfg.RangeLookbackBars, "cooldown_bars": &cfg.CooldownBars, "maximum_signals_per_day": &cfg.MaximumSignalsPerDay,
 		"atr_length": &cfg.ATRLength, "atr_window_bars": &cfg.ATRWindowBars, "trading_day_rollover_utc_hour": &cfg.TradingDayRolloverHour,
@@ -64,6 +65,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("entry_width_pips must be positive")
 	case cfg.CooldownBars < 1 || cfg.MaximumSignalsPerDay < 1:
 		return Config{}, fmt.Errorf("cooldown_bars and maximum_signals_per_day must be at least 1")
+	case cfg.BarrierBufferATR < 0 || cfg.BarrierMaxWidthATR <= 0 || cfg.BarrierMaxWidthPips <= 0:
+		return Config{}, fmt.Errorf("barrier_buffer_atr must not be negative and barrier_max_width_atr and barrier_max_width_pips must be positive")
 	case cfg.ExpiryMinutes <= 0:
 		return Config{}, fmt.Errorf("expiry_minutes must be positive")
 	case cfg.ATRLength < 2 || cfg.ATRWindowBars <= cfg.ATRLength:
