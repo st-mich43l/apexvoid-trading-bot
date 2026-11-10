@@ -23,6 +23,27 @@ def _default_runtime_cfg() -> Any:
 STOP_PLAN_VERSION = 2
 
 
+# The hard ceiling on a planned M1 scalp stop, pips from the worst planned entry leg to the absolute SL
+# (auto_algo.strategies.scalping.stop.maximum_pips). It is an eligibility limit, never a target stop distance.
+DEFAULT_SCALP_STOP_MINIMUM_PIPS = 30
+DEFAULT_SCALP_STOP_MAXIMUM_PIPS = 40
+
+
+def scalp_stop_limits(cfg: Any | None) -> tuple[int, int]:
+  """``(minimum, maximum)`` scalp stop pips from ``strategies.scalping.stop``; the maximum is never below the minimum."""
+  stop_cfg = getattr(getattr(getattr(cfg, "strategies", None), "scalping", None), "stop", None)
+  try:
+    minimum = int(float(getattr(stop_cfg, "minimum_pips", DEFAULT_SCALP_STOP_MINIMUM_PIPS) or DEFAULT_SCALP_STOP_MINIMUM_PIPS))
+  except (TypeError, ValueError):
+    minimum = DEFAULT_SCALP_STOP_MINIMUM_PIPS
+  try:
+    maximum = int(float(getattr(stop_cfg, "maximum_pips", DEFAULT_SCALP_STOP_MAXIMUM_PIPS) or DEFAULT_SCALP_STOP_MAXIMUM_PIPS))
+  except (TypeError, ValueError):
+    maximum = DEFAULT_SCALP_STOP_MAXIMUM_PIPS
+  return minimum, max(maximum, minimum)
+
+
+
 class ProtectiveStopError(ValueError):
   """A stop cannot be constructed under the shared execution contract.
 
@@ -787,21 +808,7 @@ def stop_bounds_for_reaction_room(
     execution = resolver(symbol).execution
   if is_scalp:
     if str(strategy) in M1_SCALP_STRATEGIES:
-      scalp_stop_cfg = getattr(
-        getattr(getattr(cfg, "strategies", None), "scalping", None),
-        "stop",
-        None,
-      )
-      try:
-        floor_pips = int(float(getattr(scalp_stop_cfg, "minimum_pips", 30) or 30))
-      except (TypeError, ValueError):
-        floor_pips = 30
-      try:
-        cap_pips = int(float(getattr(scalp_stop_cfg, "maximum_pips", 70) or 70))
-      except (TypeError, ValueError):
-        cap_pips = 70
-      if cap_pips < floor_pips:
-        cap_pips = floor_pips
+      floor_pips, cap_pips = scalp_stop_limits(cfg)
       min_rr = 1.0
       source = "scalp_stop_envelope"
     else:
@@ -1198,6 +1205,7 @@ def plan_go_invalidation_stop(
   enforce_minimum_stop: bool = False,
   widen_to_minimum: bool = False,
   band_extension_pips: Any = 0,
+  enforce_rounded_maximum: bool = False,
 ) -> FinalProtectiveStopPlan:
   """Use the Go engine's invalidation as the technical floor for the stop.
 
@@ -1299,6 +1307,21 @@ def plan_go_invalidation_stop(
     (price - stop if side == "BUY" else stop - price) / pip
     for price in prices
   )
+  # The cap above was checked on the unrounded stop. A scalp's cap is a hard limit on the order that is actually sent, so
+  # it is checked again on the absolute SL at broker precision, exactly (Decimal, no tolerance): the stop is rounded to a
+  # tick and never tightened into the structure to fit, so a stop that rounds past the cap is refused.
+  if enforce_rounded_maximum and final_pips > Decimal(str(maximum_stop_pips)):
+    raise ProtectiveStopError(
+      "stop_exceeds_go_invalidation_envelope",
+      measured={
+        "stop_reject_detail": "go_invalidation_over_max_after_rounding",
+        "stop_max_envelope_pips": int(maximum_stop_pips),
+        "furthest_leg_stop_pips": format(final_pips, "f"),
+        "planned_leg_prices": [format(price, "f") for price in prices],
+        "go_invalidation_price": format(go_stop, "f"),
+        "rounded_stop_price": format(stop, "f"),
+      },
+    )
   widened = adjustment != "none"
   return FinalProtectiveStopPlan(
     entry_price=reference,
@@ -1372,22 +1395,7 @@ def stop_bounds_for_strategy(
   # Reaction taxonomy fallback when room TP is unavailable. Zone / Demand /
   # Supply use the same numeric envelope as an independent family default.
   if str(strategy) in M1_SCALP_STRATEGIES:
-    scalp_stop_cfg = getattr(
-      getattr(getattr(cfg, "strategies", None), "scalping", None),
-      "stop",
-      None,
-    )
-    try:
-      scalp_min = int(float(getattr(scalp_stop_cfg, "minimum_pips", 30) or 30))
-    except (TypeError, ValueError):
-      scalp_min = 30
-    try:
-      scalp_max = int(float(getattr(scalp_stop_cfg, "maximum_pips", 70) or 70))
-    except (TypeError, ValueError):
-      scalp_max = 70
-    if scalp_max < scalp_min:
-      scalp_max = scalp_min
-    return scalp_min, scalp_max
+    return scalp_stop_limits(cfg)
   if str(strategy) in _REACTION_FAMILY_STRATEGIES:
     return trend_min, trend_max
   return trend_min, trend_max

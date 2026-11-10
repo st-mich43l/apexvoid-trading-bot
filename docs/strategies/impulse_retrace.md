@@ -1,7 +1,7 @@
 # Impulse Retrace Scalp
 
 `impulse_retrace` buys (or sells) the first retrace to the midpoint of one forceful M5 displacement bar, in the direction of the impulse. It is a Go-native XAU strategy
-(`symbols: [XAU]`), live (owner decision 2026-11-06, PR-S4; no observe-only, shadow or paper mode), and a member of the M1 scalp lane (stop 30 to 70 pips, 1R / break-even / 2R,
+(`symbols: [XAU]`), live (owner decision 2026-11-06, PR-S4; no observe-only, shadow or paper mode), and a member of the M1 scalp lane (stop 30 to 40 pips (SCALP-R40; wider is refused), 1R / break-even / 2R,
 80-pip opposite separation). **It trades every session: there is no session, clock or MAD-phase condition anywhere in it.** The session is published as a label only.
 
 Impulse Pullback (a 4 ATR displacement plus a structural reference plus M1 confirmation) is unchanged and is not gated by any clock either; it is rare because of its filters.

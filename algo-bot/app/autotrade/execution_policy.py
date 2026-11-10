@@ -29,6 +29,7 @@ from app.autotrade.protective_stop import (
   plan_protective_stop,
   plan_scalp_invalidation_stop,
   primary_tp_pips_from_match,
+  scalp_stop_limits,
   stop_bounds_for_reaction_room,
   stop_bounds_from_go_envelope,
 )
@@ -746,6 +747,7 @@ def evaluate_execution_policy(
   stop_plan_error: str | None = None
   stop_plan_error_measured: dict[str, Any] = {}
   stop_bounds_measured: dict[str, Any] = {}
+  scalp_hard_cap: int | None = None
   opposing_zone = None
   # Scalp sizing is a configured volume-only 1.5x equity-table boost. Its
   # protective stop remains structural; volume must not reshape the entry or
@@ -819,6 +821,20 @@ def evaluate_execution_policy(
         for_group_stop=use_group_stop,
         symbol=symbol,
       )
+    if is_m1_scalp_strategy(strategy_name):
+      # The scalp ceiling is read here as well as from Go's stop envelope: Go publishes it, Python enforces it, so an
+      # envelope computed under an older configuration (or none at all) can never lift it. The instrument stop floor and
+      # cap never apply to a scalp.
+      scalp_hard_cap = scalp_stop_limits(instrument_cfg)[1]
+      if maximum_stop_pips > scalp_hard_cap:
+        stop_bounds_measured = {
+          **stop_bounds_measured,
+          "stop_bounds_scalp_hard_capped_pips": scalp_hard_cap,
+          "stop_bounds_pre_hard_cap_pips": maximum_stop_pips,
+        }
+        maximum_stop_pips = scalp_hard_cap
+      if minimum_stop_pips > maximum_stop_pips:
+        minimum_stop_pips = maximum_stop_pips
     if (
       is_reaction_strategy(strategy_name)
       or is_zone_strategy(strategy_name)
@@ -906,6 +922,7 @@ def evaluate_execution_policy(
         # prevent.  The helper still enforces the configured maximum.
         enforce_minimum_stop=False,
         widen_to_minimum=True,
+        enforce_rounded_maximum=scalp_hard_cap is not None,
         band_extension_pips=_band_extension_pips(
           match, low=low, high=high, pip_size=pip,
           max_stop_pips=(
@@ -982,6 +999,25 @@ def evaluate_execution_policy(
       stop_plan_error_measured = {
         "final_stop_pips": float(stop_plan.final_stop_pips),
         "reaction_stop_max_pips": reaction_cap,
+      }
+      stop_plan = None
+  if stop_plan is not None and scalp_hard_cap is not None:
+    # Whatever path planned the stop, a scalp's final stop is measured from every planned executable leg (the worst
+    # entry included) to the absolute SL that will be sent, and is refused past the cap: never compressed to fit.
+    scalp_leg_pips = [
+      float((Decimal(str(price)) - stop_plan.final_stop_price if direction == "BUY" else stop_plan.final_stop_price - Decimal(str(price))) / Decimal(str(pip)))
+      for price in (leg_prices or [planned_entry])
+    ]
+    furthest = max(scalp_leg_pips) if scalp_leg_pips else float(stop_plan.final_stop_pips)
+    if max(furthest, float(stop_plan.final_stop_pips)) > scalp_hard_cap + 1e-9:
+      stop_plan_error = "scalp_stop_exceeds_hard_cap"
+      stop_plan_error_measured = {
+        "stop_reject_detail": "scalp_stop_over_hard_cap",
+        "scalp_stop_hard_cap_pips": scalp_hard_cap,
+        "final_stop_pips": float(stop_plan.final_stop_pips),
+        "furthest_leg_stop_pips": furthest,
+        "planned_leg_stop_pips": scalp_leg_pips,
+        "planned_stop_price": float(stop_plan.final_stop_price),
       }
       stop_plan = None
   reward_risk = (
@@ -1118,6 +1154,7 @@ def evaluate_execution_policy(
       "stop_exceeds_envelope_furthest_leg",
       "stop_below_go_invalidation_envelope",
       "stop_exceeds_go_invalidation_envelope",
+      "scalp_stop_exceeds_hard_cap",
       "go_invalidation_not_beyond_buy_entries",
       "go_invalidation_not_beyond_sell_entries",
       "stop_inside_opposing_zone",

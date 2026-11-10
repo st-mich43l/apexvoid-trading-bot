@@ -113,9 +113,12 @@ auto_algo:
       target:
         minimum_net_target_pips: 10
       stop:
-        # Impulse Pullback v4: 30-70 pips (70 = the XAU instrument cap). A stop wider than the maximum is refused, never tightened.
+        # M1 scalp lane (impulse_pullback, range_scalp, impulse_retrace): 30-40 pips. 40 is a hard eligibility limit on the planned stop,
+        # measured from the worst planned entry leg to the absolute SL at broker precision, never a target distance or a risk percentage.
+        # A structurally valid stop wider than the maximum is refused, never tightened; one narrower than the minimum is widened to it.
+        # Go reads it for its detectors and for the scalp stop envelope; Algo Bot enforces it again on the final order.
         minimum_pips: 30
-        maximum_pips: 70
+        maximum_pips: 40
         buffer_atr: 0.10
         # Sizes the entry band around a level reference only; the stop's buffer is buffer_m5_atr_multiple in analysis.yml.
         buffer_m1_atr_multiple: 1.2

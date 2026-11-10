@@ -659,7 +659,7 @@ analysis:
       reward_risk_ladder: [2.0, 1.0]
       buffer_m5_atr_multiple: 0.5
     # Range Scalp (PR-S4, docs/strategies/range_scalp.md): inside an M5 range that is going sideways, a probe of an edge that closes back inside is faded at
-    # market. XAU only. Stop and target are the shared scalp book (auto_algo.strategies.scalping.*, injected): stop 30-70 pips (wider is refused), ladder 2R then 1R.
+    # market. XAU only. Stop and target are the shared scalp book (auto_algo.strategies.scalping.*, injected): stop 30-40 pips (wider is refused), ladder 2R then 1R.
     range_scalp:
       version: v1
       enabled: true
