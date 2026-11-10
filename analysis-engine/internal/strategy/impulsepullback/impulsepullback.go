@@ -301,7 +301,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		model := scoreQuality(qualityInputs{
 			displacementATR: displacement, minDisplacementATR: cfg.ImpulseDisplacementATR, bodyDominance: ev.BodyDominance, minBodyDominance: cfg.ImpulseBodyDominance,
 			pullbackRatio: ev.MeanPullbackBody / ev.MeanImpulseBody, maxPullbackRatio: cfg.PullbackCorrectiveRatio, referenceTouches: ref.Touches,
-			price: c.Price, reference: worst, atr: structureATR, rewardPips: targetPips, corridorRoomPips: room * corridorUsableRoom, stop: stop,
+			buy: direction == market.Buy, price: c.Price, reference: worst, atr: structureATR, rewardPips: targetPips, corridorRoomPips: room * corridorUsableRoom, stop: stop,
 		})
 		evidence := []string{"m5_qualified_impulse", "m1_bounded_pullback"}
 		if confirmed {

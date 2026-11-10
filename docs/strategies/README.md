@@ -37,6 +37,8 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 Whether a strategy also needs its own confirmation candle is one execution condition for all of them,
 `analysis.require_candle_confirmation` ([candle-confirmation](candle-confirmation.md)).
 
+What a quality score measures from (the trade-aware entry location, the effective risk, the observed room) is shared geometry: [quality-geometry](quality-geometry.md).
+
 "Golden" means the decisions and entry reproduce the frozen Python publisher on
 committed real captures, generated from the oracle and never from Go. The stop,
 the stop budget and the higher-timeframe export differ from those publishers by

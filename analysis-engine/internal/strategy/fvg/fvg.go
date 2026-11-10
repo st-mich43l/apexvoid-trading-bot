@@ -80,7 +80,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	if d == nil {
 		return nil
 	}
-	candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol}, d)
+	candidate, ok := s.candidate(candidateContext{symbol: ctx.Symbol, market: ctx}, d)
 	if !ok {
 		return nil
 	}

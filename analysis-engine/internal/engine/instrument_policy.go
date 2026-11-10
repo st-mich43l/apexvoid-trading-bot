@@ -78,6 +78,9 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	if err := applyScalpLane(settings, doc, symbol); err != nil {
 		return err
 	}
+	if err := applyQualityBarrierPolicy(settings, doc, symbol); err != nil {
+		return err
+	}
 	if err := applyObserveOnly(settings, doc, symbol); err != nil {
 		return err
 	}
@@ -136,6 +139,10 @@ func applyBreakRetestGeometry(settings *Settings) {
 			params[k] = v
 		}
 		params["execution_stop_max_pips"] = settings.InstrumentStopMaxPips
+		// The floor is read by the quality score only (room against the stop execution widens a tighter structural stop to).
+		if settings.InstrumentStopMinPips > 0 {
+			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }
@@ -542,6 +549,42 @@ func instrumentBarrierBuffer(doc *config.Document, symbol string) (any, bool, er
 		return nil, false, nil
 	}
 	return doc.InstrumentOverride(symbol, "auto_algo", "actionability", "target_room", "barrier_buffer_atr")
+}
+
+// qualityBarrierStrategies are the strategies whose quality room is limited by the nearest valid opposing barrier (SQ-2). Range Scalp and Impulse Retrace read the
+// same policy for their eligibility (applyScalpLane).
+var qualityBarrierStrategies = map[string]bool{
+	"supply": true, "demand": true, "order_block": true, "fvg": true, "flip_zone": true, "trendline": true, "break_retest": true,
+	"confluence_zone": true, "round_number": true, "asia_range": true, "shock_retest": true,
+}
+
+// applyQualityBarrierPolicy gives the quality-room strategies the opposing-barrier policy the Algo Bot's target-room check reads: the execution-zone width limits
+// and the instrument's barrier buffer. It changes no detector, entry, stop or target: a quality model reads it, nothing else. It is idempotent.
+func applyQualityBarrierPolicy(settings *Settings, doc *config.Document, symbol string) error {
+	widthATR, err := getFloat(doc, "execution.policy.execution_zone_max_width_atr")
+	if err != nil {
+		return err
+	}
+	widthPips, err := getFloat(doc, "execution.policy.execution_zone_max_width_pips")
+	if err != nil {
+		return err
+	}
+	buffer, err := barrierBufferATR(doc, symbol)
+	if err != nil {
+		return err
+	}
+	for i := range settings.Strategies {
+		if !qualityBarrierStrategies[string(settings.Strategies[i].ID)] {
+			continue
+		}
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+3)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["barrier_buffer_atr"], params["barrier_max_width_atr"], params["barrier_max_width_pips"] = buffer, widthATR, widthPips
+		settings.Strategies[i].Parameters = params
+	}
+	return nil
 }
 
 // barrierBufferATR is the instrument's opposing-structure room buffer in ATR multiples: its own override

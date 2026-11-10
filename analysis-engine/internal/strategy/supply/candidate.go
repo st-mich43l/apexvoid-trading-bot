@@ -2,6 +2,7 @@ package supply
 
 import (
 	"fmt"
+	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"math"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
@@ -69,7 +70,7 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	if d.budgetCode != "" {
 		evidence = append(evidence, d.budgetCode)
 	}
-	scored := s.quality(d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
+	scored := s.quality(ctx, d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.symbol, Direction: market.Sell,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: invalidationLabel,
@@ -97,7 +98,10 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	return candidate, true
 }
 
-type candidateContext struct{ symbol market.Symbol }
+type candidateContext struct {
+	symbol market.Symbol
+	market *analysiscontext.MarketContext // the closed-bar context the quality room reads its opposing barriers from
+}
 
 // structureZone is the whole zone as drawn on its own timeframe (the execution frame is M5), with the open time of the bar that formed it.
 func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.StructureZone {
@@ -110,8 +114,8 @@ func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.St
 }
 
 // quality is the technical quality of a confirmed reaction off a supply zone: seven dimensions, each in [0, 1], averaged without weights (informational).
-func (s *Strategy) quality(d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
-	m := quality.New(string(ID) + ".quality.v1")
+func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
+	m := quality.New(string(ID) + ".quality.v2")
 	v := d.v
 	departure, width, touches := math.NaN(), math.NaN(), math.NaN()
 	if atr > 0 {
@@ -143,14 +147,13 @@ func (s *Strategy) quality(d *decision, reference, invalidation, target float64,
 	m.Measure("zone_width_atr", width)
 	m.Measure("zone_touches", touches)
 	m.Score("rejection", quality.RejectionScore(v.frame.Bars, d.conf.TouchIndex, d.conf.ConfirmationIndex, false))
-	m.Score("entry_location", quality.LocationScore(v.price, reference, atr))
-	if atr > 0 {
-		m.Measure("entry_chase_atr", math.Abs(v.price-reference)/atr)
-	}
+	strategyutil.ScoreEntryLocation(m, false, v.price, reference, atr)
 	m.Score("structure", quality.StructureScore(false, v.frame.Structure, v.recentCHoCH(maxInt(1, v.cfg.ReactionLookbackBars)), v.htfAligned()))
-	room, rewardRisk := quality.GeometryRoom(reference, invalidation, target, structural)
-	m.Score("room", room)
-	m.Measure("room_reward_risk", rewardRisk)
+	pip := d.v.cfg.StopBudget.PipSize
+	if !(pip > 0) {
+		pip = d.v.cfg.PipSize
+	}
+	strategyutil.ScoreRoom(m, strategyutil.MeasureQualityRoom(ctx.market, false, reference, invalidation, target, structural, d.v.cfg.StopBudget, d.v.cfg.Barrier.RoomParams(pip, strategyutil.ScalpRoomATR(ctx.market, atr)), 0), pip)
 	m.Measure("room_r", d.room.RoomR)
 	m.Measure("pd_position", d.inst.PDPosition)
 	m.Measure("deep_entry_pips", deepEntryPips(d))

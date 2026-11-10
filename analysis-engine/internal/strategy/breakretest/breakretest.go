@@ -165,7 +165,8 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	for name, value := range measurements {
 		model.Measure(name, value)
 	}
-	qc := qualityContext{htfAligned: factors.HTFAligned}
+	qc := qualityContext{htfAligned: factors.HTFAligned, pipSize: s.cfg.PipSize}
+	qc.room = s.qualityRoom(ctx, setup)
 	if m5.Legacy != nil {
 		qc.localTrend = m5.Legacy.Structure
 	}

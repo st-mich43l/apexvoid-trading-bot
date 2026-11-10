@@ -50,6 +50,7 @@ type Strategy struct {
 	chopRequireHTFAligned, requireHTFAligned, rejectExhausted     bool
 	legacy                                                        strategyutil.LegacyDetectorSettings
 	stopBudget                                                    strategyutil.StopBudget
+	barrier                                                       strategyutil.BarrierPolicy
 	fingerprint                                                   string
 }
 
@@ -92,6 +93,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		*dst = value
 	}
 	if s.legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
+		return nil, err
+	}
+	if s.barrier, err = strategyutil.ParseBarrierPolicy(cfg.Parameters); err != nil {
 		return nil, err
 	}
 	if s.stopBudget, err = strategyutil.ParseStopBudget(cfg.Parameters); err != nil {
@@ -298,7 +302,7 @@ func (s *Strategy) evaluateFrame(ctx *analysiscontext.MarketContext, f frame) []
 		}
 	}
 	candidate, ok := strategyutil.TechniqueCandidate(ctx, best, strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.stopBudget, ZoneEvidence: f.structureEvidence, ConfirmedEvidence: f.setupID,
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.stopBudget, Barrier: s.barrier, ZoneEvidence: f.structureEvidence, ConfirmedEvidence: f.setupID,
 		InvalidationLabel: "trendline_close_violation", InvalidationBufferATR: s.invalidationATR, ExpiryHours: f.expiryHours, Fingerprint: s.fingerprint,
 		// The target is the nearest opposing liquidity at least this far from the entry; with none there is
 		// no technical objective and nothing is published (v3 invented twice the distance to the band edge).

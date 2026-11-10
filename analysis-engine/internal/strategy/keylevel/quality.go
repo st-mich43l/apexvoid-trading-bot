@@ -31,6 +31,7 @@ type qualityInputs struct {
 	reference     float64 // proximal edge of the entry band
 	invalidation  float64
 	target        float64
+	pipSize       float64 // converts the risk distances to pips for publication
 	effectiveRisk float64 // the stop distance the trade is exposed to: the structural one, or the instrument floor when that is wider (StopBudget.EffectiveRisk)
 	structural    bool    // the target is a real opposing liquidity, not a fixed reward:risk
 	localTrend    string  // the frame's structure: "up", "down" or "range"
@@ -99,26 +100,20 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 
 	m.Score("rejection", quality.RejectionScore(in.bars, in.touchIndex, in.confirmIndex, in.buy))
 
-	m.Score("entry_location", entryLocation(in.buy, in.price, in.reference, in.atr))
-	if in.atr > 0 {
-		m.Measure("entry_chase_atr", math.Abs(in.price-in.reference)/in.atr)
-	}
+	strategyutil.ScoreEntryLocation(m, in.buy, in.price, in.reference, in.atr)
 
 	m.Score("structure", quality.StructureScore(in.buy, in.localTrend, in.choch, in.htfAligned))
 
 	// Room is scored against the risk execution takes: the structural stop distance, widened to the instrument floor where the structure is tighter. The structural
 	// ratio is still published, as a measurement.
-	_, structuralRR := quality.GeometryRoom(in.reference, in.invalidation, in.target, in.structural)
-	m.Measure("room_reward_risk", structuralRR)
-	risk := in.effectiveRisk
-	if !(risk > 0) {
-		risk = math.Abs(in.reference - in.invalidation)
+	// The geometry is measured trade-aware: the target must be ahead of the entry and the invalidation behind it, and the risk is the effective one.
+	g := quality.MeasureRoom(in.buy, in.reference, in.invalidation, in.target, in.effectiveRisk, in.structural)
+	m.Measure("room_reward_risk", quality.MeasureRoom(in.buy, in.reference, in.invalidation, in.target, 0, true).StructuralRoomR)
+	if g.EffectiveRisk > 0 {
+		m.Measure("room_r_effective", g.EffectiveRoomR)
 	}
-	reward := math.Abs(in.target - in.reference)
-	if risk > 0 {
-		m.Measure("room_r_effective", reward/risk)
-	}
-	m.Score("room", quality.Room(reward, risk, in.structural))
+	strategyutil.PublishRiskGeometry(m, g, in.pipSize)
+	m.Score("room", g.Score)
 
 	// Forward labels: what kind of level this was, so realised outcomes can later be cut by it. Measurements only.
 	if in.levelKind == "round" {
@@ -137,20 +132,6 @@ func scoreQuality(in qualityInputs) opportunity.StrategyQuality {
 	m.Measure("deep_entry_pips", in.deepEntryPips)
 
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
-}
-
-// entryLocation is how far the latest close has already run away from the proximal edge in the trade's favour (above it for a buy, below it for a sell), in ATR,
-// Fall(d; 0.25, 1.5). Price that has left the edge is a late entry. Price back inside the band, on the far side of the edge, is a better fill than the edge and is
-// not late: it scores in full (its cost, a stop that is nearer, is room's, not location's). Without a volatility there is no measurement (0).
-func entryLocation(buy bool, price, reference, atr float64) float64 {
-	if !(atr > 0) || math.IsNaN(price) || math.IsInf(price, 0) || math.IsNaN(reference) || math.IsInf(reference, 0) {
-		return 0
-	}
-	ran := price - reference
-	if !buy {
-		ran = reference - price
-	}
-	return quality.Fall(math.Max(0, ran)/atr, 0.25, 1.5)
 }
 
 // higherTimeframeLevel finds the best higher-timeframe level at this price: the touches of an H1 level (weight 1) or an M15 level

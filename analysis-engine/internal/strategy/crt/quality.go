@@ -63,10 +63,7 @@ func (s *Strategy) score(m *quality.Model, setup Setup, qc qualityContext) {
 		m.Score("range_position", quality.Fall(position, 0.25, 0.7))
 	}
 	m.Measure("entry_range_position", position)
-	m.Score("entry_location", entryLocation(buy, qc.price, reference, setup.M5ATR))
-	if setup.M5ATR > 0 {
-		m.Measure("entry_chase_atr", math.Abs(qc.price-reference)/setup.M5ATR)
-	}
+	strategyutil.ScoreEntryLocation(m, buy, qc.price, reference, setup.M5ATR)
 	m.Score("structure", quality.StructureScore(buy, qc.localTrend, qc.choch, qc.htfAligned))
 	if qc.choch {
 		m.Measure("choch_in_sequence", 1)
@@ -77,12 +74,12 @@ func (s *Strategy) score(m *quality.Model, setup Setup, qc qualityContext) {
 	// Room is scored against the risk execution takes: the structural stop distance, widened to the instrument floor where the structure is
 	// tighter. The structural ratio is still published (technical_rr), next to the executed one.
 	budget := strategyutil.StopBudget{MinPips: s.cfg.ExecutionStopMinPips, PipSize: s.cfg.PipSize}
-	risk := budget.EffectiveRisk(reference, setup.Stop)
-	reward := math.Abs(setup.Target - reference)
-	m.Score("room", quality.Room(reward, risk, true))
-	if risk > 0 {
-		m.Measure("room_r_effective", reward/risk)
+	g := quality.MeasureRoom(buy, reference, setup.Stop, setup.Target, budget.FloorPrice(), true)
+	m.Score("room", g.Score)
+	if g.EffectiveRisk > 0 {
+		m.Measure("room_r_effective", g.EffectiveRoomR)
 	}
+	strategyutil.PublishRiskGeometry(m, g, s.cfg.PipSize)
 }
 
 // entryRangePosition is where the proximal edge of the entry band sits in the reference range for the thesis: 0 at the swept edge (the
@@ -97,20 +94,6 @@ func entryRangePosition(setup Setup) float64 {
 		return (setup.EntryHigh - setup.Anchor.Low) / width
 	}
 	return (setup.Anchor.High - setup.EntryLow) / width
-}
-
-// entryLocation is how far the latest close has run away from the proximal edge of the entry band in the trade's favour (above it for a buy, below it for a
-// sell), in ATR, Fall(d; 0.25, 1.5): price that has left the entry is a late one. Price back inside the band, on the far side of the edge, is a better fill than
-// the edge and is not late, so it scores in full. Without a volatility there is no measurement (0).
-func entryLocation(buy bool, price, reference, atr float64) float64 {
-	if !(atr > 0) || math.IsNaN(price) || math.IsInf(price, 0) || math.IsNaN(reference) || math.IsInf(reference, 0) {
-		return 0
-	}
-	ran := price - reference
-	if !buy {
-		ran = reference - price
-	}
-	return quality.Fall(math.Max(0, ran)/atr, 0.25, 1.5)
 }
 
 // setupCHoCH reports whether the engine's M5 frame broke character in the trade's direction on a bar that belongs to this setup's sequence before its confirming

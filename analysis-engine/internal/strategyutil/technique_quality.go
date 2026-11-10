@@ -12,10 +12,11 @@ import (
 type QualityGeometry struct {
 	// Reference is the proximal edge of the published entry band, Invalidation the structural stop, Target the nominal objective.
 	Reference, Invalidation, Target float64
-	// Structural is true when Target is a real opposing objective (liquidity, the opposite extreme of the range) and not a fixed
-	// reward:risk beyond the entry.
-	Structural bool
-	ATR        float64
+	ATR                             float64
+	// Room is the measured room of the entry (MeasureQualityRoom): the risk the trade is exposed to, the structural stop's share of it, and the room ahead
+	// limited by the nearest valid opposing barrier. A target that is a fixed reward:risk is not observed structure and earns no structural room.
+	Room    QualityRoom
+	PipSize float64
 }
 
 // QualityFunc scores one technique decision. A strategy that has its own thesis dimensions (a trendline, a flip) sets it on the
@@ -23,7 +24,7 @@ type QualityGeometry struct {
 type QualityFunc func(dec *TechniqueDecision, g QualityGeometry) opportunity.StrategyQuality
 
 // SharedReactionDimensions adds the dimensions every confirmed rejection has, each from a different source: the reaction candles,
-// the entry's distance from the proximal edge, the direction of the market, and the room to the objective.
+// the entry's chase from the proximal edge in the trade's direction, the direction of the market, and the structural room over the risk the trade is exposed to.
 func SharedReactionDimensions(m *quality.Model, dec *TechniqueDecision, g QualityGeometry) {
 	d := dec.Detector
 	buy := dec.Direction == market.Buy
@@ -32,14 +33,9 @@ func SharedReactionDimensions(m *quality.Model, dec *TechniqueDecision, g Qualit
 		rejection = quality.RejectionScore(d.Frame.Bars, dec.Confirmation.TouchIndex, dec.Confirmation.ConfirmationIndex, buy)
 	}
 	m.Score("rejection", rejection)
-	m.Score("entry_location", quality.LocationScore(d.Price, g.Reference, g.ATR))
-	if g.ATR > 0 {
-		m.Measure("entry_chase_atr", math.Abs(d.Price-g.Reference)/g.ATR)
-	}
+	ScoreEntryLocation(m, buy, d.Price, g.Reference, g.ATR)
 	m.Score("structure", quality.StructureScore(buy, d.Frame.Structure, d.RecentCHoCH(maxInt(1, d.Settings.ReactionLookbackBars)), d.HTFAligned()))
-	room, rewardRisk := quality.GeometryRoom(g.Reference, g.Invalidation, g.Target, g.Structural)
-	m.Score("room", room)
-	m.Measure("room_reward_risk", rewardRisk)
+	ScoreRoom(m, g.Room, g.PipSize)
 }
 
 // ZoneFamilyQuality is the technical quality of a confirmed reaction off a supply/demand zone, an order block or a fair value gap.
@@ -50,8 +46,10 @@ func SharedReactionDimensions(m *quality.Model, dec *TechniqueDecision, g Qualit
 //	zone_precision   the structure's width in ATR: Peak(width; 0.1, 0.4, 1.5, 3.5). A hairline is noise and a wide zone is a region.
 //	zone_freshness   touches the zone has taken including this reaction: Fall(n; 1, 5). Each retest spends resting interest.
 //	rejection, entry_location, structure, room   see SharedReactionDimensions.
+//
+// v2: entry_location is direction-aware and room is the structural room over the effective risk (ScoreEntryLocation, ScoreRoom).
 func ZoneFamilyQuality(name string, dec *TechniqueDecision, g QualityGeometry) opportunity.StrategyQuality {
-	m := quality.New(name + ".quality.v1")
+	m := quality.New(name + ".quality.v2")
 	inst := dec.Instance
 	buy := dec.Direction == market.Buy
 	departure, width, touches := math.NaN(), math.NaN(), math.NaN()
