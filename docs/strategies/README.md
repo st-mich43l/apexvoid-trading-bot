@@ -25,7 +25,7 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | [crt](crt.md) |
 | `break_retest` | v3 | M5 | accepted break of its own key level or trendline, fresh retest, rejection | [break_retest](break_retest.md) |
 | `flip_zone` | v5 | M5 | zone born of an accepted role flip at a key level, confirmed reaction after the break | [flip_zone](flip_zone.md) |
-| `trendline` | v6 | M5 | causal trendline with healthy anchors, live interaction, reaction | [trendline](trendline.md) |
+| `trendline` | v7 | M5 | two causal anchors, a touch of the line from its valid side, a confirmed reaction | [trendline](trendline.md) |
 | `confluence_zone` | v3 | M5 | two or more genuinely independent structures on one price region, measured rejection | [confluence_zone](confluence_zone.md), spec |
 | `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | [round_number](round_number.md) |
 | `asia_range` | v1 | M15 range, M5 | XAU: London's raid of the finalized Asia range (sweep, reclaim, structure shift) or its acceptance (retest); one thesis per edge per day | [asia_range](asia_range.md) |

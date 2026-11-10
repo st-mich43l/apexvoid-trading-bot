@@ -541,17 +541,20 @@ analysis:
       # level's band that make a break accepted (the flip's required role).
       breakout_accept_bars: 2
     trendline:
-      version: v6
+      version: v7
       enabled: true
       # The target is the nearest opposing liquidity at least this far from the entry; with none
       # there is no technical objective and nothing is published. (v3 reported twice the distance
       # from the entry to the interaction band edge, unrelated to the published stop.)
       minimum_target_distance_atr: 1.0
       # The frozen trendline_reaction (V2) gates (analysis.trendlines.*,
-      # execution.technique.trendline_*): forward validation, health, staleness,
-      # chop-regime quality, the live-interaction bands.
-      minimum_validation_touches: 1
-      chop_minimum_validation_touches: 2
+      # execution.technique.trendline_*): health, staleness, the chop-regime
+      # higher-timeframe requirement, the live-interaction bands. Two confirmed anchors
+      # establish a line (v7): no validation touch after them is required, in any regime;
+      # a line that was validated is simply stronger (quality), and a line touched
+      # `exhaustion_validation_touches` times is still worn through.
+      minimum_validation_touches: 0
+      chop_minimum_validation_touches: 0
       chop_require_htf_aligned: true
       require_htf_aligned: false
       reject_exhausted: true
@@ -859,15 +862,17 @@ analysis:
     sweep_reclaim_bars: 6
 
   trendlines:
-    # V2 keeps A/B anchors immutable, requires a later causal validation, and
-    # turns this band into an interaction watch rather than an automatic fill.
+    # V2 keeps A/B anchors immutable and turns this band into an interaction watch
+    # rather than an automatic fill. minimum_validation_touches counts touches AFTER the
+    # two anchors that a line needs to be `confirmed` rather than `tentative`: 0 (v7) means
+    # two anchors and the span are enough, and a later validation only strengthens the line.
     version: v2
     validation_touch_tolerance_atr: 0.30
     interaction_band_atr: 0.20
     invalidation_penetration_atr: 0.50
     close_violation_atr: 0.15
     approach_min_distance_atr: 0.10
-    minimum_validation_touches: 1
+    minimum_validation_touches: 0
     minimum_validation_touch_spacing_bars: 5
     validation_reaction_bars: 2
     minimum_validation_favorable_excursion_atr: 0.10
