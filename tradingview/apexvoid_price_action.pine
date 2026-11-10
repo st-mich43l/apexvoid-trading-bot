@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.20", "AV PA v2.20", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.21", "AV PA v2.21", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -2286,15 +2286,25 @@ f_vpAdd(float[] hs, float[] ls, float[] vs, float[] ih, float[] il, float[] iv, 
         array.push(hs, high)
         array.push(ls, low)
         array.push(vs, volume)
-    if cap and array.size(hs) > 3000
-        for k = 0 to 499
+    if cap and array.size(hs) > 800
+        // Halve the resolution of the whole period: neighbouring intrabars are merged pairwise (high of the highs, low of the lows, summed volume) and the tail is
+        // popped, so a profile never holds more than 800 rows of input and the last-bar recompute stays cheap.
+        int total = array.size(hs)
+        int half = int(total / 2)
+        for k = 0 to half - 1
             array.set(hs, k, math.max(array.get(hs, 2 * k), array.get(hs, 2 * k + 1)))
             array.set(ls, k, math.min(array.get(ls, 2 * k), array.get(ls, 2 * k + 1)))
             array.set(vs, k, nz(array.get(vs, 2 * k)) + nz(array.get(vs, 2 * k + 1)))
-        for k = 1 to 500
-            array.remove(hs, 500)
-            array.remove(ls, 500)
-            array.remove(vs, 500)
+        int keep = half
+        if total % 2 == 1
+            array.set(hs, half, array.get(hs, total - 1))
+            array.set(ls, half, array.get(ls, total - 1))
+            array.set(vs, half, array.get(vs, total - 1))
+            keep := half + 1
+        while array.size(hs) > keep
+            array.pop(hs)
+            array.pop(ls)
+            array.pop(vs)
         added := -1
     added
 
@@ -2313,7 +2323,7 @@ f_vpLine(int x1, int x2, float y, int tr, string sty) =>
 
 string vpPer = vpMode == "Manual" ? vpPerIn : chartSecs <= 300 ? "Session" : chartSecs <= 1800 ? "Day" : chartSecs <= 7200 ? "Week" : chartSecs <= 14400 ? "Month" : "Quarter"
 bool vpOn = vpMode != "Off" and not minimalMode
-string vpIb = vpMode == "Manual" ? vpIbIn : chartSecs <= 900 ? "1" : chartSecs <= 1800 ? "3" : chartSecs <= 7200 ? "5" : chartSecs <= 14400 ? "15" : "60"
+string vpIb = vpMode == "Manual" ? vpIbIn : chartSecs <= 300 ? "1" : chartSecs <= 900 ? "3" : chartSecs <= 1800 ? "5" : chartSecs <= 7200 ? "15" : "60"
 int vpKeep = vpMode == "Manual" ? vpKeepIn : chartSecs <= 300 ? 2 : chartSecs <= 7200 ? 1 : 0
 float vpExp = (vpPer == "Session" ? 28800.0 : vpPer == "Day" ? 82800.0 : vpPer == "Week" ? 414000.0 : vpPer == "Month" ? 1738800.0 : 5216400.0) / chartSecs
 bool vpChg = timeframe.change(vpPer == "Day" ? "D" : vpPer == "Week" ? "W" : vpPer == "Month" ? "M" : "3M")

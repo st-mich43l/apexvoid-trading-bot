@@ -113,8 +113,8 @@ func TestQualityIntegrity(t *testing.T) {
 			} else if joined != schema {
 				t.Errorf("schema changed: %s vs %s", joined, schema)
 			}
-			if c[quality.ModelVersionKey] != 2 {
-				t.Errorf("model version %v, want 2", c[quality.ModelVersionKey])
+			if c[quality.ModelVersionKey] != 3 {
+				t.Errorf("model version %v, want 3", c[quality.ModelVersionKey])
 			}
 			m := quality.New(QualityModel)
 			s.score(m, setupOf(kind), qualityContext{price: price, localTrend: "up", room: s.qualityRoom(ctxWith(), setupOf(kind), 4000.5), pipSize: 0.1})
