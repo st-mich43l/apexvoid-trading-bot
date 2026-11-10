@@ -97,11 +97,33 @@ func (v *view) confirm(in instance, bandLow, bandHigh, structLow, structHigh flo
 			continue
 		}
 		if last-c > v.cfg.ConfirmationMaxAgeBars {
+			if v.cfg.CandleConfirmationOptional {
+				return v.unconfirmedTouch(bars, bandLow, bandHigh, structLow, structHigh, earliest)
+			}
 			return nil, refusedStaleConfirmation
 		}
 		return &confirmation{Type: kind, TouchIndex: touchIndex, ConfirmationIndex: c, TouchTime: bars[touchIndex].Time, ConfirmationTime: bars[c].Time}, ""
 	}
+	if v.cfg.CandleConfirmationOptional {
+		return v.unconfirmedTouch(bars, bandLow, bandHigh, structLow, structHigh, earliest)
+	}
 	return nil, refusedNoRejection
+}
+
+// unconfirmedTouch is the decision of a gap that was touched within the confirmation's own freshness (the last ConfirmationMaxAgeBars bars) when no rejecting candle
+// is required (analysis.require_candle_confirmation: false): the latest such touch, with no pattern. A rejection, when there is one, is always found first.
+func (v *view) unconfirmedTouch(bars []market.Candle, bandLow, bandHigh, structLow, structHigh float64, earliest int) (*confirmation, string) {
+	last := len(bars) - 1
+	latest := -1
+	for t := maxInt(earliest, last-v.cfg.ConfirmationMaxAgeBars); t <= last; t++ {
+		if touches(bars[t], v.dir, bandLow, bandHigh, structLow, structHigh) {
+			latest = t
+		}
+	}
+	if latest < 0 {
+		return nil, ""
+	}
+	return &confirmation{Type: "", TouchIndex: latest, ConfirmationIndex: latest, TouchTime: bars[latest].Time, ConfirmationTime: bars[latest].Time}, ""
 }
 
 // engulfing: this bar's body fully engulfs the prior bar's body, the prior bar was a doji or opposed the reaction, and (with an ATR) the bar has real

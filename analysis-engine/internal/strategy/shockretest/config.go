@@ -24,8 +24,12 @@ type Config struct {
 	ShockRangeATR, MinimumShockBodyRatio, ShockLegATR float64
 	SettleBars, RetestMaxBars                         int
 	MinimumWickRatio                                  float64
-	DisplacementGradeATR                              float64
-	ConfirmationMaxAgeBars                            int
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false):
+	// the first candle inside the retracement band is the trigger; a wick or
+	// engulfing rejection is still measured and reported when present.
+	CandleConfirmationOptional bool
+	DisplacementGradeATR       float64
+	ConfirmationMaxAgeBars     int
 
 	StopBufferPips, StopBufferATR float64
 	MinimumTargetR                float64
@@ -56,6 +60,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	if c.Symbols, err = strategyutil.ParseSymbols(params); err != nil {
 		return c, fmt.Errorf("shock_retest: %w", err)
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, c.validate()
 }
 

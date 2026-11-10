@@ -161,3 +161,17 @@ func Candidate(spec CandidateSpec) (opportunity.Candidate, error) {
 	}
 	return candidate, nil
 }
+
+// RequireCandleConfirmation reads require_candle_confirmation (analysis.require_candle_confirmation, injected by the engine into every strategy). It is true when the
+// key is absent or is not a boolean: the confirmation requirement is the default and only an explicit false lifts it.
+// CandleConfirmationOptionalEvidence marks a Candidate that stands on its structure and a touch of its entry location because
+// analysis.require_candle_confirmation is false and no confirming candle showed (nothing is claimed that did not happen). It is how a consumer
+// tells an executable touch-only setup from a resting observation, which has neither a Reaction nor this code.
+const CandleConfirmationOptionalEvidence = "candle_confirmation_optional"
+
+func RequireCandleConfirmation(params map[string]any) bool {
+	if value, ok := params["require_candle_confirmation"].(bool); ok {
+		return value
+	}
+	return true
+}

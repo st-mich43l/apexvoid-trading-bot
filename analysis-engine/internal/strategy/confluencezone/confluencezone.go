@@ -170,7 +170,7 @@ func (s *Strategy) factors(d *strategyutil.LegacyDetector, setup Setup) confluen
 	return confluence.Factors{
 		HTFAligned:          d.HTFAligned(),
 		Touches:             setup.MaxSourceTouches,
-		WickRejection:       setup.Reaction.WickRatio >= s.cfg.RejectionWickRatio,
+		WickRejection:       setup.Reaction.Pattern != "" && setup.Reaction.WickRatio >= s.cfg.RejectionWickRatio,
 		DisplacementGrade:   bodyATR >= s.cfg.DisplacementGradeATR,
 		StructuralAgreement: structural,
 		CHoCH:               d.RecentCHoCH(s.cfg.ReactionLookback),
@@ -232,7 +232,15 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	scoreQuality(model, setup, d, d.RecentCHoCH(s.cfg.ReactionLookback), factors.HTFAligned, s.cfg.ReactionLookback)
 
 	direction := strings.ToLower(string(setup.Direction))
-	evidence := []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts", "m5_confluence_reaction"}
+	evidence := []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts"}
+	// A touch-only setup (optional candle confirmation) claims no reaction: the evidence code and the Reaction below are published only when the
+	// candle measured as a rejection.
+	rejected := setup.Reaction.Pattern != ""
+	if rejected {
+		evidence = append(evidence, "m5_confluence_reaction")
+	} else {
+		evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
+	}
 	if setup.DeepEntry {
 		evidence = append(evidence, strategyutil.StopBudgetDeepEntryEvidence)
 	}
@@ -256,9 +264,11 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	// and the structures that support it), not the bar that confirmed it: a
 	// re-confirmation of the same episode is the same thesis.
 	candidate.StructuralID = setup.Region.EpisodeID
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: setup.Region.EpisodeID, TouchBarTime: setup.TouchTime, ConfirmationBarTime: setup.ConfirmTime,
-		ReactionType: "rejection", Pattern: setup.Reaction.Pattern,
+	if rejected {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: setup.Region.EpisodeID, TouchBarTime: setup.TouchTime, ConfirmationBarTime: setup.ConfirmTime,
+			ReactionType: "rejection", Pattern: setup.Reaction.Pattern,
+		}
 	}
 	candidate.DetectorConfluence = result.ConfluenceContext()
 	return built{candidate: candidate, score: score}, ""

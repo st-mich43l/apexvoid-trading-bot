@@ -115,7 +115,10 @@ type Setup struct {
 	TargetRoomATR       float64
 	ZoneIntegrity       float64 // 1 minus the deepest close inside the gap since the inversion, as a share of its width
 	WickRejection       bool
-	ConfirmedAt         int64 // = Retest.ConfirmedAt
+	// Rejected is whether the confirming candle really is a directional rejection (the detector's rule). It is always true while a rejecting candle is required; with
+	// analysis.require_candle_confirmation false a setup can stand on the first touch alone and then it is false.
+	Rejected    bool
+	ConfirmedAt int64 // = Retest.ConfirmedAt
 }
 
 // Episode is the audit record of one inversion and where it ended as of the

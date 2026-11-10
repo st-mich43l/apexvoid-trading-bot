@@ -27,8 +27,11 @@ type Config struct {
 	MaximumEntryATR    float64
 
 	// Confirmation (M5): the five reaction patterns within ReactionLookbackBars of a touch.
-	ReactionLookbackBars     int
-	EngulfingMinimumRangeATR float64
+	ReactionLookbackBars int
+	// CandleConfirmationOptional is analysis.require_candle_confirmation: false: a touch of the band with no confirming candle is enough for a decision. The zero value
+	// is the existing behaviour.
+	CandleConfirmationOptional bool
+	EngulfingMinimumRangeATR   float64
 
 	// Stop and room.
 	InvalidationBufferATR float64
@@ -126,6 +129,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	if c.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, nil
 }
 

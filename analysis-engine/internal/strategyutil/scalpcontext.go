@@ -245,3 +245,27 @@ func ConfirmM1Execution(m1 []market.Candle, direction market.Direction, level, t
 	}
 	return M1Confirmation{}, false
 }
+
+// TouchM1Execution is the optional-confirmation counterpart of ConfirmM1Execution (analysis.require_candle_confirmation: false): among the
+// newest `lookback` closed M1 bars, the latest one that interacted with the level (wick within `tolerance` of it, close back on the right side
+// of it) whatever its colour. It is a touch, not a confirmation: callers must not report it as one.
+func TouchM1Execution(m1 []market.Candle, direction market.Direction, level, tolerance float64, lookback int) (M1Confirmation, bool) {
+	if len(m1) == 0 {
+		return M1Confirmation{}, false
+	}
+	window := lookback
+	if window > len(m1) {
+		window = len(m1)
+	}
+	if window < 1 {
+		window = 1
+	}
+	tol := math.Max(0, tolerance)
+	for offset := 1; offset <= window; offset++ {
+		bar := m1[len(m1)-offset]
+		if direction == market.Buy && bar.Low <= level+tol && bar.Close > level || direction == market.Sell && bar.High >= level-tol && bar.Close < level {
+			return M1Confirmation{Close: bar.Close, Time: bar.Time}, true
+		}
+	}
+	return M1Confirmation{}, false
+}

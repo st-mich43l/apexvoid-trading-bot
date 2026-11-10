@@ -414,7 +414,9 @@ func (d *detector) episode(r ref, b int, atrB, atrPre float64) (Episode, bool) {
 			touch = i
 			ep.State, ep.EndedAt = StateRetestTouched, c.Time
 		}
-		if touch >= 0 && d.rejects(c, r.value(i)) {
+		// Optional confirmation: the first touch of the broken reference is the
+		// trigger; the rejecting candle is still measured (Setup.Rejected).
+		if touch >= 0 && (d.rejects(c, r.value(i)) || cfg.CandleConfirmationOptional && i == touch) {
 			confirm = i
 			ep.State, ep.EndedAt = StateRetestConfirmed, c.Time
 		}
@@ -533,7 +535,8 @@ func (d *detector) finish(ep Episode, r ref, brk Break, protected float64, b, a,
 		},
 		EntryLow: entryLow, EntryHigh: entryHigh, Stop: stop, Target: target, ProtectedStructure: protected,
 		ATR: atrC, RiskPips: riskPips, RewardRisk: reward / risk, TargetRoomATR: reward / atrC,
-		WickRejection: lowerWickRatio(cb) >= cfg.RejectionWickRatio, ConfirmedAt: cb.Time,
+		Rejected:      d.rejects(cb, r.value(confirm)),
+		WickRejection: lowerWickRatio(cb) >= cfg.RejectionWickRatio && d.rejects(cb, r.value(confirm)), ConfirmedAt: cb.Time,
 	}
 	setup.Reference.PriceAtBreak = r.Reference.PriceAtBreak
 	ep.State, ep.Reason, ep.Setup = StateCandidate, "", &setup

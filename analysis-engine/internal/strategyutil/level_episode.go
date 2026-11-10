@@ -271,6 +271,9 @@ type LevelRetestParams struct {
 	BandBelow, BandAbove            float64 // price units
 	MinWickRatio                    float64
 	ConfirmationMaxAge              int
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false): the first candle that enters the band is the trigger even when
+	// it is not a wick or engulfing rejection. LevelRetest.WickRejection/Engulfing stay false for such a candle; nothing is fabricated.
+	CandleConfirmationOptional bool
 }
 
 // LevelRetest is one confirmed break -> acceptance -> retest -> rejection sequence.
@@ -328,7 +331,7 @@ func FindLevelRetest(bars []market.Candle, level float64, breakIdx int, p LevelR
 		c := bars[j]
 		wick := c.Close > bandHigh && c.Close > c.Open && c.LowerWickRatio() >= p.MinWickRatio
 		engulf := j > 0 && bars[j-1].Close < bars[j-1].Open && c.Close > c.Open && c.Close >= bars[j-1].Open && c.Open <= bars[j-1].Close && c.Close > level
-		if !wick && !engulf {
+		if !wick && !engulf && !(p.CandleConfirmationOptional && j == touch) {
 			continue
 		}
 		low := bars[touch].Low

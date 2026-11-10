@@ -34,6 +34,9 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `range_scalp` | v1 | M5 | XAU scalp: in a sideways M5 range, the probe of an edge that closes back inside is faded at market | [range_scalp](range_scalp.md) |
 | `impulse_retrace` | v1 | M5 | XAU scalp, every session: the first retrace to the midpoint of a 2 ATR M5 displacement bar, in the impulse direction | [impulse_retrace](impulse_retrace.md) |
 
+Whether a strategy also needs its own confirmation candle is one execution condition for all of them,
+`analysis.require_candle_confirmation` ([candle-confirmation](candle-confirmation.md)).
+
 "Golden" means the decisions and entry reproduce the frozen Python publisher on
 committed real captures, generated from the oracle and never from Go. The stop,
 the stop budget and the higher-timeframe export differ from those publishers by

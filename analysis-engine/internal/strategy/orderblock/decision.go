@@ -152,7 +152,7 @@ func (v *view) reactionFrom(low, high float64, grab *techniquezone.Grab, minInde
 	lookback := maxInt(1, v.cfg.ReactionLookbackBars)
 	params := confirmParams{
 		MinIndex: minIndex, Direction: string(v.dir), Low: low, High: high, TouchLookback: lookback, ConfirmLookback: lookback,
-		HasCHoCH: v.recentCHoCH(lookback), ATR: v.atr, EngulfingMinimumRangeATR: v.cfg.EngulfingMinimumRangeATR,
+		HasCHoCH: v.recentCHoCH(lookback), AllowUnconfirmed: v.cfg.CandleConfirmationOptional, ATR: v.atr, EngulfingMinimumRangeATR: v.cfg.EngulfingMinimumRangeATR,
 	}
 	if grab != nil {
 		params.Grabs = []grabRef{{Index: grab.Index, Grade: grab.Grade}}

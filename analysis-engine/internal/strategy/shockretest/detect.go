@@ -174,7 +174,7 @@ func (d *detector) episode(sh shock, ownByEnd map[int]shock, counterEnds map[int
 		retestLow = math.Min(retestLow, c.Low)
 		wick := c.Close > c.Open && c.LowerWickRatio() >= cfg.MinimumWickRatio
 		engulf := j > 0 && d.ob[j-1].Close < d.ob[j-1].Open && c.Close > c.Open && c.Close >= d.ob[j-1].Open && c.Open <= d.ob[j-1].Close
-		if wick || engulf {
+		if wick || engulf || cfg.CandleConfirmationOptional && j == first {
 			d.confirm(confirmed{start: sh.start, shockEnd: shockEnd, origin: origin, extreme: extreme, atrBefore: legBefore, first: first, at: j, bandLow: bandLow, bandHigh: bandHigh, retestLow: retestLow, wick: wick, engulf: engulf})
 			return j
 		}

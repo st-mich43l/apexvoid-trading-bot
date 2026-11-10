@@ -165,14 +165,22 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	var evidence []string
 	pattern := "sweep_reclaim"
 	formed := setup.SweepTime
+	rejected := true // the sweep kind's reaction is its reclaim and structure shift: formation, always present
 	switch setup.Kind {
 	case KindSweepReclaim:
 		evidence = []string{"m5_round_number_sweep", "m5_round_number_reclaim", "m5_round_number_structure_shift"}
 	default:
-		evidence = []string{"m5_round_number_break", "m5_round_number_acceptance", "m5_round_number_retest_rejection"}
+		evidence = []string{"m5_round_number_break", "m5_round_number_acceptance"}
 		pattern, formed = "wick_rejection", setup.BreakTime
 		if setup.Engulfing {
 			pattern = "engulfing"
+		}
+		// Optional candle confirmation: the retest candle may not be a rejection; the evidence and the Reaction exist only for a real one.
+		rejected = setup.WickRejection || setup.Engulfing
+		if rejected {
+			evidence = append(evidence, "m5_round_number_retest_rejection")
+		} else {
+			evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
 		}
 	}
 	if setup.Major {
@@ -225,9 +233,11 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	if setup.Kind == KindBreakRetest {
 		touch = setup.RetestTime
 	}
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: structuralID, TouchBarTime: touch, ConfirmationBarTime: setup.ConfirmedAt,
-		ReactionType: "rejection", Pattern: pattern,
+	if rejected {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: structuralID, TouchBarTime: touch, ConfirmationBarTime: setup.ConfirmedAt,
+			ReactionType: "rejection", Pattern: pattern,
+		}
 	}
 	candidate.DetectorConfluence = confluenceContext(score)
 	return candidate, ""

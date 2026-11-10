@@ -42,15 +42,18 @@ type Settings struct {
 	LegacyRead legacyread.Config
 	// LegacyDetector are the shared frozen-detector thresholds injected into the
 	// detector-contract strategies' parameters.
-	LegacyDetector   map[string]any
-	Regime           regime.Config
-	MAD              mad.Config
-	Arbitration      arbitration.Config
-	TechniqueZones   TechniqueZoneSettings
-	StopEnvelope     StopEnvelopeConfig
-	Strategies       []strategy.Config
-	HistoryDepths    map[market.Timeframe]int
-	PrimaryTimeframe market.Timeframe
+	LegacyDetector map[string]any
+	// RequireCandleConfirmation is analysis.require_candle_confirmation: whether a strategy's own entry-confirmation candle is required to make a valid setup
+	// executable. It is injected into every strategy's parameters (applyCandleConfirmation).
+	RequireCandleConfirmation bool
+	Regime                    regime.Config
+	MAD                       mad.Config
+	Arbitration               arbitration.Config
+	TechniqueZones            TechniqueZoneSettings
+	StopEnvelope              StopEnvelopeConfig
+	Strategies                []strategy.Config
+	HistoryDepths             map[market.Timeframe]int
+	PrimaryTimeframe          market.Timeframe
 
 	// Geometry is left zero-value by LoadSettings (LoadSettings is symbol-
 	// agnostic) — callers that need per-candidate stop-envelope pip
@@ -179,6 +182,10 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	requireCandleConfirmation, err := getBool(doc, "analysis.require_candle_confirmation")
+	if err != nil {
+		return Settings{}, err
+	}
 	legacyDetector, err := LegacyDetectorParametersFromConfig(doc)
 	if err != nil {
 		return Settings{}, err
@@ -217,7 +224,7 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	}
 	settings := Settings{
 		Candle: candle.DefaultConfig(), Confluence: confluenceConfig, ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
-		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig, LegacyRead: legacyReadConfig, LegacyDetector: legacyDetector,
+		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig, LegacyRead: legacyReadConfig, LegacyDetector: legacyDetector, RequireCandleConfirmation: requireCandleConfirmation,
 		Arbitration: arbitrationConfig, Regime: regimeConfig, MAD: madConfig, TechniqueZones: productionTechniqueZoneSettings(), StopEnvelope: stopEnvelopeConfig, Strategies: strategyConfigs,
 		HistoryDepths: depths, PrimaryTimeframe: primary,
 		AllowReplaceForming: allowReplaceForming,

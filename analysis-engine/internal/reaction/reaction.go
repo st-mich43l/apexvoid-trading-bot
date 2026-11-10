@@ -59,9 +59,14 @@ type Params struct {
 	// (a structure cannot react before it exists). Zero allows every bar;
 	// the bar before MinIndex may still serve as an engulfing bar\'s prior.
 	MinIndex int
+	// AllowUnconfirmed lifts the requirement of a confirming candle (analysis.require_candle_confirmation: false): when a band was touched but no recognised pattern
+	// confirms it, Evaluate returns the touch itself as an unconfirmed reaction (Type ""), and nothing else is changed. A pattern is always preferred and reported
+	// when one exists, so the evidence is exactly what the candles show: an unconfirmed touch carries no pattern and is never given one.
+	AllowUnconfirmed bool
 }
 
-// Confirmation is a found reaction; indexes are positions in the window.
+// Confirmation is a found reaction; indexes are positions in the window. Type "" is a touch with no confirming candle (Params.AllowUnconfirmed): TouchIndex and
+// ConfirmationIndex are then the same bar, the latest touch.
 type Confirmation struct {
 	Type              string
 	TouchIndex        int
@@ -134,6 +139,10 @@ func Evaluate(candles []market.Candle, p Params) *Confirmation {
 			continue
 		}
 		return &Confirmation{Type: confirmation, TouchIndex: touchIndex, ConfirmationIndex: ci}
+	}
+	if p.AllowUnconfirmed {
+		latest := touchIndexes[len(touchIndexes)-1]
+		return &Confirmation{Type: "", TouchIndex: latest, ConfirmationIndex: latest}
 	}
 	return nil
 }

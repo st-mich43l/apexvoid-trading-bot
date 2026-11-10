@@ -59,6 +59,10 @@ type Config struct {
 	RejectionCloseStrength float64
 	RejectionWickRatio     float64
 	RejectionBodyRatio     float64
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false)
+	// lets the first retest touch be the entry trigger; the rejection candle is
+	// still evaluated and reported (Setup.Rejected) but no longer required.
+	CandleConfirmationOptional bool
 
 	// Geometry.
 	ProtectedStructure      string
@@ -115,6 +119,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		}
 		*dst = value
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	var ok bool
 	if c.ProtectedStructure, ok = params["protected_structure"].(string); !ok {
 		return c, fmt.Errorf("break_retest: parameter %q must be a string", "protected_structure")

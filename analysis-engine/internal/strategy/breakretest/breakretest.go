@@ -129,7 +129,12 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	if setup.Reference.Kind == KindTrendline {
 		prefix = "m5_trendline"
 	}
-	evidence := []string{prefix + "_break", prefix + "_retest", "m5_break_accepted", "m5_retest_holds", "m5_retest_rejection"}
+	evidence := []string{prefix + "_break", prefix + "_retest", "m5_break_accepted", "m5_retest_holds"}
+	if setup.Rejected {
+		evidence = append(evidence, "m5_retest_rejection")
+	} else {
+		evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
+	}
 	if factors.DisplacementGrade {
 		evidence = append(evidence, "displacement_grade")
 	}

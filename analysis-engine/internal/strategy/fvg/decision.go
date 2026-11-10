@@ -229,7 +229,7 @@ func (v *view) factorsFor(in instance, z zoneBand, conf *confirmation) confluenc
 		HTFAligned: v.htfAligned(), Touches: z.Touches,
 		WickRejection:       conf.Type == patternWickRejection,
 		DisplacementGrade:   conf.Type == patternEngulfing || v.middleBodyATR(in) >= 1.0,
-		StructuralAgreement: v.confirmedThroughRecentSwing(conf.ConfirmationIndex),
+		StructuralAgreement: conf.Type != "" && v.confirmedThroughRecentSwing(conf.ConfirmationIndex),
 	}
 }
 
