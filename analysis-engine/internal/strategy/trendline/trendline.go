@@ -1,12 +1,15 @@
 // Package trendline publishes the frozen trendline_reaction (V2) decision: a
-// causally anchored line with forward validation, in good health, that the latest
-// closed bars reclaimed from the correct side, and that shows a confirmed
-// structural reaction within the shared confluence floor.
+// causally anchored line, in good health, that price touched from the correct
+// side and closed back off, and that shows a confirmed structural reaction within
+// the shared confluence floor.
 //
-// The line's A/B anchors are immutable and its health (tentative, broken,
-// degraded, exhausted, stale) is judged on the frame's bounded window. A broken
-// line, a test without a reaction, or an entry outside the interaction band is
-// never published.
+// Two confirmed anchors establish the line (v7); the line is knowable from the
+// close that confirmed its second anchor, and the trade is the first reaction after
+// that, never the anchor itself. A validation touch after the anchors is not a
+// requirement, only a measure of how respected the line is. The anchors are
+// immutable and the line's health (tentative, broken, degraded, exhausted, stale) is
+// judged on the frame's bounded window. A broken line, a test without a reaction,
+// or an entry outside the interaction band is never published.
 package trendline
 
 import (
@@ -24,7 +27,7 @@ import (
 )
 
 const ID strategy.StrategyID = "trendline"
-const Version = "v6"
+const Version = "v7"
 
 type Strategy struct {
 	strategyutil.RefusalCounter
@@ -115,14 +118,22 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if s.structurallyRejected(d, line, last) {
 			continue
 		}
+		// The line now: its price and interaction band at the latest closed bar, which is where the entry rests.
 		interaction := technical.EvaluateInteraction(bars, line, base.ATR, cfg)
-		if interaction.State != technical.InteractionReclaimedSupport && interaction.State != technical.InteractionReclaimedResistance {
+		if !holdsAtLatestBar(interaction.State) {
 			continue
 		}
-		// The line is knowable from the close that confirmed its second anchor; the bars that
-		// formed and confirmed the anchor are the line's formation, not a reaction to it.
+		// The line is knowable from the close that confirmed its second anchor; the bars that formed and confirmed the anchor are the line's formation,
+		// not a reaction to it. The reaction is a touch and, on or after it, a confirming candle, both inside the last reaction_lookback_bars closed bars;
+		// they may be different candles (a wick that touched the line, a candle that closed back off it).
 		conf := d.ReactionFrom(float64(interaction.BandLow), float64(interaction.BandHigh), nil, line.AnchorBConfirmedIndex+1)
 		if conf == nil {
+			continue
+		}
+		// The touch is judged where it happened: price reached the PROJECTED line at that bar, from the intended side, without closing through it.
+		touch := technical.EvaluateInteraction(bars[:conf.TouchIndex+1], line, base.ATR, cfg)
+		if touch.State != technical.InteractionReclaimedSupport && touch.State != technical.InteractionReclaimedResistance &&
+			touch.State != technical.InteractionTestingSupport && touch.State != technical.InteractionTestingResistance {
 			continue
 		}
 		linePrice := float64(interaction.LinePrice)
@@ -140,9 +151,9 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		if best == nil || result.Stars > best.Result.Stars {
 			best = &strategyutil.TechniqueDecision{
 				Technique: "trendline", Direction: direction, Detector: d, Confirmation: conf, Result: result,
-				ID: fmt.Sprintf("trendline:%s:%s", line.AnchorA, line.AnchorB),
+				ID: lineID(line, bars),
 				Score: func(dec *strategyutil.TechniqueDecision, g strategyutil.QualityGeometry) opportunity.StrategyQuality {
-					return scoreQuality(line, interaction, dec, g)
+					return scoreQuality(line, touch, dec, g)
 				},
 			}
 		}
@@ -160,7 +171,27 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	return []opportunity.Candidate{candidate}
 }
 
-// structurallyRejected mirrors _trendline_v2_structural_rejection.
+// lineID is the line's identity: its kind and the open times of its two anchor candles. The swing ids the builder carries (legacy:<index>:<n>) are positions in
+// the analysis window, which moves one bar every evaluation, so an id built from them named the same line differently on every bar and published the same
+// reaction as a new opportunity each time.
+func lineID(line technical.Trendline, bars []market.Candle) string {
+	return fmt.Sprintf("trendline:%s:%d:%d", line.Kind, bars[line.AnchorAIndex].Time, bars[line.AnchorBIndex].Time)
+}
+
+// holdsAtLatestBar is whether the latest closed bar leaves the line standing: it is on the valid side of the line (reclaimed it, or has not come back to it).
+// A close through the line, or a touch from the wrong side, is not a reaction to publish whatever happened on the bars before.
+func holdsAtLatestBar(state technical.InteractionState) bool {
+	switch state {
+	case technical.InteractionReclaimedSupport, technical.InteractionReclaimedResistance,
+		technical.InteractionAboveLine, technical.InteractionBelowLine,
+		technical.InteractionApproachingSupport, technical.InteractionApproachingResistance:
+		return true
+	}
+	return false
+}
+
+// structurallyRejected mirrors _trendline_v2_structural_rejection. A line with no validation is not rejected for that (v7): Tentative here means a line
+// shorter than the minimum span, not one without a third touch. Staleness (the last validation too long ago) only exists for a line that has one.
 func (s *Strategy) structurallyRejected(d *strategyutil.LegacyDetector, line technical.Trendline, last int) bool {
 	validations := len(line.ValidationTouches)
 	if line.State == technical.StateTentative || validations < s.minimumValidationTouches {

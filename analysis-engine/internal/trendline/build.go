@@ -386,7 +386,7 @@ func resolveSettings(cfg Config, atr float64) resolvedSettings {
 		approachMinDistance:       maxF(0, cfg.ApproachMinDistanceATR) * atr,
 		minimumFavorableExcursion: maxF(0, cfg.MinimumValidationFavorableExcursionATR) * atr,
 		validationReactionBars:    maxI(0, cfg.ValidationReactionBars),
-		minimumValidations:        maxI(1, cfg.MinimumValidationTouches),
+		minimumValidations:        maxI(0, cfg.MinimumValidationTouches),
 		exhaustionValidations:     maxI(1, cfg.ExhaustionValidationTouches),
 		maximumWickViolations:     maxI(0, cfg.MaximumWickViolations),
 		dedupValueATR:             maxF(0, cfg.DedupValueATR),

@@ -40,11 +40,13 @@ type Config struct {
 	ApproachMinDistanceATR                 float64
 	MinimumValidationFavorableExcursionATR float64
 	ValidationReactionBars                 int
-	MinimumValidationTouches               int
-	ExhaustionValidationTouches            int
-	MaximumWickViolations                  int
-	DedupValueATR                          float64
-	DedupSlopePercent                      float64
+	// MinimumValidationTouches is how many touches after the two anchors a line needs to be Confirmed. Zero is allowed: two anchors and the minimum span make
+	// a Confirmed line, and a validation only counts toward Exhausted.
+	MinimumValidationTouches    int
+	ExhaustionValidationTouches int
+	MaximumWickViolations       int
+	DedupValueATR               float64
+	DedupSlopePercent           float64
 
 	// InteractionBandATR is EvaluateInteraction's own leaf
 	// (interaction_band_atr) — not used by Build.
