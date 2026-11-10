@@ -27,6 +27,9 @@ type Config struct {
 	// closed candles of the evaluated one (the confirming candle at most
 	// ReactionLookback-1 candles old).
 	ReactionLookback int
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false): a touch of the supported region whose candle is not a measured
+	// rejection is a setup too; it carries no Reaction and no confirmation evidence.
+	CandleConfirmationOptional bool
 	// A sweep of the region's far edge needs at least this depth.
 	MinimumSweepPips float64
 	MinimumSweepATR  float64
@@ -139,6 +142,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		}
 		c.DeepEntryMinimumWidthPips = v
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, c.validate()
 }
 

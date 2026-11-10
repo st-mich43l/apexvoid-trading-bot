@@ -201,6 +201,20 @@ _SCALP_ROUNDING_TOLERANCE_PIPS = 1.0
 _TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900, "H1": 3600, "H4": 14400}
 
 
+# Go's own statement that a candidate stands on its structure and a touch of its entry location because analysis.require_candle_confirmation is
+# false and no confirming candle showed. Mirrors strategyutil.CandleConfirmationOptionalEvidence in the Analysis Engine.
+CANDLE_CONFIRMATION_OPTIONAL_EVIDENCE = "candle_confirmation_optional"
+
+
+def candle_confirmation_required() -> bool:
+  """``analysis.require_candle_confirmation`` (the same leaf the Analysis Engine reads); absent means required, as before."""
+  from app.core.config import runtime_config
+  try:
+    return runtime_config.analysis.require_candle_confirmation is not False
+  except (AttributeError, KeyError):
+    return True
+
+
 def _reaction_is_recent(confirmation_bar_time: int, reference_time: int, timeframe: str) -> bool:
   """The confirming bar may lie up to ``structural_reaction_lookback_bars - 1``
   bars before the observation bar: the legacy detector accepted the latest
@@ -232,15 +246,19 @@ def build_strategy_match(
       f"{profile.catalog_id} expects {sorted(profile.allowed_timeframes)}, got {timeframe}",
     )
   reaction = tech.confirmation
+  evidence_codes = tuple(item.code for item in payload.evidence)
   if profile.requires_reaction and reaction is None:
-    raise AdapterRejection("reaction_confirmation_unavailable", "this zone adapter requires Go's causal rejection confirmation")
+    # analysis.require_candle_confirmation=false: Go may publish a structurally valid setup that stands on a touch of its entry location without a
+    # confirming candle. It says so itself (CANDLE_CONFIRMATION_OPTIONAL_EVIDENCE); a resting observation carries neither a reaction nor that
+    # code and stays non-executable. Nothing is inferred here: with the option on (the default) the reaction is mandatory exactly as before.
+    if candle_confirmation_required() or CANDLE_CONFIRMATION_OPTIONAL_EVIDENCE not in evidence_codes:
+      raise AdapterRejection("reaction_confirmation_unavailable", "this zone adapter requires Go's causal rejection confirmation")
   if reaction is not None and not _reaction_is_recent(
     reaction.confirmation_bar_time, tech.reference_time, timeframe,
   ):
     raise AdapterRejection("reaction_not_current_observation")
   if profile.direction is not None and payload.direction != profile.direction:
     raise AdapterRejection("direction_scope_mismatch", f"{profile.catalog_id} produces {profile.direction}, got {payload.direction}")
-  evidence_codes = tuple(item.code for item in payload.evidence)
   quality = payload.quality
   quality_overall = float(quality.overall)
   quality_components = dict(quality.components)

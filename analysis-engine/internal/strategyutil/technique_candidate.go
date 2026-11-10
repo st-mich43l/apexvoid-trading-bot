@@ -141,7 +141,7 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	if spec.PublishStructure && dec.Instance != nil {
 		candidate.Structure = structureZone(dec, structLow, structHigh)
 	}
-	if conf != nil {
+	if conf != nil && conf.Type != "" {
 		candidate.Reaction = &opportunity.ReactionConfirmation{
 			ZoneID: dec.ID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
 			ReactionType: "rejection", Pattern: conf.Type,
@@ -208,7 +208,14 @@ func nearestOpposingTarget(d *LegacyDetector, direction market.Direction, refere
 // techniqueEvidence is the zone and confirmation evidence, plus the higher
 // timeframe the zone was built on when it is not the execution frame's.
 func techniqueEvidence(dec *TechniqueDecision, spec TechniqueSpec) []string {
-	evidence := []string{spec.ZoneEvidence, spec.ConfirmedEvidence}
+	evidence := []string{spec.ZoneEvidence}
+	// The confirmation evidence is published only when a confirming candle showed it: with analysis.require_candle_confirmation false a decision can stand on
+	// the structure and the touch alone, and then says so with CandleConfirmationOptionalEvidence instead.
+	if dec.Confirmation == nil || dec.Confirmation.Type != "" {
+		evidence = append(evidence, spec.ConfirmedEvidence)
+	} else {
+		evidence = append(evidence, CandleConfirmationOptionalEvidence)
+	}
 	if dec.Instance != nil && dec.Instance.Timeframe != "" {
 		evidence = append(evidence, "htf_zone_"+strings.ToLower(dec.Instance.Timeframe))
 	}

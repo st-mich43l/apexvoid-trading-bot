@@ -58,6 +58,8 @@ type Config struct {
 	PipSize              float64
 	EntryMaxWidthPrice   float64 // proximal slice of the inverted gap that may be entered; 0 = whole gap
 	ExecutionStopMaxPips float64 // 0 disables the pre-check
+	// CandleConfirmationOptional is analysis.require_candle_confirmation: false: the first touch of the inverted gap is enough, a rejecting candle is not required.
+	CandleConfirmationOptional bool
 }
 
 func parseConfig(params map[string]any) (Config, error) {

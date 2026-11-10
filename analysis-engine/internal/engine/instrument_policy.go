@@ -68,6 +68,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	}
 	applyCRTGeometry(settings)
 	applyLegacyDetector(settings)
+	applyCandleConfirmation(settings)
 	applyOwnedScale(settings)
 	applyBreakRetestGeometry(settings)
 	applyIFVGGeometry(settings)
@@ -493,6 +494,19 @@ func applyLegacyDetector(settings *Settings) {
 		params["fibonacci_epsilon_atr"] = settings.Fib.EpsilonATR
 		params["price_digits"] = float64(settings.Geometry.PriceDigits)
 		params["technique_retest_max_touches"] = float64(settings.TechniqueZones.Technique.RetestMaxTouches)
+		settings.Strategies[i].Parameters = params
+	}
+}
+
+// applyCandleConfirmation gives every strategy analysis.require_candle_confirmation. A strategy reads it with strategyutil.RequireCandleConfirmation, which is
+// true (the confirmation is required, as it has always been) when the key is absent. It is idempotent.
+func applyCandleConfirmation(settings *Settings) {
+	for i := range settings.Strategies {
+		params := make(map[string]any, len(settings.Strategies[i].Parameters)+1)
+		for k, v := range settings.Strategies[i].Parameters {
+			params[k] = v
+		}
+		params["require_candle_confirmation"] = settings.RequireCandleConfirmation
 		settings.Strategies[i].Parameters = params
 	}
 }

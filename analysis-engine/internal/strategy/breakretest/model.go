@@ -129,6 +129,7 @@ type Setup struct {
 	RewardRisk          float64
 	TargetRoomATR       float64
 	WickRejection       bool
+	Rejected            bool  // the confirming candle is a real directional rejection (false: optional-confirmation touch trigger)
 	ConfirmedAt         int64 // = Retest.ConfirmedAt
 }
 

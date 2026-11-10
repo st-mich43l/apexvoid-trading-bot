@@ -27,10 +27,12 @@ type Config struct {
 	MaximumEntryATR    float64
 
 	// Confirmation (M5): a touch, then within ConfirmationWindowBars a rejection, not older than ConfirmationMaxAgeBars at the decision bar.
-	ConfirmationWindowBars   int
-	ConfirmationMaxAgeBars   int
-	MinimumWickRatio         float64
-	EngulfingMinimumRangeATR float64
+	ConfirmationWindowBars int
+	ConfirmationMaxAgeBars int
+	// CandleConfirmationOptional is analysis.require_candle_confirmation: false: a fresh touch of the gap with no rejecting candle is enough for a decision.
+	CandleConfirmationOptional bool
+	MinimumWickRatio           float64
+	EngulfingMinimumRangeATR   float64
 
 	// Stop, target, room, extension.
 	InvalidationBufferATR  float64
@@ -142,6 +144,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	if c.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, nil
 }
 

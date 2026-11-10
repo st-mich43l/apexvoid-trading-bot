@@ -30,17 +30,19 @@ const legacyEpsilon = 1e-9
 // read from the strategy's parameters, which the engine fills from
 // config/analysis.yml (instrument-scale values are applied per instrument).
 type LegacyDetectorSettings struct {
-	PipSize                  float64
-	MaximumEntryATR          float64
-	MaximumZoneWidthATR      float64
-	ProximalBandATR          float64
-	FVGEntryMaxWidthPrice    float64
-	ConfluenceFloor          int
-	Confluence               confluence.Config
-	FibonacciEnabled         bool
-	FibonacciEpsilonATR      float64
-	ReactionLookbackBars     int
-	EngulfingMinimumRangeATR float64
+	PipSize               float64
+	MaximumEntryATR       float64
+	MaximumZoneWidthATR   float64
+	ProximalBandATR       float64
+	FVGEntryMaxWidthPrice float64
+	ConfluenceFloor       int
+	Confluence            confluence.Config
+	FibonacciEnabled      bool
+	FibonacciEpsilonATR   float64
+	ReactionLookbackBars  int
+	// CandleConfirmationOptional is analysis.require_candle_confirmation: false. Its zero value is the existing behaviour (the confirming candle is required).
+	CandleConfirmationOptional bool
+	EngulfingMinimumRangeATR   float64
 	// RetestMaxTouches is technique_retest_max_touches: how many touches a
 	// technique zone may have taken and still publish (optional, default 30).
 	RetestMaxTouches int
@@ -95,6 +97,7 @@ func ParseLegacyDetectorSettings(params map[string]any) (LegacyDetectorSettings,
 	if s.ReactionLookbackBars, err = Int(params, "reaction_lookback_bars"); err != nil {
 		return s, err
 	}
+	s.CandleConfirmationOptional = !RequireCandleConfirmation(params)
 	s.RetestMaxTouches = 30
 	if _, present := params["technique_retest_max_touches"]; present {
 		if s.RetestMaxTouches, err = Int(params, "technique_retest_max_touches"); err != nil {
@@ -499,8 +502,9 @@ func (d *LegacyDetector) ZoneReaction(zone techniquezone.Zone) *LegacyConfirmati
 
 func (d *LegacyDetector) reactionFrom(low, high float64, grab *techniquezone.Grab, touchLookback, confirmationLookback, minIndex int) *LegacyConfirmation {
 	params := reaction.Params{
-		MinIndex:  minIndex,
-		Direction: string(d.Direction), Low: low, High: high, TouchLookback: maxInt(1, touchLookback), ConfirmLookback: maxInt(1, confirmationLookback),
+		MinIndex:         minIndex,
+		AllowUnconfirmed: d.Settings.CandleConfirmationOptional,
+		Direction:        string(d.Direction), Low: low, High: high, TouchLookback: maxInt(1, touchLookback), ConfirmLookback: maxInt(1, confirmationLookback),
 		HasCHoCH: d.RecentCHoCH(confirmationLookback), ATR: d.ATR, EngulfingMinimumRangeATR: d.Settings.EngulfingMinimumRangeATR,
 	}
 	if grab != nil {

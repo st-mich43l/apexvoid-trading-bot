@@ -395,7 +395,11 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		"m5_key_level_" + a.level.Kind,
 		"m5_key_level_touches_sufficient",
 		"m5_key_level_role_" + a.role.String(),
-		"m5_key_level_rejection_confirmed",
+	}
+	if conf.Type != "" { // the confirmation evidence is published only when a confirming candle showed it
+		evidence = append(evidence, "m5_key_level_rejection_confirmed")
+	} else {
+		evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
 	}
 	if a.widened {
 		evidence = append(evidence, "m5_key_level_opposing_zone_widened")
@@ -433,9 +437,11 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	// The persistent identity of the thesis is the level, not this
 	// confirmation: a re-confirmation of the same level is the same thesis.
 	candidate.StructuralID = levelID
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: levelID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
-		ReactionType: "rejection", Pattern: conf.Type,
+	if conf.Type != "" {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: levelID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
+			ReactionType: "rejection", Pattern: conf.Type,
+		}
 	}
 	candidate.DetectorConfluence = a.result.ConfluenceContext()
 	candidate.Provenance = opportunity.AnalysisProvenance{

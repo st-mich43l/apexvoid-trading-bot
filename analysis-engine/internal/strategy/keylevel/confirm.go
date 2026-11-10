@@ -46,6 +46,8 @@ type confirmParams struct {
 	ATR                      float64
 	EngulfingMinimumRangeATR float64
 	MinIndex                 int // the bar on which the level became known
+	// AllowUnconfirmed returns the latest touch as an unconfirmed reaction (Type "") when no pattern confirms it (analysis.require_candle_confirmation: false).
+	AllowUnconfirmed bool
 }
 
 // evaluateConfirmation finds the latest valid confirmation within the lookback windows, or nil. Touch and confirmation may be on different bars; the
@@ -110,6 +112,10 @@ func evaluateConfirmation(candles []market.Candle, p confirmParams) *strategyuti
 			Type: kind, TouchIndex: touchIndex, ConfirmationIndex: ci, TouchTime: candles[touchIndex].Time, ConfirmationTime: candles[ci].Time,
 		}
 	}
+	if p.AllowUnconfirmed {
+		latest := touchIndexes[len(touchIndexes)-1]
+		return &strategyutil.LegacyConfirmation{Type: "", TouchIndex: latest, ConfirmationIndex: latest, TouchTime: candles[latest].Time, ConfirmationTime: candles[latest].Time}
+	}
 	return nil
 }
 
@@ -155,7 +161,7 @@ func (s *Strategy) confirmReaction(d *strategyutil.LegacyDetector, low, high flo
 	}
 	p := confirmParams{
 		Direction: string(d.Direction), Low: low, High: high, TouchLookback: lookback, ConfirmLookback: lookback, GrabIndex: -1,
-		CHoCHIndexes: choch, ATR: d.ATR, EngulfingMinimumRangeATR: d.Settings.EngulfingMinimumRangeATR, MinIndex: knownFrom,
+		CHoCHIndexes: choch, ATR: d.ATR, EngulfingMinimumRangeATR: d.Settings.EngulfingMinimumRangeATR, MinIndex: knownFrom, AllowUnconfirmed: d.Settings.CandleConfirmationOptional,
 	}
 	if grab != nil {
 		p.GrabIndex, p.GrabGrade = grab.Index, grab.Grade

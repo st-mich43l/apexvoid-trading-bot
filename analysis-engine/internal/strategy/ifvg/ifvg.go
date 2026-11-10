@@ -54,6 +54,7 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg.CandleConfirmationOptional = detector.CandleConfirmationOptional
 	budget, err := strategyutil.ParseStopBudget(c.Parameters)
 	if err != nil {
 		return nil, fmt.Errorf("ifvg: %w", err)
@@ -116,7 +117,7 @@ func (s *Strategy) factors(ctx *analysiscontext.MarketContext, m5 *analysisconte
 	return confluence.Factors{
 		HTFAligned:          ctx.Legacy != nil && ctx.Legacy.AlignedWithHTF(setup.Direction),
 		Touches:             setup.Retest.Touches,
-		WickRejection:       setup.WickRejection,
+		WickRejection:       setup.WickRejection && setup.Rejected, // a wick that is not part of a rejecting candle is not rejection evidence
 		DisplacementGrade:   setup.Inversion.DisplacementATR >= s.cfg.DisplacementGradeATR,
 		StructuralAgreement: structural,
 		SessionContext:      s.sessionSweep(ctx, setup),
@@ -146,7 +147,12 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	side := strings.ToLower(string(setup.Direction))
 	thesis := fmt.Sprintf("technique:ifvg:%s:%s:%d", side, setup.Gap.ID, setup.Inversion.Time)
 
-	evidence := []string{"m5_ifvg_gap", "m5_ifvg_inversion_confirmed", "m5_ifvg_retest", "m5_ifvg_rejection_confirmed"}
+	evidence := []string{"m5_ifvg_gap", "m5_ifvg_inversion_confirmed", "m5_ifvg_retest"}
+	if setup.Rejected { // the rejection evidence is published only when a rejecting candle showed it
+		evidence = append(evidence, "m5_ifvg_rejection_confirmed")
+	} else {
+		evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
+	}
 	if factors.DisplacementGrade {
 		evidence = append(evidence, "displacement_grade")
 	}
@@ -229,9 +235,11 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, m5 *analysiscon
 	// The persistent identity of the thesis is the inverted gap: a later
 	// confirmation of the same retest is the same thesis.
 	candidate.StructuralID = thesis
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: thesis, TouchBarTime: setup.Retest.TouchTime, ConfirmationBarTime: setup.ConfirmedAt,
-		ReactionType: "rejection", Pattern: pattern,
+	if setup.Rejected {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: thesis, TouchBarTime: setup.Retest.TouchTime, ConfirmationBarTime: setup.ConfirmedAt,
+			ReactionType: "rejection", Pattern: pattern,
+		}
 	}
 	candidate.DetectorConfluence = confluenceContext(score)
 	return candidate, true

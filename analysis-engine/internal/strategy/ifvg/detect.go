@@ -322,7 +322,7 @@ func (d *detector) inversion(g gap, j int) []Episode {
 			touch, touches = k, touches+1
 			cur.TouchTime, cur.State, cur.EndedAt = c.Time, StateRetestTouched, c.Time
 		}
-		if touch >= 0 && d.rejects(c, g.High) {
+		if touch >= 0 && (d.rejects(c, g.High) || cfg.CandleConfirmationOptional && k == touch) {
 			cur.State, cur.EndedAt = StateRejectionConfirmed, c.Time
 			out = append(out, d.finish(cur, g, inv, j, touch, k, touches, atrJ, failBuf))
 			confirmed++
@@ -441,7 +441,7 @@ func (d *detector) finish(ep Episode, g gap, inv Inversion, j, touch, confirm, t
 		},
 		EntryLow: entryLow, EntryHigh: entryHigh, Stop: stop, Target: target,
 		ATR: atrC, RiskPips: riskPips, RewardRisk: reward / risk, TargetRoomATR: reward / atrC,
-		ZoneIntegrity: integrity, WickRejection: lowerWickRatio(cb) >= cfg.RejectionWickRatio, ConfirmedAt: cb.Time,
+		ZoneIntegrity: integrity, WickRejection: lowerWickRatio(cb) >= cfg.RejectionWickRatio, Rejected: d.rejects(cb, g.High), ConfirmedAt: cb.Time,
 	}
 	ep.State, ep.Reason, ep.Setup, ep.EndedAt = StateCandidate, "", &setup, cb.Time
 	return ep

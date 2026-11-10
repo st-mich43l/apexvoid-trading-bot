@@ -11,6 +11,10 @@ import (
 type Config struct {
 	ATRLength, ATRWindowBars int
 
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false) applies to the accepted-break retest kind only: the first retest
+	// candle is the trigger. The sweep/reclaim/structure-shift kind is formation and is unchanged.
+	CandleConfirmationOptional bool
+
 	// The anchor: the finalized Asia range, qualified by its width in M15 ATR, live for a window from London open.
 	MinimumRangeATR, MaximumRangeATR float64
 	ActiveWindowHours                float64
@@ -72,6 +76,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	if c.Symbols, err = strategyutil.ParseSymbols(params); err != nil {
 		return c, fmt.Errorf("asia_range: %w", err)
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, c.validate()
 }
 

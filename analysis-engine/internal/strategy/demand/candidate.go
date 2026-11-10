@@ -51,7 +51,12 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	conf := d.conf
 	formedAt, confirmedAt := conf.TouchTime, conf.ConfirmationTime
 	setupKey := fmt.Sprintf("zone:%s:rejection:%d:%d", d.id, conf.TouchTime, conf.ConfirmationTime)
-	evidence := []string{zoneEvidence, confirmedEvidence}
+	evidence := []string{zoneEvidence}
+	if conf.Type != "" { // the confirmation evidence is published only when a confirming candle showed it
+		evidence = append(evidence, confirmedEvidence)
+	} else {
+		evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
+	}
 	if d.inst.Timeframe != "" {
 		evidence = append(evidence, "htf_zone_"+lowerTimeframe(d.inst.Timeframe))
 	}
@@ -79,8 +84,10 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 		candidate.StructureTimeframe = d.inst.Timeframe
 	}
 	candidate.Structure = s.structureZone(d, structLow, structHigh)
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: d.id, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime, ReactionType: "rejection", Pattern: conf.Type,
+	if conf.Type != "" {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: d.id, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime, ReactionType: "rejection", Pattern: conf.Type,
+		}
 	}
 	candidate.DetectorConfluence = d.res.confluenceContext()
 	candidate.Provenance = opportunity.AnalysisProvenance{

@@ -201,14 +201,22 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	structuralID := fmt.Sprintf("technique:asia_range:%s:%d", strings.ToLower(setup.Edge), setup.Anchor.AvailableAt)
 	var evidence []string
 	pattern, formed, touch := "sweep_reclaim", setup.SweepTime, setup.SweepTime
+	rejected := true // the sweep kind's reaction is its reclaim and structure shift: formation, always present
 	switch setup.Kind {
 	case KindSweepReclaim:
 		evidence = []string{"m5_asia_range_sweep", "m5_asia_range_reclaim", "m5_asia_range_structure_shift"}
 	default:
-		evidence = []string{"m15_asia_range_break", "m5_asia_range_acceptance", "m5_asia_range_retest_rejection"}
+		evidence = []string{"m15_asia_range_break", "m5_asia_range_acceptance"}
 		pattern, formed, touch = "wick_rejection", setup.BreakTime, setup.RetestTime
 		if setup.Engulfing {
 			pattern = "engulfing"
+		}
+		// Optional candle confirmation: the retest candle may not be a rejection; the evidence and the Reaction exist only for a real one.
+		rejected = setup.WickRejection || setup.Engulfing
+		if rejected {
+			evidence = append(evidence, "m5_asia_range_retest_rejection")
+		} else {
+			evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
 		}
 	}
 	if budgetCode != "" {
@@ -255,9 +263,11 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	}
 	// The persistent identity of the thesis is the edge of that day's range: a later confirmation of the same edge is the same thesis.
 	candidate.StructuralID = structuralID
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: structuralID, TouchBarTime: touch, ConfirmationBarTime: setup.ConfirmedAt,
-		ReactionType: "rejection", Pattern: pattern,
+	if rejected {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: structuralID, TouchBarTime: touch, ConfirmationBarTime: setup.ConfirmedAt,
+			ReactionType: "rejection", Pattern: pattern,
+		}
 	}
 	candidate.DetectorConfluence = confluenceContext(score)
 	return candidate, ""

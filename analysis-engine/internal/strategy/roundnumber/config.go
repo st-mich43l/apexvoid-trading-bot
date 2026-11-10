@@ -18,13 +18,16 @@ type Config struct {
 	MinimumReclaimPips                 float64
 	ReclaimMaxBars, AcceptanceCloses   int
 	ConfirmationMode                   string
-	StructurePivotBars                 int
-	StructureLookbackBars              int
-	MSSMaxBars                         int
-	MinimumMSSBodyRatio                float64
-	MinimumMSSDisplacementATR          float64
-	MinimumMSSCloseStrength            float64
-	ConfirmationMaxAgeBars             int
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false) applies to the accepted-break retest kind only: the first retest
+	// candle is the trigger. The sweep/reclaim/structure-shift kind is formation and is unchanged.
+	CandleConfirmationOptional bool
+	StructurePivotBars         int
+	StructureLookbackBars      int
+	MSSMaxBars                 int
+	MinimumMSSBodyRatio        float64
+	MinimumMSSDisplacementATR  float64
+	MinimumMSSCloseStrength    float64
+	ConfirmationMaxAgeBars     int
 
 	// Setup B: the accepted break.
 	EntryBandPips, BreakBufferPips float64
@@ -77,6 +80,7 @@ func parseConfig(params map[string]any) (Config, error) {
 	if c.Symbols, err = strategyutil.ParseSymbols(params); err != nil {
 		return c, fmt.Errorf("round_number: %w", err)
 	}
+	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, c.validate()
 }
 

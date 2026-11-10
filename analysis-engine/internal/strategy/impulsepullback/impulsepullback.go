@@ -29,7 +29,10 @@ const Version = "v4"
 // setup-window structure, the archetype's qualification and the shared stop and
 // target book. Every value is the profitable week's (auto_algo.strategies.scalping.*).
 type Config struct {
-	Symbols                                                                                 []string
+	Symbols []string
+	// CandleConfirmationOptional (analysis.require_candle_confirmation: false): a directional M1 confirmation candle is not required; an M1
+	// bar that merely interacted with the reference (touch, close on the trade side) triggers instead. A real confirmation is still preferred.
+	CandleConfirmationOptional                                                              bool
 	PipSize                                                                                 float64
 	SetupWindowBars, DealingWindowBars, ConfirmationWindowBars, ConfirmationLookbackBars    int
 	ContextMaxAgeSeconds                                                                    int64
@@ -136,6 +139,7 @@ func parseConfig(params map[string]any) (Config, error) {
 		cfg.ImpulseDisplacementATR <= 0, cfg.ImpulseBodyDominance < 0, cfg.PullbackCorrectiveRatio <= 0, cfg.ZoneMaximumATR <= 0:
 		return Config{}, fmt.Errorf("invalid parameters")
 	}
+	cfg.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return cfg, nil
 }
 
@@ -243,7 +247,10 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			continue
 		}
 		confirm, confirmed := strategyutil.ConfirmM1Execution(m1, direction, ref.Level, buffer, cfg.ConfirmationLookbackBars)
-		if !confirmed {
+		if !confirmed && cfg.CandleConfirmationOptional {
+			confirm, _ = strategyutil.TouchM1Execution(m1, direction, ref.Level, buffer, cfg.ConfirmationLookbackBars)
+		}
+		if confirm.Time == 0 {
 			continue
 		}
 		if s.levelRole(ref, direction, closes) != expectedRole(direction) {
@@ -292,10 +299,16 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			pullbackRatio: ev.MeanPullbackBody / ev.MeanImpulseBody, maxPullbackRatio: cfg.PullbackCorrectiveRatio, referenceTouches: ref.Touches,
 			price: c.Price, reference: worst, atr: structureATR, rewardPips: targetPips, stop: stop,
 		})
+		evidence := []string{"m5_qualified_impulse", "m1_bounded_pullback"}
+		if confirmed {
+			evidence = append(evidence, "m1_continuation_trigger")
+		} else {
+			evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
+		}
 		candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 			ID: string(ID), Version: Version, SetupKey: fmt.Sprintf("impulse:%s:%.2f:%.2f:%.2f", direction, ev.Origin, ev.Extreme, ref.Level), Symbol: ctx.Symbol, Direction: direction,
 			EntryLow: zoneLow, EntryHigh: zoneHigh, Invalidation: invalidation, InvalidationLabel: "impulse_reference_lost",
-			Target: targetPrice, TargetLabel: "scalp_corridor", Evidence: []string{"m5_qualified_impulse", "m1_bounded_pullback", "m1_continuation_trigger"},
+			Target: targetPrice, TargetLabel: "scalp_corridor", Evidence: evidence,
 			Quality:  opportunity.StrategyQuality{Overall: model.Overall(), Components: model.Components()},
 			FormedAt: ev.BarTime, ConfirmedAt: confirm.Time, ExpiryHours: cfg.ExpiryMinutes / 60, Fingerprint: s.fingerprint,
 		})

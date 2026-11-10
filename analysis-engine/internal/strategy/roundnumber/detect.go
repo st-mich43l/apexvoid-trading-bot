@@ -126,6 +126,7 @@ func (d *detector) retestParams() strategyutil.LevelRetestParams {
 	return strategyutil.LevelRetestParams{
 		PipSize: c.PipSize, AcceptanceCloses: c.AcceptanceCloses, RetestMaxBars: c.RetestMaxBars,
 		BandBelow: c.RetestTolerancePips * c.PipSize, BandAbove: c.EntryBandPips * c.PipSize, MinWickRatio: c.MinimumWickRatio,
+		CandleConfirmationOptional: c.CandleConfirmationOptional,
 	}
 }
 

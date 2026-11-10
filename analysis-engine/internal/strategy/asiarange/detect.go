@@ -189,7 +189,7 @@ func (d *detector) sweepParams() strategyutil.LevelSweepParams {
 func (d *detector) retestParams() strategyutil.LevelRetestParams {
 	c := d.cfg
 	half := c.EntryBandPips * c.PipSize / 2
-	return strategyutil.LevelRetestParams{PipSize: c.PipSize, AcceptanceCloses: c.AcceptanceCloses, RetestMaxBars: c.RetestMaxBars, BandBelow: half, BandAbove: half, MinWickRatio: c.MinimumWickRatio}
+	return strategyutil.LevelRetestParams{PipSize: c.PipSize, AcceptanceCloses: c.AcceptanceCloses, RetestMaxBars: c.RetestMaxBars, BandBelow: half, BandAbove: half, MinWickRatio: c.MinimumWickRatio, CandleConfirmationOptional: c.CandleConfirmationOptional}
 }
 
 func (d *detector) reject(reason string, at int) {

@@ -15,6 +15,11 @@ analysis:
     # larger than max_delivery_lag_seconds; older events only rebuild the ledger.
     max_event_age_seconds: 900
     max_delivery_lag_seconds: 300
+  # Execution condition of every strategy (AE-CF1). true: a setup is executable only after the strategy's own entry-confirmation candle (rejection, engulfing,
+  # sweep/reclaim and the rest, unchanged). false: a structurally valid setup is executable when price reaches its entry location, without an additional
+  # confirmation candle; the confirmation evidence is still computed, scored and published whenever a candle shows it, and never made up when none does.
+  # The structural formation of a setup (a sweep, a reclaim, a structure shift, an inversion) is part of the setup and is not affected.
+  require_candle_confirmation: false
   # The Go engine uses the canonical simple ATR series for this analysis
   # context. Keep the algorithm explicit so all consumers share the same
   # contract.

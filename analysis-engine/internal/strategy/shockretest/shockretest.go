@@ -114,7 +114,15 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	}
 	side := strings.ToLower(string(setup.Direction))
 	structuralID := fmt.Sprintf("technique:shock_retest:%s:%d", side, setup.OriginTime)
-	evidence := []string{"m5_volatility_shock", "m5_shock_first_retest", "m5_shock_retest_rejection"}
+	evidence := []string{"m5_volatility_shock", "m5_shock_first_retest"}
+	// With optional candle confirmation the retest candle may not be a rejection;
+	// the evidence code and the Reaction are published only for a real one.
+	rejected := setup.WickRejection || setup.Engulfing
+	if rejected {
+		evidence = append(evidence, "m5_shock_retest_rejection")
+	} else {
+		evidence = append(evidence, strategyutil.CandleConfirmationOptionalEvidence)
+	}
 	pattern := "wick_rejection"
 	if setup.Engulfing {
 		pattern = "engulfing"
@@ -163,9 +171,11 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	}
 	// The persistent identity of the thesis is the shock: its first candle and side. A later confirmation of the same shock is the same thesis.
 	candidate.StructuralID = structuralID
-	candidate.Reaction = &opportunity.ReactionConfirmation{
-		ZoneID: structuralID, TouchBarTime: setup.RetestTime, ConfirmationBarTime: setup.ConfirmedAt,
-		ReactionType: "rejection", Pattern: pattern,
+	if rejected {
+		candidate.Reaction = &opportunity.ReactionConfirmation{
+			ZoneID: structuralID, TouchBarTime: setup.RetestTime, ConfirmationBarTime: setup.ConfirmedAt,
+			ReactionType: "rejection", Pattern: pattern,
+		}
 	}
 	candidate.DetectorConfluence = confluenceContext(score)
 	return candidate, ""

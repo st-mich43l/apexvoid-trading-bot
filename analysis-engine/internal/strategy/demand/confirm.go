@@ -33,6 +33,8 @@ type confirmParams struct {
 	ATR                      float64
 	EngulfingMinimumRangeATR float64
 	MinIndex                 int
+	// AllowUnconfirmed returns the latest touch as an unconfirmed reaction (Type "") when no pattern confirms it (analysis.require_candle_confirmation: false).
+	AllowUnconfirmed bool
 }
 
 type confirmation struct {
@@ -105,6 +107,10 @@ func evaluateConfirmation(candles []market.Candle, p confirmParams) *confirmatio
 			continue
 		}
 		return &confirmation{Type: kind, TouchIndex: touchIndex, ConfirmationIndex: ci, TouchTime: candles[touchIndex].Time, ConfirmationTime: candles[ci].Time}
+	}
+	if p.AllowUnconfirmed {
+		latest := touchIndexes[len(touchIndexes)-1]
+		return &confirmation{Type: "", TouchIndex: latest, ConfirmationIndex: latest, TouchTime: candles[latest].Time, ConfirmationTime: candles[latest].Time}
 	}
 	return nil
 }

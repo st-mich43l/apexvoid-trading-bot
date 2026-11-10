@@ -516,6 +516,9 @@ func (v *view) measure(cfg Config, ti, ci int, lo, hi, atr float64) (reactionVie
 		rx.Pattern = reaction.TypeWickRejection
 	case c.Close > c.Open && rx.BodyRatio >= cfg.DisplacementBodyRatio-epsilon && rx.RangeATR >= cfg.DisplacementRangeATR-epsilon && closeOK && c.Close > hi+epsilon:
 		rx.Pattern = reaction.TypeStrongReclaim
+	case cfg.CandleConfirmationOptional && ci == ti:
+		// Optional candle confirmation: the touch candle itself is the trigger. Its measured facts stay in rx (nothing is made up) and Pattern
+		// stays empty: no rejection is claimed.
 	default:
 		return reactionView{}, ReasonNoConfirmation
 	}
