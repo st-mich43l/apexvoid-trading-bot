@@ -1,7 +1,7 @@
 # Range Scalp
 
 `range_scalp` fades the probe of an edge inside an M5 range that is genuinely going sideways. It is a Go-native XAU strategy (`symbols: [XAU]`), live
-(owner decision 2026-11-06, PR-S4; no observe-only, shadow or paper mode), and a member of the M1 scalp lane: stop 30 to 70 pips, 1R / break-even / 2R
+(owner decision 2026-11-06, PR-S4; no observe-only, shadow or paper mode), and a member of the M1 scalp lane: stop 30 to 40 pips (SCALP-R40; wider is refused), 1R / break-even / 2R
 exits, the 80-pip opposite separation. It shares nothing with the retired Range Box Scalp or Fade Scalp (no name, code or `range_lane` behaviour).
 
 **Thesis.** Inside a range with no net direction, price that reaches the outer tenth of the range and closes back inside the inner 80 percent has been rejected

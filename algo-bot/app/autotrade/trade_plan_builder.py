@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
 from app.autotrade.execution_policy import evaluate_execution_policy
@@ -34,7 +34,8 @@ from app.autotrade.card_prices import snap_measured_to_card_prices
 from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.strategy_catalog import exposure_lane
 from app.autotrade.strategy_match import StrategyMatch
-from app.autotrade.strategy_taxonomy import is_scalp_strategy
+from app.autotrade.protective_stop import scalp_stop_limits
+from app.autotrade.strategy_taxonomy import is_m1_scalp_strategy, is_scalp_strategy
 from app.autotrade.trade_plan import (
   ENTRY_TYPE_LIMIT_LADDER,
   ENTRY_TYPE_MARKET,
@@ -248,6 +249,36 @@ def _reaction_stop_max_pips(cfg: Any | None) -> float | None:
     return None
 
 
+def scalp_slippage_ceiling_ticks(
+  *,
+  direction: str,
+  stop_price: Decimal,
+  leg_prices: Sequence[Any],
+  pip_size: Decimal,
+  price_digits: int,
+  cap_pips: int,
+) -> int:
+  """Ticks of adverse fill the stop cap leaves above the planned legs of an M1 scalp.
+
+  The cap is a distance from the worst planned leg to the absolute SL. A market leg that fills worse than planned (a late
+  quote shift, a chase) lengthens that distance pip for pip, and the executor already refuses to send a market leg whose live
+  quote is more than ``max_slippage_ticks`` past the leg's declared price (``slippage_exceeds_declared_limit``: it waits, it
+  does not fill). Declaring only the headroom under the cap makes that existing check the pre-submission revalidation of the
+  cap. ``0`` means the leg may fill at its price or better and no worse.
+  """
+  tick = Decimal(1).scaleb(-int(price_digits))
+  if pip_size <= 0 or tick <= 0 or not leg_prices:
+    return 0
+  buy = str(direction).upper() == "BUY"
+  widest = max(
+    ((Decimal(str(price)) - stop_price) if buy else (stop_price - Decimal(str(price)))) / pip_size
+    for price in leg_prices
+  )
+  headroom = (Decimal(cap_pips) - widest) * pip_size / tick
+  return max(0, int(headroom.to_integral_value(rounding=ROUND_FLOOR)))
+
+
+
 def _build_entry(
   *,
   route: str,
@@ -257,7 +288,10 @@ def _build_entry(
   expires_at: int,
   max_spread_ticks: int,
   max_slippage_ticks: int,
+  slippage_ceiling_ticks: int | None = None,
 ) -> TradePlanEntry:
+  if slippage_ceiling_ticks is not None:
+    max_slippage_ticks = min(max_slippage_ticks, slippage_ceiling_ticks)
   if route == "market":
     # Scalping activation explicitly permits a trade-direction chase inside its
     # pip budget. Re-arming that already-confirmed decision as market_watch
@@ -270,6 +304,8 @@ def _build_entry(
       # engine. Keep enough budget for a short continuation (~1.0 XAU /
       # ~100 ticks) without allowing multi-point blow-throughs past TP1.
       chase_slippage = max(max_slippage_ticks, 100)
+      if slippage_ceiling_ticks is not None:
+        chase_slippage = min(chase_slippage, slippage_ceiling_ticks)
       return TradePlanEntry(
         type=ENTRY_TYPE_MARKET,
         expires_at=expires_at,
@@ -534,6 +570,7 @@ def build_trade_plan_from_strategy_match(
       "stop_exceeds_max_envelope",
       "stop_exceeds_envelope_furthest_leg",
       "stop_exceeds_go_invalidation_envelope",
+      "scalp_stop_exceeds_hard_cap",
       "go_invalidation_not_beyond_buy_entries",
       "go_invalidation_not_beyond_sell_entries",
       "stop_inside_opposing_zone",
@@ -761,6 +798,24 @@ def build_trade_plan_from_strategy_match(
   else:
     resolved_max_spread_ticks = int(max_spread_ticks)
 
+  slippage_ceiling_ticks: int | None = None
+  if is_m1_scalp_strategy(str(getattr(match, "strategy", "") or "")):
+    # An M1 scalp's stop cap is a hard limit on the order actually sent: the fill budget is what the cap leaves above the
+    # planned legs, not the generic 10 ticks (100 for a chase), which could add up to 10 pips to a 40-pip stop.
+    scalp_leg_prices = measured.get("planned_leg_entry_prices") or [measured["planned_entry_price"]]
+    slippage_ceiling_ticks = scalp_slippage_ceiling_ticks(
+      direction=direction,
+      stop_price=Decimal(str(measured["planned_stop_price"])),
+      leg_prices=scalp_leg_prices,
+      pip_size=Decimal(str(pip_size)),
+      price_digits=int(
+        getattr(getattr(cfg_resolved, "units", None), "price_digits", None)
+        or getattr(getattr(getattr(cfg_resolved, "contract", None), "instrument", None), "price_digits", None)
+        or 2
+      ),
+      cap_pips=scalp_stop_limits(cfg_resolved)[1],
+    )
+
   entry = _build_entry(
     route=str(measured["planned_execution_route"]),
     direction=direction,
@@ -769,6 +824,7 @@ def build_trade_plan_from_strategy_match(
     expires_at=published_expires_at,
     max_spread_ticks=resolved_max_spread_ticks,
     max_slippage_ticks=max_slippage_ticks,
+    slippage_ceiling_ticks=slippage_ceiling_ticks,
   )
 
   stop = TradePlanStop(
@@ -792,7 +848,7 @@ def build_trade_plan_from_strategy_match(
   # The planner owns the optional XAU risk leg: it is part of the plan and of
   # the card, and the executor places exactly the legs the plan declares.
   # The risk leg is a swing-sized trade-off leg 15 pips inside a 50-70 pip gold
-  # stop. A scalp's stop is 30-70 pips (auto_algo.strategies.scalping.stop), so the
+  # stop. A scalp's stop is 30-40 pips (auto_algo.strategies.scalping.stop), so the
   # same leg would still add size to a trade whose point is a fixed, small risk.
   risk_leg = None if is_scalp_strategy(
     str(getattr(match, "strategy", "") or ""),

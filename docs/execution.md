@@ -262,7 +262,20 @@ otherwise the leg is written off as already gone.
   up). EURUSD and GBPUSD use $10 per lot per pip, USDJPY and GBPJPY their `contract.pip_value_per_lot`. Before this, FX used the equity table x 1.5 (0.18 lot at
   $1,000-$2,000), which risked 1.6-3.7% depending on the stop. XAU keeps the equity table; scalps keep their own sizing. The plan's `risk.risk_percent` and
   `sizing.mode` carry the rule, so a card shows what the executor will use.
-- **Scalps** (`impulse_pullback`) keep their own M1 stop book and ladder; XAU-only.
+- **Scalps** (`impulse_pullback`, `range_scalp`, `impulse_retrace`) keep their own M1 stop book and ladder; XAU-only.
+  **The scalp stop is capped at 40 pips** (SCALP-R40; `auto_algo.strategies.scalping.stop`: minimum 30, maximum 40). 40 is a hard eligibility limit on the planned stop,
+  measured from every planned executable leg (the worst entry included) to the absolute SL at broker precision: not a target distance and not a risk percentage.
+  Go applies it three times over the one config leaf: each detector refuses a structure (uncompressed, with its buffers) wider than 40 from its worst entry and widens a
+  narrower one to 30; the stop envelope attached to the opportunity is the dedicated 30-40 `scalp_stop_envelope`, never the XAU 50-70 instrument envelope; and Algo
+  Bot enforces it again whatever envelope arrived (`stop_bounds_scalp_hard_capped_pips`): an envelope published under an older cap, or none, cannot lift it. A stop that
+  does not fit is refused (`stop_exceeds_go_invalidation_envelope` with `furthest_leg_stop_pips`, or `scalp_stop_exceeds_hard_cap` from the final per-leg guard),
+  never compressed, and a stop that only crosses the cap when rounded to the tick is refused too (`go_invalidation_over_max_after_rounding`). A quote that moved after
+  the detector (a chase, a deeper retrace) is re-measured when the plan is built: the planned entry is the live quote, so a chase that lengthens the stop past 40 is
+  refused, and one that moves toward the stop widens it outward to 30 at most, never inward. The plan's `entry.max_slippage_ticks` is the headroom the cap leaves
+  above the planned legs (not the generic 10, or 100 for a chase), and the executor already waits (`slippage_exceeds_declared_limit`) instead of sending a market leg
+  whose live quote is worse than that, so the cap is re-checked against the quote at submission. Volume, the 0.5% scalp risk setting, targets (1R/2R), break-even,
+  the manual and auto ladders and Tricky Leg are unchanged; a lower cap can only lower the largest stop a scalp can carry. A stop order can still fill beyond its price in a market
+  gap: this is a cap on the planned stop, not a guaranteed maximum realized loss.
 
 ## Operator controls
 

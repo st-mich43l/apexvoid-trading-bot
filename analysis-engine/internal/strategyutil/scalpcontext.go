@@ -140,11 +140,15 @@ func ScalpBuffer(m1ATR, m1ATRMultiple, pip, maximumSpreadPips, spreadMultiple fl
 // setup does not fit the risk model — shrinking it would falsify the stop).
 func ScalpStopPips(structural, minimum, maximum float64) (float64, bool) {
 	value := math.Abs(structural)
-	if value <= 0 || maximum < minimum || value > maximum {
+	if value <= 0 || maximum < minimum || value > maximum+ScalpStopCapTolerancePips {
 		return 0, false
 	}
 	return math.Max(value, minimum), true
 }
+
+// ScalpStopCapTolerancePips absorbs only floating-point noise in a structural distance that lies exactly on the cap (40.000000000001 for a 40-pip structure);
+// it is not a margin. A real structure wider than the cap is refused.
+const ScalpStopCapTolerancePips = 1e-9
 
 // ScalpTarget mirrors strategies._select_target: the first reward:risk of the
 // ladder (1:2 then 1:1) whose target clears the minimum net target and fits the
