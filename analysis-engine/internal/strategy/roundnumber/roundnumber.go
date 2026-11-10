@@ -214,7 +214,7 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 		}
 	}
 	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
-		qc.choch = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars))
+		qc.choch = setupCHoCH(d, setup)
 	}
 	qc.pipSize = s.cfg.PipSize
 	qc.room = s.qualityRoom(ctx, setup, reference)
@@ -260,11 +260,4 @@ func confluenceContext(score confluence.Score) *opportunity.ConfluenceContext {
 			StructuralAgreement: score.Factors.StructuralAgreement, FibTouch: score.Factors.FibTouch, CHoCH: score.Factors.CHoCH,
 		},
 	}
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
