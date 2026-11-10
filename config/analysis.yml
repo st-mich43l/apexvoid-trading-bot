@@ -650,9 +650,10 @@ analysis:
     # to an unmitigated M5 zone or a nearby key level whose role agrees, confirmed by
     # a closed M1 bar, with the shared stop/target book. XAU only.
     impulse_pullback:
-      # v4 (docs/strategies/impulse_pullback.md): the stop sits behind the deeper of the reference and the pullback's own extreme, with an M5-ATR buffer
+      # v5 (SQ-1): the corridor room is measured from the worst planned entry (not the context price) and is what the room quality reads; the selected ladder rung is not
+      # scored as room. v4 (docs/strategies/impulse_pullback.md): the stop sits behind the deeper of the reference and the pullback's own extreme, with an M5-ATR buffer
       # (buffer_m5_atr_multiple x the structure ATR, at least buffer_minimum_spread_multiple x maximum_spread_pips). Bounds: auto_algo.strategies.scalping.stop.
-      version: v4
+      version: v5
       enabled: true
       symbols: [XAU]
       setup_window_bars: 120
@@ -682,7 +683,7 @@ analysis:
     # Range Scalp (PR-S4, docs/strategies/range_scalp.md): inside an M5 range that is going sideways, a probe of an edge that closes back inside is faded at
     # market. XAU only. Stop and target are the shared scalp book (auto_algo.strategies.scalping.*, injected): stop 30-40 pips (wider is refused), ladder 2R then 1R.
     range_scalp:
-      version: v1
+      version: v2
       enabled: true
       symbols: [XAU]
       # The range is the high and low of this many closed M5 bars before the signal bar.
@@ -704,11 +705,13 @@ analysis:
       expiry_minutes: 15
       atr_length: 14
       atr_window_bars: 140
+      # SQ-1: the target ladder is bounded by the actual room, from the worst planned entry to the far edge of the range or the nearest valid opposing barrier
+      # (less the instrument's barrier buffer), whichever is nearer. A ladder rung that does not fit is not offered; with none, the probe is refused.
       reward_risk_ladder: [2.0, 1.0]
     # Impulse Retrace Scalp (PR-S4, docs/strategies/impulse_retrace.md): after one forceful M5 displacement bar, the first retrace to its midpoint is traded in the
     # direction of the impulse. XAU only, every session: there is no clock, session or MAD-phase condition. Stop and target are the shared scalp book.
     impulse_retrace:
-      version: v1
+      version: v2
       enabled: true
       symbols: [XAU]
       # The impulse bar's body must be at least this many ATR (Wilder, M5, known before the bar).
@@ -725,6 +728,10 @@ analysis:
       entry_window_minutes: 60
       atr_length: 14
       atr_window_bars: 140
+      # SQ-1: room runs from the worst planned entry to the nearest valid opposing barrier (less the instrument's barrier buffer), or, when none is nearer, to the
+      # equal-leg projection of the impulse bar beyond its extreme: this multiple of the bar's range. The extreme itself is only the first objective: an entry at the
+      # retrace with the stop beyond the origin has less than 1R to it by construction.
+      room_projection: 1.0
       reward_risk_ladder: [2.0, 1.0]
     round_number:
       # v1 (docs/strategies/round_number.md): stop runs at gold handles (Osler 2003/2005). The stop orders cluster just beyond a round number: a trade

@@ -2,21 +2,22 @@
 
 Rules for AI agents working on **apexvoid-trading-bot**.
 
-## No tests
+## Tests
 
-This repository has no tests, fixtures, goldens or reference models, and CI does not run any.
-Do not add a test suite, test project, `testdata/` or `fixtures/` directory, or a `pytest`,
-`go test` or `dotnet test` step unless the owner asks for it.
+The repository has no test suite, goldens or reference models of its own. The only tests are those the owner
+asked for in a task; CI runs them (`go test ./...`, `python -m unittest discover -s tests -t .`).
+Do not add a test suite, test project, `testdata/` or `fixtures/` directory, or a `pytest`
+or `dotnet test` step unless the owner asks for it.
 
 ## CI
 
-The **Autotrade Integrity** workflow (`.github/workflows/autotrade-integrity.yml`) only checks
-that the services build and the stack file is valid:
+The **Autotrade Integrity** workflow (`.github/workflows/autotrade-integrity.yml`) checks
+that the services build, that the requested tests pass and that the stack file is valid:
 
 | Job | Check |
 |-----|-------|
-| **Python bot compiles** | `pip install -r requirements.txt`, `python -m compileall -q app tools` |
-| **Go analysis engine builds** | `go build ./...`, `go vet ./...` |
+| **Python bot compiles** | `pip install -r requirements.txt`, `python -m compileall -q app tools`, `python -m unittest discover -s tests -t .` |
+| **Go analysis engine builds** | `go build ./...`, `go vet ./...`, `go test ./...` |
 | **C# ctrader engine builds** | `dotnet build src/CTraderFeed.csproj` |
 | **Repository checks** | `docker compose config -q` |
 
@@ -26,8 +27,8 @@ unless the user explicitly asks. If CI fails on your PR, fix your code, not the 
 ## Before you push
 
 ```bash
-(cd analysis-engine && go build ./... && go vet ./...)
-(cd algo-bot && python -m compileall -q app tools)
+(cd analysis-engine && go build ./... && go vet ./... && go test ./...)
+(cd algo-bot && python -m compileall -q app tools && python -m unittest discover -s tests -t .)
 (cd ctrader-engine && dotnet build src/CTraderFeed.csproj --nologo)
 ```
 

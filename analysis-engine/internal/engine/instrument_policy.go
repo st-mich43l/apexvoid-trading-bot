@@ -75,7 +75,7 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	applyConfluenceZoneGeometry(settings)
 	applyLegacyStopBudget(settings)
 	applyTradingDay(settings)
-	if err := applyScalpLane(settings, doc); err != nil {
+	if err := applyScalpLane(settings, doc, symbol); err != nil {
 		return err
 	}
 	if err := applyObserveOnly(settings, doc, symbol); err != nil {
@@ -533,11 +533,41 @@ var scalpLaneExtras = map[string]map[string]string{
 	"impulse_retrace": {},
 }
 
+// scalpRoomStrategies read the opposing-barrier policy their room is measured with (SQ-1): the execution-zone width limits and the barrier buffer, the same
+// leaves the Algo Bot's execution-time target-room check reads, so one set of walls is judged in both places.
+var scalpRoomStrategies = map[string]bool{"range_scalp": true, "impulse_retrace": true}
+
+func instrumentBarrierBuffer(doc *config.Document, symbol string) (any, bool, error) {
+	if symbol == "" {
+		return nil, false, nil
+	}
+	return doc.InstrumentOverride(symbol, "auto_algo", "actionability", "target_room", "barrier_buffer_atr")
+}
+
+// barrierBufferATR is the instrument's opposing-structure room buffer in ATR multiples: its own override
+// (auto_algo.actionability.target_room.barrier_buffer_atr under the instrument or its pack) over the global leaf.
+func barrierBufferATR(doc *config.Document, symbol string) (float64, error) {
+	// Before a symbol is attached (LoadSettings) the global leaf stands in; ApplyInstrument applies the instrument's own.
+	if raw, ok, err := instrumentBarrierBuffer(doc, symbol); err != nil {
+		return 0, err
+	} else if ok {
+		switch v := raw.(type) {
+		case float64:
+			return v, nil
+		case int:
+			return float64(v), nil
+		default:
+			return 0, fmt.Errorf("instrument %s: barrier_buffer_atr must be a number, got %T", symbol, raw)
+		}
+	}
+	return getFloat(doc, "auto_algo.actionability.target_room.barrier_buffer_atr")
+}
+
 // applyScalpLane gives the M5-setup / M1-confirmation scalp (Impulse Pullback) its instrument scale and the shared M1-scalp
 // stop/target book (auto_algo.strategies.scalping.*), the same leaves the stop
 // envelope and the execution policy read, so a setup is sized from one source.
 // It is idempotent.
-func applyScalpLane(settings *Settings, doc *config.Document) error {
+func applyScalpLane(settings *Settings, doc *config.Document, symbol string) error {
 	for i := range settings.Strategies {
 		extras, isScalp := scalpLaneExtras[string(settings.Strategies[i].ID)]
 		if !isScalp {
@@ -563,6 +593,23 @@ func applyScalpLane(settings *Settings, doc *config.Document) error {
 		}
 		params["pip_size"] = pip
 		params["price_digits"] = float64(digits)
+		if scalpRoomStrategies[string(settings.Strategies[i].ID)] {
+			for key, path := range map[string]string{
+				"barrier_max_width_atr":  "execution.policy.execution_zone_max_width_atr",
+				"barrier_max_width_pips": "execution.policy.execution_zone_max_width_pips",
+			} {
+				value, err := getFloat(doc, path)
+				if err != nil {
+					return err
+				}
+				params[key] = value
+			}
+			buffer, err := barrierBufferATR(doc, symbol)
+			if err != nil {
+				return err
+			}
+			params["barrier_buffer_atr"] = buffer
+		}
 		settings.Strategies[i].Parameters = params
 	}
 	return nil

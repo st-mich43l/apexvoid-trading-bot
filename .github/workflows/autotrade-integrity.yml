@@ -1,7 +1,6 @@
 name: Autotrade Integrity
 
-# PR validation that every service BUILDS and the stack file is valid. There are no tests in
-# this repository; this is the only gate.
+# PR validation that every service BUILDS, that the tests the owner has requested pass (Go and Python), and that the stack file is valid.
 
 on:
   pull_request:
@@ -34,6 +33,10 @@ jobs:
           pip install -r requirements.txt
           python -m compileall -q app tools
 
+      - name: Unit tests
+        working-directory: algo-bot
+        run: python -m unittest discover -s tests -t .
+
   go-analysis:
     name: Go analysis engine builds
     runs-on: ubuntu-latest
@@ -48,6 +51,10 @@ jobs:
         run: |
           go build ./...
           go vet ./...
+
+      - name: Unit tests
+        working-directory: analysis-engine
+        run: go test ./...
 
   csharp:
     name: C# ctrader engine builds
