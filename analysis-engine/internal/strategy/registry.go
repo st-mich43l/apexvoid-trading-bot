@@ -214,11 +214,23 @@ func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Ti
 		if _, affected := registered.required[closed]; !affected {
 			continue
 		}
-		if !hasRequiredTimeframes(ctx, registered.required) {
+		perFrame, perFrameStrategy := registered.strategy.(ClosedFrameEvaluator)
+		if perFrameStrategy {
+			// Each frame of such a strategy stands alone: the frame that closed is the only one it needs.
+			if ctx.Timeframes[closed] == nil {
+				result.Deferred = append(result.Deferred, registered.config.ID)
+				continue
+			}
+		} else if !hasRequiredTimeframes(ctx, registered.required) {
 			result.Deferred = append(result.Deferred, registered.config.ID)
 			continue
 		}
-		candidates := registered.strategy.Evaluate(ctx)
+		var candidates []opportunity.Candidate
+		if perFrameStrategy {
+			candidates = perFrame.EvaluateClosed(ctx, closed)
+		} else {
+			candidates = registered.strategy.Evaluate(ctx)
+		}
 		result.Evaluated = append(result.Evaluated, registered.config.ID)
 		if reporter, ok := registered.strategy.(StopBudgetReporter); ok {
 			if n := reporter.TakeStopBudgetRefusals(); n > 0 {

@@ -374,20 +374,7 @@ func htfBias(frames map[market.Timeframe]*analysiscontext.LegacyFrame, cfg Confi
 }
 
 // frameBias ports _bias_from_tf.
-func frameBias(frame *analysiscontext.LegacyFrame) string {
-	switch {
-	case frame.Structure == "up" && frame.Momentum != momentum.Bear:
-		return "up"
-	case frame.Structure == "down" && frame.Momentum != momentum.Bull:
-		return "down"
-	case frame.Momentum == momentum.Bull:
-		return "up"
-	case frame.Momentum == momentum.Bear:
-		return "down"
-	default:
-		return "range"
-	}
-}
+func frameBias(frame *analysiscontext.LegacyFrame) string { return frame.Bias() }
 
 func maxFloat(a, b float64) float64 {
 	if a > b {

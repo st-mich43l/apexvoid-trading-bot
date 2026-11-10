@@ -112,3 +112,20 @@ func (r LegacyRead) Direction() market.Direction {
 func (r LegacyRead) AlignedWithHTF(direction market.Direction) bool {
 	return direction == market.Buy && r.HTFBias == "up" || direction == market.Sell && r.HTFBias == "down"
 }
+
+// Bias is the frame's directional bias (the frozen _bias_from_tf): its structure when momentum does not contradict it, else momentum alone, else "range". The
+// symbol-level HTFBias is the first decided Bias of the configured higher frames; a strategy that needs the bias of one particular frame reads it here.
+func (f *LegacyFrame) Bias() string {
+	switch {
+	case f.Structure == "up" && f.Momentum != momentum.Bear:
+		return "up"
+	case f.Structure == "down" && f.Momentum != momentum.Bull:
+		return "down"
+	case f.Momentum == momentum.Bull:
+		return "up"
+	case f.Momentum == momentum.Bear:
+		return "down"
+	default:
+		return "range"
+	}
+}

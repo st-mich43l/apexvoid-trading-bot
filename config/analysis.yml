@@ -541,8 +541,10 @@ analysis:
       # level's band that make a break accepted (the flip's required role).
       breakout_accept_bars: 2
     trendline:
-      version: v7
+      version: v8
       enabled: true
+      # The timeframes a line is found, reacted to and published on, each against its own closed candles (M5 and M15 are independent setups of this one strategy).
+      setup_timeframes: [M5, M15]
       # The target is the nearest opposing liquidity at least this far from the entry; with none
       # there is no technical objective and nothing is published. (v3 reported twice the distance
       # from the entry to the interaction band edge, unrelated to the published stop.)
@@ -564,6 +566,20 @@ analysis:
       close_violation_atr: 0.15
       approach_min_distance_atr: 0.10
       maximum_bars_since_last_touch: 30
+      # Per-timeframe values (docs/strategies/trendline.md, "Timeframes"). The flat values above are the defaults; a timeframe lists only what it owns. Everything that is
+      # in ATR (the interaction band, the close violation, the approach, the stop buffer, the target distance) is shared: ATR is already the frame's own. Measured on
+      # the production captures, a line's anchor spacing and slope in ATR per bar are the same on M5 and M15 (median 8 and 9 bars between anchors, 0.129 and 0.120
+      # ATR per bar), so the bar-count geometry in analysis.trendlines (spacing, span, slope) is read in bars of each frame and not converted to minutes. Expiry is in
+      # hours, already elapsed time. The reaction window must span the second anchor and the bars that confirm it (the fractal confirms a pivot 2 bars later: 3 bars).
+      timeframes:
+        M5:
+          maximum_bars_since_last_touch: 30
+          expiry_hours: 12.0
+          reaction_lookback_bars: 3
+        M15:
+          maximum_bars_since_last_touch: 30
+          expiry_hours: 12.0
+          reaction_lookback_bars: 3
     break_retest:
       version: v3
       enabled: true
