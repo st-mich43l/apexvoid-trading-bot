@@ -6,7 +6,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.20). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.21). |
 
 ## ApexVoid Price Action
 
@@ -94,7 +94,7 @@ Engine v6 is what the bot trades today. Selective v7 is a preview of the definit
 - **Selectivity readout (tooltip only, nothing on the chart):** the share of the window's [low, high] inside any level band, over all levels: `coverage 69 % of the recent range: low selectivity` above 40 %, `selective` at or below 25 %. On the 3 Nov M5 capture: v6 69 %, v7 36 %.
 - **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count).
 
-### Volume profile (v2.20)
+### Volume profile (v2.20, intrabar timeframes changed in v2.21)
 
 A quiet histogram of where the period traded, with its point of control (POC) and value area (VA). **The volume is tick volume**: on XAUUSD (OANDA, FXCM, cTrader) it counts price updates, a measure of activity, not contracts. Read the profile as "where price spent its time and activity", not as traded size. It is a display tool with **no measured edge**; nothing here trades it.
 
@@ -103,9 +103,10 @@ A quiet histogram of where the period traded, with its point of control (POC) an
 | Chart timeframe | Profile period | Intrabar timeframe | Profiles drawn |
 |---|---|---|---|
 | 5m and below | engine session: Asia start, London start, New York start, next Asia start (contiguous) | 1m (1m charts: the chart bars) | developing + last 2 |
-| 10m to 30m | trading day (XAU rolls 17:00 New York) | 1m (up to 15m), 3m (30m) | developing + last 1 |
-| 1h to 2h | week | 5m | developing + last 1 |
-| 3h to 4h | month | 15m | developing |
+| 10m to 15m | trading day (XAU rolls 17:00 New York) | 3m | developing + last 1 |
+| 30m | trading day | 5m | developing + last 1 |
+| 1h to 2h | week | 15m | developing + last 1 |
+| 3h to 4h | month | 60m | developing |
 | 1D and above | quarter | 60m | developing |
 
 `Manual` shows the period (Session, Day, Week, Month), the intrabar timeframe, the rows and how many completed profiles to draw. `Off` (and the `Minimal` display profile) draws nothing.
@@ -238,6 +239,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
+| 2.21 | **Runtime fix for `RE10110` (the script takes too long to execute, 0.5 s on the free plans), not measured in TradingView.** The volume profile is recomputed over every intrabar of the period on the last bar; on a 15m chart that was up to 1,380 one-minute intrabars (a trading day), and when a profile outgrew 3,000 intrabars it was thinned with 1,500 `array.remove` calls. v2.21 uses coarser automatic intrabar timeframes (15m chart: 3m, 30m: 5m, 1h to 2h: 15m, 3h to 4h: 60m, so a day is at most 460 intrabars), caps a profile at 800 intrabars (when it passes that, neighbours are merged pairwise and the tail popped, no `array.remove`), and nothing else changes: same periods, rows, POC and value-area rules. If the error persists, set `Volume profile` to `Off` and use TradingView's Profiler (Pine Editor, More, Profiler) to see which block is slow. |
 | 2.20 | Volume profile inside the main indicator (tick volume): POC, value area, naked POCs, polylines, `request.security_lower_tf` of the plain high / low / volume, period and intrabar timeframe follow the chart timeframe (`Auto`). Right-column captions get a category `volume` (listed together, appended next to other labels). New group `08 Volume Profile`, `max_polylines_count` 20. Display only; no measured edge. |
 | 2.19 | The Market Intelligence panel (the table) and the state that only fed it are removed. |
 | 2.18 | The trade plan (inputs, paper tracker, `Trades` row, four alerts) is removed. |
