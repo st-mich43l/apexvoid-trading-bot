@@ -229,7 +229,8 @@ func (s *Strategy) build(ctx *analysiscontext.MarketContext, base *strategyutil.
 	for name, value := range measurements {
 		model.Measure(name, value)
 	}
-	scoreQuality(model, setup, d, d.RecentCHoCH(s.cfg.ReactionLookback), factors.HTFAligned, s.cfg.ReactionLookback)
+	room := s.qualityRoom(ctx, setup)
+	scoreQuality(model, setup, d, d.RecentCHoCH(s.cfg.ReactionLookback), factors.HTFAligned, s.cfg.ReactionLookback, room, s.cfg.PipSize)
 
 	direction := strings.ToLower(string(setup.Direction))
 	evidence := []string{"m5_distinct_zone_overlap", "m5_confluence_independent_facts"}

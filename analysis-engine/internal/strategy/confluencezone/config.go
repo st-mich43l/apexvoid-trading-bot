@@ -65,6 +65,8 @@ type Config struct {
 	// layer widens a tighter stop to it, so reward:risk is measured against at
 	// least this much risk. 0 disables the adjustment.
 	ExecutionStopMinPips float64
+	// Barrier is the opposing-barrier policy the quality room is limited with.
+	Barrier strategyutil.BarrierPolicy
 	// DeepEntryMinimumWidthPips is the narrowest entry band a deep entry may leave (PR-E1): when the stop is wider than the cap from the band's proximal edge, the band
 	// is cut to the part within the cap (the stop never moves). 0 turns deep entry off: such a setup is refused.
 	DeepEntryMinimumWidthPips float64
@@ -143,6 +145,10 @@ func parseConfig(params map[string]any) (Config, error) {
 		c.DeepEntryMinimumWidthPips = v
 	}
 	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
+	var berr error
+	if c.Barrier, berr = strategyutil.ParseBarrierPolicy(params); berr != nil {
+		return c, fmt.Errorf("confluence_zone: %w", berr)
+	}
 	return c, c.validate()
 }
 

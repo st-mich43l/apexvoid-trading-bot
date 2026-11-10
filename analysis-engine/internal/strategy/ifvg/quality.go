@@ -5,6 +5,7 @@ import (
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/quality"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
 // QualityModel is the version of the scoring rule below.
@@ -61,31 +62,14 @@ func (s *Strategy) score(m *quality.Model, setup Setup, qc qualityContext) {
 	if !buy {
 		reference = setup.EntryLow
 	}
-	m.Score("entry_location", entryLocation(buy, qc.price, reference, setup.ATR))
+	strategyutil.ScoreEntryLocation(m, buy, qc.price, reference, setup.ATR)
 	m.Score("structure", quality.StructureScore(buy, qc.localTrend, qc.choch, qc.htfAligned))
 
 	// Room is scored against the risk execution takes; the structural reward:risk is still published (target_room_r).
-	risk := qc.effectiveRisk
-	if !(risk > 0) {
-		risk = math.Abs(reference - setup.Stop)
+	g := quality.MeasureRoom(buy, reference, setup.Stop, setup.Target, qc.effectiveRisk, true)
+	m.Score("room", g.Score)
+	if g.EffectiveRisk > 0 {
+		m.Measure("room_r_effective", g.EffectiveRoomR)
 	}
-	reward := math.Abs(setup.Target - reference)
-	m.Score("room", quality.Room(reward, risk, true))
-	if risk > 0 {
-		m.Measure("room_r_effective", reward/risk)
-	}
-}
-
-// entryLocation is how far the latest close has run away from the proximal edge of the entry band in the trade's favour (above it for a buy, below it for a
-// sell), in ATR, Fall(d; 0.25, 1.5): price that has left the entry is a late one. Price back inside the band, on the far side of the edge, is a better fill than the
-// edge and is not late, so it scores in full. Without a volatility there is no measurement (0).
-func entryLocation(buy bool, price, reference, atr float64) float64 {
-	if !(atr > 0) || math.IsNaN(price) || math.IsInf(price, 0) || math.IsNaN(reference) || math.IsInf(reference, 0) {
-		return 0
-	}
-	ran := price - reference
-	if !buy {
-		ran = reference - price
-	}
-	return quality.Fall(math.Max(0, ran)/atr, 0.25, 1.5)
+	strategyutil.PublishRiskGeometry(m, g, s.cfg.PipSize)
 }

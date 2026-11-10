@@ -76,8 +76,12 @@ type Config struct {
 	MinimumTargetRoomATR    float64
 	MinimumRewardRisk       float64
 	ExecutionStopMaxPips    float64 // 0 disables the pre-check
-	ExpiryHours             float64
-	PipSize                 float64
+	// ExecutionStopMinPips is the instrument's execution stop floor, read by the quality room only (execution widens a tighter stop to it); 0 is none.
+	ExecutionStopMinPips float64
+	// Barrier is the opposing-barrier policy the quality room is limited with.
+	Barrier     strategyutil.BarrierPolicy
+	ExpiryHours float64
+	PipSize     float64
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -136,6 +140,20 @@ func parseConfig(params map[string]any) (Config, error) {
 			return c, fmt.Errorf("break_retest: execution_stop_max_pips must be > 0 when set (omit it to disable the pre-check)")
 		}
 		c.ExecutionStopMaxPips = v
+	}
+	if _, present := params["execution_stop_min_pips"]; present {
+		v, err := strategyutil.Float(params, "execution_stop_min_pips")
+		if err != nil {
+			return c, fmt.Errorf("break_retest: %w", err)
+		}
+		if !(v > 0) {
+			return c, fmt.Errorf("break_retest: execution_stop_min_pips must be > 0 when set")
+		}
+		c.ExecutionStopMinPips = v
+	}
+	var err error
+	if c.Barrier, err = strategyutil.ParseBarrierPolicy(params); err != nil {
+		return c, fmt.Errorf("break_retest: %w", err)
 	}
 	return c, c.validate()
 }

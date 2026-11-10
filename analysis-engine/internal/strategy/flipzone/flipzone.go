@@ -44,6 +44,8 @@ type Config struct {
 	Legacy strategyutil.LegacyDetectorSettings
 	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
 	StopBudget strategyutil.StopBudget
+	// Barrier is the opposing-barrier policy the quality room is limited with.
+	Barrier strategyutil.BarrierPolicy
 }
 
 // Strategy is FlipZoneStrategy.
@@ -72,6 +74,9 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 		return nil, fmt.Errorf("flipzone: %w", err)
 	}
 	if out.Legacy, err = strategyutil.ParseLegacyDetectorSettings(cfg.Parameters); err != nil {
+		return nil, fmt.Errorf("flipzone: %w", err)
+	}
+	if out.Barrier, err = strategyutil.ParseBarrierPolicy(cfg.Parameters); err != nil {
 		return nil, fmt.Errorf("flipzone: %w", err)
 	}
 	if out.StopBudget, err = strategyutil.ParseStopBudget(cfg.Parameters); err != nil {
@@ -106,7 +111,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 
 func (s *Strategy) spec() strategyutil.TechniqueSpec {
 	return strategyutil.TechniqueSpec{
-		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, ZoneEvidence: "m5_flip_zone_role_confirmed", ConfirmedEvidence: "m5_flip_zone_rejection_confirmed",
+		ID: string(ID), Version: Version, AnchorToReaction: true, StopBudget: s.cfg.StopBudget, Barrier: s.cfg.Barrier, ZoneEvidence: "m5_flip_zone_role_confirmed", ConfirmedEvidence: "m5_flip_zone_rejection_confirmed",
 		InvalidationLabel: "flip_zone_invalidated", InvalidationBufferATR: s.cfg.InvalidationBufferATR,
 		MinimumTargetDistanceATR: s.cfg.MinimumTargetDistanceATR, ExpiryHours: s.cfg.ExpiryHours, Fingerprint: s.fingerprint,
 		Versions: opportunity.AnalysisProvenance{

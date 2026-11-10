@@ -12,7 +12,7 @@ import (
 func inputs(rewardPips, corridorRoomPips float64) qualityInputs {
 	return qualityInputs{
 		displacementATR: 2, minDisplacementATR: 1.5, bodyDominance: 0.7, minBodyDominance: 0.5, pullbackRatio: 0.3, maxPullbackRatio: 0.6,
-		referenceTouches: 3, price: 4000.2, reference: 4000, atr: 2, rewardPips: rewardPips, corridorRoomPips: corridorRoomPips, stop: 30,
+		referenceTouches: 3, buy: true, price: 4000.2, reference: 4000, atr: 2, rewardPips: rewardPips, corridorRoomPips: corridorRoomPips, stop: 30,
 	}
 }
 
@@ -86,5 +86,35 @@ func TestCorridorRoomIsMeasuredFromTheWorstPlannedEntry(t *testing.T) {
 		if got := corridorRoomPips(c.direction, c.worst, low, high, pip); got > 0 {
 			t.Errorf("%s worst %v: room %v, want none", c.direction, c.worst, got)
 		}
+	}
+}
+
+// The location is direction-aware: a BUY deeper in the zone than its proximal edge is not chasing, one above it is; a SELL mirrors it.
+func TestPullbackEntryLocationIsDirectionAware(t *testing.T) {
+	at := func(buy bool, price float64) float64 {
+		in := inputs(60, 90)
+		in.buy, in.price, in.reference, in.atr = buy, price, 4000, 2
+		return scoreQuality(in).Components()["score_entry_location"]
+	}
+	for _, c := range []struct {
+		name string
+		buy  bool
+		px   float64
+		want func(float64) bool
+	}{
+		{"BUY deeper in the zone", true, 3999, func(v float64) bool { return v == 1 }},
+		{"BUY at the edge", true, 4000, func(v float64) bool { return v == 1 }},
+		{"BUY above the edge", true, 4002, func(v float64) bool { return v < 1 }},
+		{"SELL higher in the zone", false, 4001, func(v float64) bool { return v == 1 }},
+		{"SELL at the edge", false, 4000, func(v float64) bool { return v == 1 }},
+		{"SELL below the edge", false, 3998, func(v float64) bool { return v < 1 }},
+	} {
+		if got := at(c.buy, c.px); !c.want(got) {
+			t.Errorf("%s: score %v", c.name, got)
+		}
+	}
+	m := scoreQuality(inputs(60, 90)).Components()
+	if m["quality_model_version"] != 3 {
+		t.Errorf("model version %v, want 3", m["quality_model_version"])
 	}
 }

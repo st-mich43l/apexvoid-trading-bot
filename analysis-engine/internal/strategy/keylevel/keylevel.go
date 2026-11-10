@@ -419,7 +419,7 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	quality := scoreQuality(qualityInputs{
 		bars: d.Frame.Bars, touchIndex: conf.TouchIndex, confirmIndex: conf.ConfirmationIndex,
 		level: a.level.Price, band: effectiveBand, atr: atr, buy: direction == market.Buy, price: d.Price, reference: reference,
-		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity", effectiveRisk: s.cfg.StopBudget.EffectiveRisk(reference, invalidation),
+		invalidation: invalidation, target: target, structural: targetLabel == "nearest_opposing_liquidity", effectiveRisk: s.cfg.StopBudget.EffectiveRisk(reference, invalidation), pipSize: s.cfg.StopBudget.PipSize,
 		localTrend: d.Frame.Structure, choch: reactionCHoCH(a.detector, conf.TouchIndex, conf.ConfirmationIndex), htfAligned: a.detector.HTFAligned(),
 		htfTouches: htfTouches, htfWeight: htfWeight,
 		levelKind: a.level.Kind, levelBand: a.level.Band, swings: d.Frame.Swings, coverage: coverage,

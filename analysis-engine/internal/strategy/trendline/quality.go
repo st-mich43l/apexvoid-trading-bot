@@ -11,7 +11,7 @@ import (
 )
 
 // QualityModel is the version of the scoring rule below.
-const QualityModel = "trendline.quality.v1"
+const QualityModel = "trendline.quality.v2"
 
 // scoreQuality is Trendline's technical quality: a causally confirmed line, respected, and reclaimed at the latest bar. Eight
 // dimensions in [0, 1], averaged without weights:
@@ -26,7 +26,8 @@ const QualityModel = "trendline.quality.v1"
 //	                   bar count selects the same share of lines on each, while converting it to minutes would make M15 three times less selective.
 //	approach           the move into the line, in ATR, before it touched: Ramp(d; 0.3, 1.5). A reaction from a distance means price
 //	                   went to the line; price hovering at it is not a reaction.
-//	rejection, entry_location, structure, room   see strategyutil.SharedReactionDimensions.
+//	rejection, entry_location, structure, room   see strategyutil.SharedReactionDimensions. v2: entry_location is direction-aware and room is the structural
+//	                   room over the effective risk, limited by the nearest valid opposing barrier.
 func scoreQuality(tf market.Timeframe, line technical.Trendline, interaction technical.Interaction, dec *strategyutil.TechniqueDecision, g strategyutil.QualityGeometry) opportunity.StrategyQuality {
 	m := quality.New(QualityModel)
 	validations := float64(len(line.ValidationTouches))

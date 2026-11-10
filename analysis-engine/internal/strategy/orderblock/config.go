@@ -62,6 +62,8 @@ type Config struct {
 
 	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
 	StopBudget strategyutil.StopBudget
+	// Barrier is the opposing-barrier policy the quality room is limited with.
+	Barrier strategyutil.BarrierPolicy
 }
 
 func parseConfig(params map[string]any) (Config, error) {
@@ -131,6 +133,9 @@ func parseConfig(params map[string]any) (Config, error) {
 		if c.BindWithinExecutionWindow, ok = raw.(bool); !ok {
 			return Config{}, fmt.Errorf("parameter %q must be boolean", "bind_within_execution_window")
 		}
+	}
+	if c.Barrier, err = strategyutil.ParseBarrierPolicy(params); err != nil {
+		return c, err
 	}
 	if c.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err

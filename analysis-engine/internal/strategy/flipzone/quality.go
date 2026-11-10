@@ -10,7 +10,7 @@ import (
 )
 
 // QualityModel is the version of the scoring rule below.
-const QualityModel = "flip_zone.quality.v1"
+const QualityModel = "flip_zone.quality.v2"
 
 // scoreQuality is Flip Zone's technical quality: a level that price broke and accepted, now retested from the new side. Seven
 // dimensions in [0, 1], averaged without weights:
@@ -20,7 +20,8 @@ const QualityModel = "flip_zone.quality.v1"
 //	break_strength      the candle that broke it: body in ATR, Ramp(body; 0.5, 1.5). A weak poke through a level is not a flip.
 //	retest_timing       bars from the break to the retest: Peak(n; 0, 1, 6, 30). The flip is only published once its role has been
 //	                    accepted (a validity rule), so a quick retest is the normal case and a retest long after is another market.
-//	rejection, entry_location, structure, room   see strategyutil.SharedReactionDimensions.
+//	rejection, entry_location, structure, room   see strategyutil.SharedReactionDimensions. v2: entry_location is direction-aware and room is the structural
+//	                    room over the effective risk, limited by the nearest valid opposing barrier.
 func scoreQuality(zone techniquezone.Zone, level techniquezone.Level, dec *strategyutil.TechniqueDecision, g strategyutil.QualityGeometry) opportunity.StrategyQuality {
 	m := quality.New(QualityModel)
 	bars := dec.Detector.Frame.Bars

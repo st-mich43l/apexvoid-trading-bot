@@ -30,6 +30,7 @@ type Strategy struct {
 	cfg         Config
 	detector    strategyutil.LegacyDetectorSettings
 	budget      strategyutil.StopBudget
+	barrier     strategyutil.BarrierPolicy
 	fingerprint string
 }
 
@@ -49,7 +50,11 @@ func New(c strategy.Config) (strategy.Strategy, error) {
 	if err != nil {
 		return nil, fmt.Errorf("round_number: %w", err)
 	}
-	s := &Strategy{cfg: cfg, detector: detector, budget: budget, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
+	barrier, err := strategyutil.ParseBarrierPolicy(c.Parameters)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", "round_number", err)
+	}
+	s := &Strategy{cfg: cfg, detector: detector, budget: budget, barrier: barrier, fingerprint: strategyutil.Fingerprint(string(c.ID), c.Version, c.Parameters)}
 	s.budget.Refusals = &s.RefusalCounter
 	return s, nil
 }
@@ -211,6 +216,8 @@ func (s *Strategy) candidate(ctx *analysiscontext.MarketContext, setup Setup) (o
 	if d, ok := strategyutil.NewLegacyDetector(ctx, market.M5, setup.Direction, s.detector); ok {
 		qc.choch = d.RecentCHoCH(maxInt(1, s.detector.ReactionLookbackBars))
 	}
+	qc.pipSize = s.cfg.PipSize
+	qc.room = s.qualityRoom(ctx, setup, reference)
 	s.score(model, setup, qc)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version,

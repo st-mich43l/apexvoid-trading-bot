@@ -1,8 +1,6 @@
 package quality
 
 import (
-	"math"
-
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
@@ -17,16 +15,6 @@ func RejectionScore(bars []market.Candle, touchIndex, confirmIndex int, buy bool
 	wick := RejectionWick(bars[touchIndex], buy)
 	closeStrength := CloseStrength(bars[confirmIndex], buy)
 	return 0.5*Ramp(wick, 0.2, 0.6) + 0.5*Ramp(closeStrength, 0.5, 0.9)
-}
-
-// LocationScore is entry timing: how far the latest close already is from the proximal edge of the entry band, in ATR,
-// Fall(d; 0.25, 1.5). Price that has run from the edge is a late entry, not a better one. Without a volatility there is no
-// measurement (0).
-func LocationScore(price, reference, atr float64) float64 {
-	if !(atr > 0) || !finite(price) || !finite(reference) {
-		return 0
-	}
-	return Fall(math.Abs(price-reference)/atr, 0.25, 1.5)
 }
 
 // StructureScore grades the direction of the market for the trade, as a graded context and not as an added bonus, so a confirmed
@@ -55,15 +43,4 @@ func StructureScore(buy bool, localTrend string, choch, htfAligned bool) float64
 	default:
 		return pick(0.6, 0.5)
 	}
-}
-
-// GeometryRoom is Room measured from an entry reference to a target and an invalidation. It also returns the technical reward:risk
-// (0 when the risk is not positive) for publication as a measurement.
-func GeometryRoom(reference, invalidation, target float64, structural bool) (score, rewardRisk float64) {
-	risk := math.Abs(reference - invalidation)
-	reward := math.Abs(target - reference)
-	if risk > 0 && finite(reward) {
-		rewardRisk = reward / risk
-	}
-	return Room(reward, risk, structural), rewardRisk
 }

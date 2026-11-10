@@ -42,6 +42,8 @@ type TechniqueSpec struct {
 	// StopBudget is the instrument's stop envelope (see StopBudget): a structural stop wider than its cap is refused, never tightened; the zero value
 	// leaves the candidate as it was.
 	StopBudget StopBudget
+	// Barrier is the opposing-barrier policy the quality room is limited with (BarrierPolicy); the zero value is no barrier book.
+	Barrier BarrierPolicy
 	// PublishStructure puts the structure's own bounds on the candidate (Candidate.Structure) for display. The zone family sets it.
 	PublishStructure bool
 }
@@ -115,7 +117,12 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	if budgetCode != "" {
 		evidence = append(evidence, budgetCode)
 	}
-	geometry := QualityGeometry{Reference: reference, Invalidation: invalidation, Target: target, Structural: targetLabel != "fixed_reward_risk", ATR: atr}
+	pip := d.Settings.PipSize
+	geometry := QualityGeometry{
+		Reference: reference, Invalidation: invalidation, Target: target, ATR: atr, PipSize: pip,
+		Room: MeasureQualityRoom(ctx, dec.Direction == market.Buy, reference, invalidation, target, targetLabel != "fixed_reward_risk",
+			spec.StopBudget, spec.Barrier.RoomParams(pip, ScalpRoomATR(ctx, atr)), 0),
+	}
 	var scored opportunity.StrategyQuality
 	if dec.Score != nil {
 		scored = dec.Score(dec, geometry)
