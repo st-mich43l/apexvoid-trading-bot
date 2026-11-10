@@ -118,7 +118,7 @@ only observes it.
 | `ifvg` | Reaction at an inverted fair value gap | M5 | `strategies.ifvg` (v3) | `GO_NATIVE_VALIDATED` | live |
 | `crt` | Closed H1 range, M5 sweep and reclaim | M5 (H1 range) | `strategies.crt` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `flip_zone` | Zone born of an accepted role flip, then a reaction | M5 | `strategies.flip_zone` (v5) | `LEGACY_PARITY_PROVEN` (decisions and entry; invalidation anchored beyond the reaction extreme since v4; differs from the frozen publisher by design) | live |
-| `trendline` | Causal trendline with health and live interaction, then a reaction | M5 | `strategies.trendline` (v7) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions; invalidation anchored beyond the reaction extreme since v5; instrument stop cap applied since v6, ) | live |
+| `trendline` | Causal trendline with health and live interaction, then a reaction | M5, M15 | `strategies.trendline` (v8) | `GO_NATIVE_VALIDATED` (target reworked; 7 of 8 oracle decisions; invalidation anchored beyond the reaction extreme since v5; instrument stop cap applied since v6, ) | live |
 | `break_retest` | Broken trendline or key level, same-side retest and hold | M5 | `strategies.break_retest` (v2) | `LEGACY_PARITY_PROVEN` | live |
 | `impulse_pullback` | M5 impulse, corrective pullback, structural reference, M1 confirmation (XAU only) | M1 (M5 impulse) | `strategies.impulse_pullback` (v3) | `LEGACY_PARITY_PROVEN` on synthetic data only | observe-only on every instrument |
 | `range_scalp` | Probe of an edge of a sideways M5 range, faded at market (XAU only) | M5 | `strategies.range_scalp` (v1) | none yet (new in PR-S4: replayed for counts only, no outcome claim) | live |

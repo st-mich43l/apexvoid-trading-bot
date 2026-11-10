@@ -41,3 +41,11 @@ type Strategy interface {
 	RequiredTimeframes() []market.Timeframe
 	Evaluate(ctx *context.MarketContext) []opportunity.Candidate
 }
+
+// ClosedFrameEvaluator is the optional contract of a strategy that decides on more than one timeframe, each one against its own closed candles. The registry calls
+// EvaluateClosed with the timeframe that just closed instead of Evaluate, so a strategy evaluates exactly the frame whose bar closed (not every frame on every event)
+// and needs only that frame, not all of RequiredTimeframes, to be present: a frame that is not warm yet never holds back a frame that is. Evaluate remains the
+// answer for every frame at once, for callers that have no closing event.
+type ClosedFrameEvaluator interface {
+	EvaluateClosed(ctx *context.MarketContext, closed market.Timeframe) []opportunity.Candidate
+}

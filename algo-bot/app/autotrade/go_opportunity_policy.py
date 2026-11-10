@@ -131,7 +131,8 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "asia_range": ScopeProfile("asia_range", "Asia Range", "asia_range", None, frozenset({"M5"}), "go_m5_asia_range", requires_reaction=True, evidence_prefixes=("m5_asia_range_", "m15_asia_range_")),
   "shock_retest": ScopeProfile("shock_retest", "Shock Retest", "shock_retest", None, frozenset({"M5"}), "go_m5_shock_retest", requires_reaction=True, evidence_prefixes=("m5_volatility_shock", "m5_shock_")),
   "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", requires_reaction=True, evidence_prefixes=("m5_flip_",)),
-  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_",)),
+  # Trendline decides on M5 and on M15, each on its own frame's closed candles (observed timeframe = the frame the line lives on).
+  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5", "M15"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_", "m15_trendline_")),
   "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),
   # These strategies intentionally publish on the M1 observation boundary:
   # their Go implementations consume their M5 structure and own the M1
