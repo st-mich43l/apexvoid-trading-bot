@@ -25,7 +25,7 @@ at the edge. The strategy sells the top edge probe and buys the bottom one at ma
 Evidence `m5_range_sideways`, `m5_range_edge_probe`, `m5_range_close_inside`; measures `range_width_atr`, `efficiency_ratio`, `probe_depth_atr`, `entry_range_position`, `range_midpoint`, `range_high`, `range_low`, `available_room_pips`, `objective_room_pips`,
 `barrier_room_pips` (when a wall lies ahead), `room_limited_by_barrier`, `room_reward_risk`, `target_pips`, `target_r`, `utc_hour`.
 
-**Quality (v2, ranking only, never a gate; `quality_ranking` stays false).** The overall is the mean of the `score_*` dimensions, each in [0, 1], each a different fact:
+**Quality (v2, ranking only, never a gate; `quality_ranking` stays false).** The schema is fixed: every opportunity carries the same five `score_*` dimensions, each in [0, 1] and each a different fact, and the overall is their exact mean (`support_wall_present` and `support_wall_touches` are published beside it; `barrier_room_pips` exists only with `barrier_ahead` = 1):
 
 | Dimension | Definition |
 |---|---|
@@ -33,7 +33,7 @@ Evidence `m5_range_sideways`, `m5_range_edge_probe`, `m5_range_close_inside`; me
 | `edge_probe` | the excursion into the edge band in ATR, `Peak(d; 0, 0.10, 0.60, 1.50)`: a scrape is noise, a few tenths of an ATR is a healthy probe, beyond 1.5 ATR is a breakout with a wick and scores 0 (depth is not rewarded indefinitely) |
 | `entry_location` | where the worst entry sits as a fraction of the range from the edge it fades, `Fall(p; 0.10, 0.50)` |
 | `room_reward_risk` | the available room (above) against the stop, `Ramp(room / stop; 1, 3)`: 1R scores 0, 3R scores 1 |
-| `structural_support` | 1 only when a live wall of the trade's own side overlaps the probe's span; otherwise the dimension is absent |
+| `structural_support` | 1 when a live wall of the trade's own side overlaps the probe's span, 0 otherwise (no structural evidence) |
 
 v1 scored `sideways` and `edge_probe` (the raw probe depth in ATR, unbounded and never penalised) only.
 
@@ -45,7 +45,7 @@ v1 scored `sideways` and `edge_probe` (the raw probe depth in ATR, unbounded and
 
 ## SQ-1 replay (real XAU capture, M5, 2-9 Nov 2026), v1 against v2
 
-26 probes before, 24 after. The two refused are `no_opposing_room`: a wall the entry sat in or against. Of the 24, 22 keep the 2R price and 2 are limited to 1R: one by the far edge of its range (49.7 pips of room against a 30-pip stop), one by a barrier (34.5 pips after the buffer). Stops and entries are unchanged. The quality overall moves from 0.13 to 0.73 (median 0.45) to 0.51 to 0.99 (median 0.85) because the dimensions are now normalised; it ranks nothing. Counts only: no outcome was simulated.
+26 probes before, 24 after. The two refused are `no_opposing_room`: a wall the entry sat in or against. Of the 24, 22 keep the 2R price and 2 are limited to 1R: one by the far edge of its range (49.7 pips of room against a 30-pip stop), one by a barrier (34.5 pips after the buffer). Stops and entries are unchanged. The quality overall moves from 0.13 to 0.73 (median 0.45) to 0.41 to 0.94 (median 0.75; 9 of the 24 have a supporting wall) because the dimensions are now normalised; it ranks nothing. Counts only: no outcome was simulated.
 
 ## Replay (real XAU capture, M5 29 Oct - 6 Nov 2026), v1
 

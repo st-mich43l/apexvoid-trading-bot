@@ -235,7 +235,11 @@ func TestQualityDimensionsAreFiniteBoundedAndTheOverallIsTheirMean(t *testing.T)
 
 func TestAStrongImpulseWithLittleRoomIsNotExcellent(t *testing.T) {
 	s := testStrategy(t)
-	plenty, _ := buildFor(t, s, ctxWith(), market.Buy, 33)
+	// A barrier 200 pips ahead lies beyond the 74-pip projection: the room is the projection, seen clear of walls up to that barrier.
+	plenty, why := buildFor(t, s, ctxWith(opposingWall(s, market.Buy, 33, 200, barTime-5000)), market.Buy, 33)
+	if why != "" {
+		t.Fatalf("refused: %s", why)
+	}
 	tight, why := buildFor(t, s, ctxWith(opposingWall(s, market.Buy, 33, 38, barTime-5000)), market.Buy, 33)
 	if why != "" {
 		t.Fatalf("refused: %s", why)
@@ -244,11 +248,96 @@ func TestAStrongImpulseWithLittleRoomIsNotExcellent(t *testing.T) {
 		t.Fatalf("the impulse must be strong for this test, impulse_strength = %v", got)
 	}
 	if tight.Quality.Components["score_room_reward_risk"] >= plenty.Quality.Components["score_room_reward_risk"] || !(tight.Quality.Overall < plenty.Quality.Overall) {
-		t.Errorf("room scores %v vs %v, overall %v vs %v: the same impulse with less room must score lower",
+		t.Errorf("room scores %v vs %v, overall %v vs %v: the same impulse with less structural room must score lower",
 			tight.Quality.Components["score_room_reward_risk"], plenty.Quality.Components["score_room_reward_risk"], tight.Quality.Overall, plenty.Quality.Overall)
 	}
 	if tight.Quality.Components["score_room_reward_risk"] > 0.1 || tight.Quality.Overall > 0.85 {
 		t.Errorf("a strong impulse with barely 1R of room scored room %v overall %v: not an excellent setup", tight.Quality.Components["score_room_reward_risk"], tight.Quality.Overall)
+	}
+}
+
+// The equal-leg projection is a technical target hypothesis. It makes the target eligible (the approved room rule is unchanged) but it is not observed
+// structure, so a room that rests on it alone must not score as structural room.
+func TestProjectionOnlyRoomIsEligibleButNotStructural(t *testing.T) {
+	s := testStrategy(t)
+	for _, direction := range []market.Direction{market.Buy, market.Sell} {
+		cand, why := buildFor(t, s, ctxWith(), direction, 30)
+		if why != "" {
+			t.Fatalf("%s: a projection-only room must still make the target eligible, refused %q", direction, why)
+		}
+		c := cand.Quality.Components
+		if got := math.Abs(float64(cand.Targets[0].Price.Price)-worstEntry(cand, direction)) / s.cfg.PipSize; math.Abs(got-60) > 1e-6 {
+			t.Errorf("%s: target %.2f pips, want the 2R rung (60): eligibility must be unchanged", direction, got)
+		}
+		if c["score_room_reward_risk"] != 0 {
+			t.Errorf("%s: room_reward_risk = %v for a room supported only by the projection, want 0 (structural=false)", direction, c["score_room_reward_risk"])
+		}
+		if c["structural_room_basis"] != 0 || c["structural_room_pips"] != 0 || c["structural_room_r"] != 0 || c["barrier_ahead"] != 0 {
+			t.Errorf("%s: structural basis %v pips %v r %v barrier_ahead %v, want none", direction, c["structural_room_basis"], c["structural_room_pips"], c["structural_room_r"], c["barrier_ahead"])
+		}
+		if c["available_room_pips"] <= 0 || c["projected_room_pips"] != c["available_room_pips"] {
+			t.Errorf("%s: available %v projected %v, want the available room to be the projected one", direction, c["available_room_pips"], c["projected_room_pips"])
+		}
+		if _, ok := c["barrier_room_pips"]; ok {
+			t.Errorf("%s: a barrier distance was published with no barrier", direction)
+		}
+	}
+}
+
+func TestRoomBoundedByAnActualBarrierIsStructural(t *testing.T) {
+	s := testStrategy(t)
+	for _, direction := range []market.Direction{market.Buy, market.Sell} {
+		// A wall 50 raw pips ahead: 45.5 after the buffer, against a 30-pip stop.
+		cand, why := buildFor(t, s, ctxWith(opposingWall(s, direction, 30, 50, barTime-5000)), direction, 30)
+		if why != "" {
+			t.Fatalf("%s: refused %q", direction, why)
+		}
+		c := cand.Quality.Components
+		if c["structural_room_basis"] != 1 || math.Abs(c["structural_room_pips"]-45.5) > 1e-6 || c["barrier_ahead"] != 1 || c["room_limited_by_barrier"] != 1 {
+			t.Errorf("%s: basis %v structural %v barrier %v limited %v, want a structural room of 45.5 pips bounded by the barrier",
+				direction, c["structural_room_basis"], c["structural_room_pips"], c["barrier_ahead"], c["room_limited_by_barrier"])
+		}
+		want := quality.Room(45.5, 30, true)
+		if math.Abs(c["score_room_reward_risk"]-want) > 1e-9 || !(want > 0) {
+			t.Errorf("%s: room_reward_risk = %v, want %v", direction, c["score_room_reward_risk"], want)
+		}
+		// The same impulse with the projection alone scores lower on room even though both are eligible.
+		bare, _ := buildFor(t, s, ctxWith(), direction, 30)
+		if !(c["score_room_reward_risk"] > bare.Quality.Components["score_room_reward_risk"]) {
+			t.Errorf("%s: a barrier-bounded room (%v) must outscore a projection-only one (%v)", direction, c["score_room_reward_risk"], bare.Quality.Components["score_room_reward_risk"])
+		}
+	}
+}
+
+func TestABarrierBeyondTheProjectionSupportsTheProjectedDistance(t *testing.T) {
+	// The wall is 200 pips ahead, past the 74-pip horizon: the distance up to the horizon has been seen clear, so it is structural; the barrier does not bound it.
+	s := testStrategy(t)
+	cand, why := buildFor(t, s, ctxWith(opposingWall(s, market.Buy, 30, 200, barTime-5000)), market.Buy, 30)
+	if why != "" {
+		t.Fatalf("refused %q", why)
+	}
+	c := cand.Quality.Components
+	if c["structural_room_basis"] != 1 || c["room_limited_by_barrier"] != 0 || math.Abs(c["structural_room_pips"]-c["projected_room_pips"]) > 1e-9 {
+		t.Errorf("basis %v limited %v structural %v projected %v", c["structural_room_basis"], c["room_limited_by_barrier"], c["structural_room_pips"], c["projected_room_pips"])
+	}
+}
+
+func TestStaleAndFutureBarriersLeaveOnlyProjectedRoom(t *testing.T) {
+	s := testStrategy(t)
+	wall := opposingWall(s, market.Buy, 30, 50, barTime-5000)
+	stale := wall
+	stale.State = zone.StateMitigated
+	future := opposingWall(s, market.Buy, 30, 50, barTime+900)
+	born := opposingWall(s, market.Buy, 30, 50, barTime)
+	for name, z := range map[string]zone.Zone{"mitigated": stale, "from the future": future, "born of the impulse": born} {
+		cand, why := buildFor(t, s, ctxWith(z), market.Buy, 30)
+		if why != "" {
+			t.Fatalf("%s: refused %q", name, why)
+		}
+		c := cand.Quality.Components
+		if c["structural_room_basis"] != 0 || c["score_room_reward_risk"] != 0 {
+			t.Errorf("%s wall produced structural room (basis %v, score %v)", name, c["structural_room_basis"], c["score_room_reward_risk"])
+		}
 	}
 }
 

@@ -14,7 +14,8 @@ Impulse Pullback (a 4 ATR displacement plus a structural reference plus M1 confi
 4. **Room and target (SQ-1, v2).** The room is finite and measured from the **worst planned entry** (the limit band's far edge): `room = min(horizon, barrier)`.
    *Horizon:* the equal-leg projection of the impulse bar beyond its extreme, `extreme +/- room_projection (1.0) x range`. The impulse extreme itself is the first objective and is published as `extreme_room_pips`, but it cannot be the end of the room: with the entry at the retrace and the stop beyond the origin the extreme is always closer than the stop (room to the extreme is `0.5 x range - w`; the stop is at least `0.5 x range + w`), so no rung of the ladder could ever fit it.
    *Barrier:* the nearest live, side-correct wall ahead of the entry in the engine's canonical zone book (as for Range Scalp: `internal/barrier`, the instrument's `barrier_buffer_atr` once), excluding any zone born at or after the impulse bar (its own structure) or created after the decision. A wall the entry sits inside has no room.
-   `ScalpTarget` takes the first rung of `[2.0, 1.0]` that clears `minimum_net_target_pips` and fits the room; **if none fits the impulse is refused** (`no_opposing_room`, `no_ladder_target_fits_room`). v1 passed `room = +Inf`. No rejection candle is needed or waited for (`analysis.require_candle_confirmation` is irrelevant: the entry is a pending limit).
+   The two rooms are kept apart. **Available room** (eligibility) = `min(projected room, barrier room)`. **Structural room** (scoring) = the available room only when a barrier lies ahead (the room is bounded by it, or the space up to the projection was seen clear up to it); with no barrier it is none (`structural_room_basis` 0, `structural_room_pips` 0). Published as `available_room_pips`, `projected_room_pips`, `structural_room_basis`, `structural_room_pips`, `structural_room_r`, `barrier_ahead`.
+   `ScalpTarget` takes the first rung of `[2.0, 1.0]` that clears `minimum_net_target_pips` and fits the available room; **if none fits the impulse is refused** (`no_opposing_room`, `no_ladder_target_fits_room`). v1 passed `room = +Inf`. No rejection candle is needed or waited for (`analysis.require_candle_confirmation` is irrelevant: the entry is a pending limit).
 5. **Expiry.** `entry_window_minutes` (60) after the impulse bar's close; unfilled it expires.
 
 Evidence `m5_impulse_bar`, `m5_retrace_limit`, and `session_asia` / `session_london` / `session_ny` as a label; measures `impulse_body_atr`, `impulse_body_dominance`, `retrace_fraction`, `stop_atr`, `extreme_room_pips`, `available_room_pips`, `objective_room_pips`,
@@ -28,7 +29,7 @@ Evidence `m5_impulse_bar`, `m5_retrace_limit`, and `session_asia` / `session_lon
 | `impulse_efficiency` | `Ramp(body / range; 0.4, 0.9)`: a long wick is price that was refused on the way |
 | `retrace_depth` | `Peak(retrace_fraction; 0.20, 0.38, 0.62, 0.80)`: the healthy pullback of an impulse |
 | `invalidation_quality` | `Peak(stop / M5 ATR; 0.4, 0.8, 1.8, 3.0)`: outside the noise, not absurdly wide |
-| `room_reward_risk` | the available room against the stop, `Ramp(room / stop; 1, 3)`: a strong impulse with little room cannot average up to an excellent score |
+| `room_reward_risk` | the **structural** room against the stop, `Ramp(room / stop; 1, 3)` (`quality.Room` with `structural` = an opposing barrier lies ahead). A room that rests on the equal-leg projection alone is a technical target hypothesis, not observed structure: it still makes the target eligible, but it scores 0 here. A strong impulse with little structural room cannot average up to an excellent score |
 
 v1 scored `impulse_strength` only.
 

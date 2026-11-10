@@ -57,6 +57,17 @@ type ScalpRoom struct {
 	Barrier *barrier.Barrier
 }
 
+// StructuralPips is the part of the available room that observed structure supports, for scoring: the room itself when the strategy's objective is observed
+// structure (objectiveObserved: the far edge of a range), otherwise only when an actual opposing barrier lies ahead of the entry, because then the space up
+// to the room has been seen clear of walls up to that barrier. A room that rests on a projection alone (a technical target hypothesis such as an equal-leg
+// move) is not structure: ok is false and the caller must not score it as structural room. Eligibility (Pips) is unaffected.
+func (r ScalpRoom) StructuralPips(objectiveObserved bool) (pips float64, ok bool) {
+	if objectiveObserved || r.HasBarrier() {
+		return r.Pips, true
+	}
+	return 0, false
+}
+
 // HasBarrier reports whether a barrier lies ahead of the entry.
 func (r ScalpRoom) HasBarrier() bool { return r.Barrier != nil }
 

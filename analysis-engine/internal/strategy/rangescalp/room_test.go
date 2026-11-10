@@ -2,6 +2,7 @@ package rangescalp
 
 import (
 	"math"
+	"sort"
 	"strings"
 	"testing"
 
@@ -267,17 +268,84 @@ func TestASyntheticRungDoesNotCreateRoom(t *testing.T) {
 	}
 }
 
-func TestStructuralSupportIsScoredOnlyWhenItExists(t *testing.T) {
+// The schema is fixed: structural_support is on every opportunity, 1 with a supporting wall and 0 without, and the overall is always the exact mean of the
+// same five dimensions.
+func TestStructuralSupportIsAlwaysScoredWithAFixedSchema(t *testing.T) {
+	s := testStrategy(t)
+	for _, direction := range []market.Direction{market.Buy, market.Sell} {
+		sig := probeWithRoom(direction, 33, 200, s.cfg)
+		low, high := sig.SignalLow, sig.Close
+		kind := zone.KindDemand
+		if direction == market.Sell {
+			low, high, kind = sig.Close, sig.SignalHigh, zone.KindSupply
+		}
+		opposite := zone.KindSupply
+		if direction == market.Sell {
+			opposite = zone.KindDemand
+		}
+		cases := []struct {
+			name      string
+			zones     []zone.Zone
+			wantScore float64
+		}{
+			{"no wall at all", nil, 0},
+			{"a supporting wall under the probe", []zone.Zone{wallAt(kind, low-0.1, high)}, 1},
+			{"a wall of the other side is not support", []zone.Zone{wallAt(opposite, low-0.1, high)}, 0},
+			{"a supporting wall away from the probe is not support", []zone.Zone{wallAt(kind, low-50, low-40)}, 0},
+		}
+		var schema []string
+		for _, c := range cases {
+			cand, why := build(t, ctxWith(c.zones...), sig)
+			if why != "" {
+				t.Fatalf("%s %s: refused %q", direction, c.name, why)
+			}
+			comps := cand.Quality.Components
+			got, present := comps["score_structural_support"]
+			if !present || got != c.wantScore {
+				t.Errorf("%s %s: score_structural_support = %v (present %v), want %v", direction, c.name, got, present, c.wantScore)
+			}
+			if want := c.wantScore; comps["support_wall_present"] != want {
+				t.Errorf("%s %s: support_wall_present = %v, want %v", direction, c.name, comps["support_wall_present"], want)
+			}
+			var dims []string
+			sum := 0.0
+			for name, v := range comps {
+				if strings.HasPrefix(name, quality.Prefix) {
+					dims = append(dims, name)
+					sum += v
+				}
+			}
+			sort.Strings(dims)
+			if len(dims) != 5 || math.Abs(cand.Quality.Overall-sum/5) > 1e-12 {
+				t.Errorf("%s %s: %d dimensions %v, overall %v vs mean %v: want the same five and the exact mean", direction, c.name, len(dims), dims, cand.Quality.Overall, sum/5)
+			}
+			if schema == nil {
+				schema = dims
+			} else if strings.Join(schema, ",") != strings.Join(dims, ",") {
+				t.Errorf("%s %s: dimensions %v differ from %v", direction, c.name, dims, schema)
+			}
+			if err := quality.Verify(cand.Quality.Overall, comps); err != nil {
+				t.Errorf("%s %s: %v", direction, c.name, err)
+			}
+		}
+	}
+}
+
+func TestSupportMovesOnlyThatDimensionAndTheOverall(t *testing.T) {
 	s := testStrategy(t)
 	sig := probeWithRoom(market.Buy, 33, 200, s.cfg)
 	without, _ := build(t, ctxWith(), sig)
-	if _, ok := without.Quality.Components["score_structural_support"]; ok {
-		t.Error("a probe with no supporting wall must not carry the dimension")
+	with, _ := build(t, ctxWith(wallAt(zone.KindDemand, sig.SignalLow-0.1, sig.Close)), sig)
+	for name, v := range without.Quality.Components {
+		if !strings.HasPrefix(name, quality.Prefix) || name == "score_structural_support" {
+			continue
+		}
+		if with.Quality.Components[name] != v {
+			t.Errorf("%s changed with a supporting wall: %v to %v", name, v, with.Quality.Components[name])
+		}
 	}
-	support := wallAt(zone.KindDemand, sig.SignalLow-1, sig.SignalLow+1)
-	with, _ := build(t, ctxWith(support), sig)
-	if with.Quality.Components["score_structural_support"] != 1 {
-		t.Errorf("a demand wall under the BUY probe: structural_support = %v, want 1", with.Quality.Components["score_structural_support"])
+	if d := with.Quality.Overall - without.Quality.Overall; math.Abs(d-1.0/5) > 1e-12 {
+		t.Errorf("overall moved by %v, want exactly 1/5", d)
 	}
 }
 

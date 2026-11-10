@@ -17,8 +17,11 @@ import (
 //	retrace_depth       the planned retrace as a fraction of the bar's range back from its extreme: Peak(f; 0.20, 0.38, 0.62, 0.80). A shallow limit is rarely
 //	                    filled, a deep one is a reversal; the 38 to 62 percent band is the healthy pullback of an impulse.
 //	invalidation_quality the stop outside the noise but not absurdly wide, in M5 ATR: Peak(stop/ATR; 0.4, 0.8, 1.8, 3.0). The stop is beyond the impulse origin.
-//	room_reward_risk    the available room from the planned entry (the horizon or the nearest valid opposing barrier, see strategyutil.MeasureScalpRoom) as
-//	                    reward:risk against the stop: Ramp(room/stop; 1, 3). A strong impulse with little room does not average up to an excellent score.
+//	room_reward_risk    the STRUCTURAL room from the planned entry as reward:risk against the stop: Ramp(room/stop; 1, 3). Room is structural only when an
+//	                    actual opposing barrier lies ahead (the room is bounded by it, or the space up to the projection was seen clear up to it). The
+//	                    equal-leg projection is a technical target hypothesis, not observed structure: a room that rests on it alone scores 0 here (quality.Room
+//	                    with structural=false) although it still makes the target eligible (strategyutil.MeasureScalpRoom). A strong impulse with little
+//	                    structural room does not average up to an excellent score.
 func (s *Strategy) score(bar market.Candle, atr, stop, targetPips, extremeRoomPips float64, room strategyutil.ScalpRoom) *quality.Model {
 	cfg := s.cfg
 	span := bar.High - bar.Low
@@ -29,25 +32,34 @@ func (s *Strategy) score(bar market.Candle, atr, stop, targetPips, extremeRoomPi
 	m.Score("impulse_efficiency", quality.Ramp(body/span, 0.4, 0.9))
 	m.Score("retrace_depth", quality.Peak(cfg.RetraceFraction, 0.20, 0.38, 0.62, 0.80))
 	m.Score("invalidation_quality", quality.Peak(stop*cfg.PipSize/atr, 0.4, 0.8, 1.8, 3.0))
-	m.Score("room_reward_risk", quality.Room(room.Pips, stop, true))
+	structuralRoom, structural := room.StructuralPips(false) // the impulse's objective is a projection, never observed structure
+	m.Score("room_reward_risk", quality.Room(structuralRoom, stop, structural))
 	m.Measure("impulse_body_atr", bodyATR)
 	m.Measure("impulse_body_dominance", body/span)
 	m.Measure("retrace_fraction", cfg.RetraceFraction)
 	m.Measure("stop_atr", stop*cfg.PipSize/atr)
 	m.Measure("extreme_room_pips", extremeRoomPips)
+	// Available room (eligibility) is the projected room bounded by any barrier; the structural room is what observation supports. They are published apart.
 	m.Measure("available_room_pips", room.Pips)
-	m.Measure("objective_room_pips", room.ObjectivePips)
+	m.Measure("projected_room_pips", room.ObjectivePips)
+	m.Measure("structural_room_basis", boolValue(structural))
+	m.Measure("structural_room_pips", structuralRoom)
+	m.Measure("barrier_ahead", boolValue(room.HasBarrier()))
 	if room.HasBarrier() {
 		m.Measure("barrier_room_pips", room.BarrierPips)
 	}
-	boolean := 0.0
-	if room.Limiter == strategyutil.ScalpRoomLimitedByBarrier {
-		boolean = 1
-	}
-	m.Measure("room_limited_by_barrier", boolean)
+	m.Measure("room_limited_by_barrier", boolValue(room.Limiter == strategyutil.ScalpRoomLimitedByBarrier))
 	m.Measure("room_reward_risk", room.Pips/stop)
+	m.Measure("structural_room_r", structuralRoom/stop)
 	m.Measure("target_pips", targetPips)
 	m.Measure("target_r", targetPips/stop)
 	m.Measure("utc_hour", float64(time.Unix(bar.Time, 0).UTC().Hour()))
 	return m
+}
+
+func boolValue(v bool) float64 {
+	if v {
+		return 1
+	}
+	return 0
 }
