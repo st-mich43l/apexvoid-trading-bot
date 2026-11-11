@@ -27,6 +27,36 @@
         "formed_at": { "type": "integer", "description": "Unix seconds: open time of the bar that completed the structure (the third candle of a fair value gap)." }
       }
     },
+    "execution": {
+      "type": "object",
+      "description": "Additive V1 field (TL-LIVE-2): how the opportunity is traded. Omitted for the default, an entry ZONE. `model: single_price` declares a ONE-PRICE opportunity (Trendline only): the executable entry is `price`, read from the projected line using only closed bars, and `entry` stays the technical interaction corridor (where a touch is detected), not a zone to trade. The entry is bounded in time: `valid_until` is the instant the projected price is stale, and the opportunity expires then (`expires_at` is never later). `proximity` is how far beyond `price`, against the trade, the live quote may be before the line is treated as already passed and never chased. A consumer that does not know this block must refuse the event rather than trade the corridor as a zone.",
+      "additionalProperties": false,
+      "required": ["model", "price", "timeframe", "projected_at", "valid_until", "proximity", "slope_per_bar"],
+      "properties": {
+        "model": { "type": "string", "enum": ["single_price"] },
+        "price": { "type": "number", "description": "The line's projected value at `projected_at`; inside the `entry` corridor and on the entry side of `invalidation`." },
+        "timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"], "description": "The timeframe whose bars the line lives on and the projection is stepped in." },
+        "projected_at": { "type": "integer", "description": "Unix seconds: the open of the bar after the observation bar. Always after `created_at` (the price uses no later bar)." },
+        "valid_until": { "type": "integer", "description": "Unix seconds: the projected price is stale from here; > projected_at and <= expires_at." },
+        "proximity": { "type": "number", "minimum": 0, "description": "Price units." },
+        "slope_per_bar": { "type": "number", "description": "Price units the line moves per bar (signed): the fact the validity window was bounded with." }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "description": "Additive V1 field (TL-LIVE-2): how the opportunity is traded. Omitted for the default, an entry ZONE. `model: single_price` declares a ONE-PRICE opportunity (Trendline only): the executable entry is `price`, read from the projected line using only closed bars, and `entry` stays the technical interaction corridor (where a touch is detected), not a zone to trade. The entry is bounded in time: `valid_until` is the instant the projected price is stale, and the opportunity expires then (`expires_at` is never later). `proximity` is how far beyond `price`, against the trade, the live quote may be before the line is treated as already passed and never chased. A consumer that does not know this block must refuse the event rather than trade the corridor as a zone.",
+      "additionalProperties": false,
+      "required": ["model", "price", "timeframe", "projected_at", "valid_until", "proximity", "slope_per_bar"],
+      "properties": {
+        "model": { "type": "string", "enum": ["single_price"] },
+        "price": { "type": "number", "description": "The line's projected value at `projected_at`; inside the `entry` corridor and on the entry side of `invalidation`." },
+        "timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"], "description": "The timeframe whose bars the line lives on and the projection is stepped in." },
+        "projected_at": { "type": "integer", "description": "Unix seconds: the open of the bar after the observation bar. Always after `created_at` (the price uses no later bar)." },
+        "valid_until": { "type": "integer", "description": "Unix seconds: the projected price is stale from here; > projected_at and <= expires_at." },
+        "proximity": { "type": "number", "minimum": 0, "description": "Price units." },
+        "slope_per_bar": { "type": "number", "description": "Price units the line moves per bar (signed): the fact the validity window was bounded with." }
+      }
+    },
     "direction": { "type": "string", "enum": ["BUY", "SELL"] },
     "entry": {
       "type": "object",

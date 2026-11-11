@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from decimal import Decimal, ROUND_HALF_UP
 import logging
 import math
+import time
 from types import SimpleNamespace
 from typing import Any, Callable
 
@@ -17,7 +18,7 @@ from app.analysis_client.provenance import (
   STOP_BUDGET_STRUCTURAL_EVIDENCE,
 )
 from app.autotrade.go_containment import STRUCTURE_TIMEFRAME_TAG
-from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
+from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan, resolve_single_price_route
 from app.autotrade.xau_ladder import XAU_DIGITS, ladder_settings, round_price as round_xau_price
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
@@ -33,6 +34,7 @@ from app.autotrade.protective_stop import (
   stop_bounds_for_reaction_room,
   stop_bounds_from_go_envelope,
 )
+from app.autotrade.strategy_match import is_single_price_match
 from app.autotrade.strategy_taxonomy import (
   is_m1_scalp_strategy,
   is_xau_retest_ladder_strategy,
@@ -503,6 +505,7 @@ def evaluate_execution_policy(
   trigger_wick_extreme: float | None = None,
   available_target_room_pips: float | None = None,
   metric_sink: Callable[[str, str, dict[str, str]], None] | None = None,
+  now: float | None = None,
 ) -> ExecutionPolicyEvaluation:
   """Enforce every declared setup policy before candidate publication."""
   if cfg is None:
@@ -547,12 +550,16 @@ def evaluate_execution_policy(
     else None
   )
   pip = pip_size if pip_size > 0 else 0.1
+  # TL-LIVE-2: a match that declares the typed one-price execution (Trendline) has no zone: the entry is its projected price, entry_low == entry_high. It is not trimmed,
+  # widened or laddered, and the 30-pip XAU minimum does not apply to it (it is not a scalp, and every other rule still does).
+  single_price = is_single_price_match(match)
   low, high, execution_zone_expanded = _execution_entry_zone(
     match,
     instrument_cfg=instrument_cfg,
     pip_size=pip,
     zone_band=(
-      symbol.upper() in {"XAU", "XAUUSD"}
+      not single_price
+      and symbol.upper() in {"XAU", "XAUUSD"}
       and not is_m1_scalp_strategy(str(getattr(match, "strategy", "") or ""))
       and not is_scalp_strategy(str(getattr(match, "strategy", "") or ""))
       and (policy.entry_distribution == "zone_scale" or retest_ladder)
@@ -567,7 +574,7 @@ def evaluate_execution_policy(
     )
   )
   minimum_zone_pips = entry_zone_minimum_width_pips(instrument_cfg)
-  if go_origin and xau_non_scalp and minimum_zone_pips > 0:
+  if go_origin and xau_non_scalp and minimum_zone_pips > 0 and not single_price:
     # The zone Go published is the zone: its width is measured as published (before any trim) and is never manufactured here.
     published_pips = (
       float(getattr(match, "entry_high", high)) - float(getattr(match, "entry_low", low))
@@ -634,8 +641,11 @@ def evaluate_execution_policy(
     spot_price if executable_quote is None else executable_quote
   )
   digits = _instrument_digits("", instrument_cfg)
+  if single_price:
+    entry_distribution = "single"
   manual_xau_ladder = (
-    symbol.upper() in {"XAU", "XAUUSD"} and not is_m1_scalp_strategy(
+    not single_price
+    and symbol.upper() in {"XAU", "XAUUSD"} and not is_m1_scalp_strategy(
       str(getattr(match, "strategy", "") or "")
     )
   )
@@ -667,7 +677,15 @@ def evaluate_execution_policy(
         structure_buffer_atr=float(execution.scaling.add.stop_buffer_atr),
       )
       risk_targeted_entry_pips = float(reaction_execution.stop_min_pips)
-  route_plan = resolve_execution_route_plan(
+  route_plan = resolve_single_price_route(
+    direction=direction,
+    price=float(match.execution_price),
+    executable_quote=quote,
+    proximity=float(match.execution_proximity or 0.0),
+    valid_until=match.execution_valid_until,
+    now=time.time() if now is None else float(now),
+    digits=digits,
+  ) if single_price else resolve_execution_route_plan(
     direction=direction,
     order_type_preference=policy.order_type_preference,
     entry_distribution=entry_distribution,
@@ -1132,6 +1150,9 @@ def evaluate_execution_policy(
     "planned_entry_zone_low": _planned_entry_price(symbol, low),
     "planned_entry_zone_high": _planned_entry_price(symbol, high),
     "execution_zone_expanded": execution_zone_expanded,
+    "execution_model": "single_price" if single_price else "zone",
+    "execution_valid_until": getattr(match, "execution_valid_until", None) if single_price else None,
+    "execution_proximity": getattr(match, "execution_proximity", None) if single_price else None,
     "planned_stop_error": stop_plan_error,
     "entry_plan_version": ENTRY_PLAN_VERSION,
     "regime": normalized_regime or "unknown",

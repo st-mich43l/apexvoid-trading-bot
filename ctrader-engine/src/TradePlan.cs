@@ -270,7 +270,11 @@ public sealed record TradePlanEntry(
   // receipt (TradePlanLadder.GeometryProblem) and again against the live
   // quote before each leg is submitted (TradePlanExecutionEngine.GuardRestingLeg).
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-  decimal? MinLegSpacing = null
+  decimal? MinLegSpacing = null,
+  // TL-LIVE-2: on a single_limit entry, how far (price units) the live quote may be beyond the order price, against the trade, before the plan is NOT submitted
+  // (the line was left behind: a one-price entry is never chased). null = no guard (every older plan).
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? Proximity = null
 )
 {
   // Every price at which this entry could actually fill. Used only to
@@ -557,6 +561,15 @@ public static class TradePlanValidator
 
     ValidateEntryShape(plan.Entry);
     ValidateLadderGeometry(plan.Entry, direction == "BUY");
+    if (plan.Entry.Proximity is decimal proximity)
+    {
+      if (proximity < 0m || plan.Entry.Type != TradePlanContract.EntryTypeSingleLimit)
+      {
+        throw new TradePlanContractException(
+          "entry.proximity must be >= 0 and is only valid on a single_limit entry"
+        );
+      }
+    }
   }
 
   // A planner that declared a spacing guarantees it. The plan is refused whole

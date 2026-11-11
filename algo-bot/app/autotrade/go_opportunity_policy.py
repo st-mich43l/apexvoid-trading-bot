@@ -104,6 +104,8 @@ class ScopeProfile:
   strategy_mode: str
   requires_reaction: bool = False
   evidence_prefixes: tuple[str, ...] = ()
+  # TL-LIVE-2: the strategy is approved to declare the typed single-price execution (Trendline only). An event from any other strategy that carries it is refused.
+  allows_single_price: bool = False
 
 
 # This is deliberately an explicit adapter registry, rather than a generic
@@ -132,7 +134,7 @@ REVIEWED_SCOPES: dict[str, ScopeProfile] = {
   "shock_retest": ScopeProfile("shock_retest", "Shock Retest", "shock_retest", None, frozenset({"M5"}), "go_m5_shock_retest", requires_reaction=True, evidence_prefixes=("m5_volatility_shock", "m5_shock_")),
   "flip_zone": ScopeProfile("flip_zone", "Flip Zone", "flip_zone", None, frozenset({"M5"}), "go_m5_flip_zone", requires_reaction=True, evidence_prefixes=("m5_flip_",)),
   # Trendline decides on M5 and on M15, each on its own frame's closed candles (observed timeframe = the frame the line lives on).
-  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5", "M15"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_", "m15_trendline_")),
+  "trendline": ScopeProfile("trendline", "Trendline", "trendline", None, frozenset({"M5", "M15"}), "go_m5_trendline", requires_reaction=True, evidence_prefixes=("m5_trendline_", "m15_trendline_"), allows_single_price=True),
   "break_retest": ScopeProfile("break_retest", "Break & Retest", "break_retest", None, frozenset({"M5"}), "go_m5_break_retest", evidence_prefixes=("m5_trendline_break", "m5_key_level_break", "m5_trendline_retest", "m5_key_level_retest", "m5_retest_holds", "m5_retest_rejection")),
   # These strategies intentionally publish on the M1 observation boundary:
   # their Go implementations consume their M5 structure and own the M1
@@ -280,6 +282,16 @@ def build_strategy_match(
     )
   if now >= payload.expires_at:
     raise AdapterRejection("opportunity_expired")
+  execution = payload.execution
+  if execution is not None:
+    # The typed one-price execution is the only way an entry is not a zone. It is honoured for the one approved strategy and refused for any other, and a projected
+    # price that has already gone stale (or was projected on another timeframe than the one observed) is never traded.
+    if not profile.allows_single_price:
+      raise AdapterRejection("single_price_not_approved", f"{profile.catalog_id} may not declare a single-price execution")
+    if execution.timeframe != timeframe:
+      raise AdapterRejection("single_price_timeframe_mismatch", f"projected on {execution.timeframe}, observed on {timeframe}")
+    if now >= execution.valid_until:
+      raise AdapterRejection("projection_stale", f"valid until {execution.valid_until}, now {now}")
   symbol = payload.symbol.upper()
   try:
     pip = float(units.pip_size(symbol))
@@ -289,7 +301,13 @@ def build_strategy_match(
     raise AdapterRejection("bad_pip_size", symbol)
 
   low, high = float(payload.entry.low), float(payload.entry.high)
-  if not high > low:
+  interaction_low = interaction_high = None
+  if execution is not None:
+    # ONE price: the corridor stays what it is (a technical interaction band, kept for display) and the entry the policy sees is the projected price alone. No zone is
+    # built from the corridor, and none is widened to look like one.
+    interaction_low, interaction_high = low, high
+    low = high = float(execution.price)
+  elif not high > low:
     raise AdapterRejection("degenerate_entry_band")
   direction = payload.direction
   proximal = low if direction == "SELL" else high     # edge price reaches first
@@ -457,12 +475,22 @@ def build_strategy_match(
     structure_low=None if payload.structure is None else float(payload.structure.low),
     structure_high=None if payload.structure is None else float(payload.structure.high),
     structure_formed_at=None if payload.structure is None else int(payload.structure.formed_at),
+    execution_model="zone" if execution is None else execution.model,
+    execution_price=None if execution is None else float(execution.price),
+    execution_timeframe=None if execution is None else execution.timeframe,
+    execution_projected_at=None if execution is None else int(execution.projected_at),
+    execution_valid_until=None if execution is None else int(execution.valid_until),
+    execution_proximity=None if execution is None else float(execution.proximity),
+    interaction_low=interaction_low,
+    interaction_high=interaction_high,
     family=family,
     structural_source=f"go:{profile.catalog_id}",
     zone_id=structural_id,
     structural_zone_id=structural_id,
-    structural_zone_low=low,
-    structural_zone_high=high,
+    # The structure behind the setup is the interaction corridor Go detected the touch in; for a one-price execution the entry is the single price and the corridor stays
+    # the structure (TradePlan source_structure needs a real low < high).
+    structural_zone_low=low if interaction_low is None else interaction_low,
+    structural_zone_high=high if interaction_high is None else interaction_high,
     structural_kind=profile.structural_kind,
     # Every reviewed strategy uses M5 structure, including the three M1
     # confirmation strategies. The event timeframe is kept separately in

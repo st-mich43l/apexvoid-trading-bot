@@ -22,6 +22,12 @@ func EntryZoneBelowMinimumWidth(c opportunity.Candidate, geometry market.Geometr
 	if strategyStopEnvelope[c.Strategy] == stopEnvelopeM1Scalp {
 		return false
 	}
+	// TL-LIVE-2: an opportunity that DECLARES the typed single-price execution (an approved strategy, validated by Candidate.Validate) has no entry zone to measure: its
+	// executable entry is one projected price and its band is only the interaction corridor. The exemption is the declared model, never the strategy's name alone,
+	// and it exempts nothing else about the strategy: it is not a scalp, and its stop envelope, target room and every other rule apply as for any intraday setup.
+	if c.Execution != nil && opportunity.SinglePriceStrategies[c.Strategy] {
+		return false
+	}
 	widthPips := (c.Entry.High - c.Entry.Low) / geometry.PipSize
 	if math.IsNaN(widthPips) {
 		return true

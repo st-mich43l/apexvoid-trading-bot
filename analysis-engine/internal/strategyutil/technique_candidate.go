@@ -77,6 +77,9 @@ func TechniqueCandidate(ctx *analysiscontext.MarketContext, dec *TechniqueDecisi
 	if dec.Direction == market.Sell {
 		reference = low
 	}
+	if dec.ExecutionPrice != nil {
+		reference = *dec.ExecutionPrice
+	}
 	// The invalidation lies beyond the structure and beyond the bars the reaction itself traded (ReactionAnchoredInvalidation); a decision with
 	// no confirmation keeps the structural price.
 	invalidation, anchored := structLowOrHigh(dec.Direction, structLow, structHigh, buffer), false

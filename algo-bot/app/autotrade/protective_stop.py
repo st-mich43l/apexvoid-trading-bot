@@ -1237,7 +1237,8 @@ def plan_go_invalidation_stop(
   if (
     side not in {"BUY", "SELL"}
     or zone_low <= 0
-    or zone_high <= zone_low
+    # A one-price entry (TL-LIVE-2) has a zone of zero width: low == high == its price. Only an inverted zone is invalid.
+    or zone_high < zone_low
     or stop <= 0
     or not prices
     or any(price <= 0 for price in prices)

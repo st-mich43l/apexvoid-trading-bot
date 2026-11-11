@@ -97,7 +97,9 @@ def snap_measured_to_card_prices(
   snapping is unsafe. When it snaps, ``card_price_snap`` records the before/after.
   """
   if (
-    str(symbol).upper() not in _GOLD
+    measured.get("execution_model") == "single_price"
+    # TL-LIVE-2: a one-price entry is the projected line itself; the card never rounds it to a whole number.
+    or str(symbol).upper() not in _GOLD
     or pip_size <= 0
     or direction not in {"BUY", "SELL"}
     or is_m1_scalp_strategy(strategy)

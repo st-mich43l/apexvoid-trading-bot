@@ -77,6 +77,7 @@ from app.autotrade import scalp_outcome
 from app.autotrade.strategy_catalog import exposure_lane
 from app.autotrade.strategy_match import (
   StrategyMatch,
+  is_single_price_match,
 )
 from app.autotrade.strategy_taxonomy import (
   is_m1_scalp_match,
@@ -979,6 +980,20 @@ def _execution_quote_access(
   arbitration, so "can execute now" can never mean two different things.
   """
   pip_size = units.pip_size(symbol)
+  if is_single_price_match(match):
+    # TL-LIVE-2: a one-price entry has no zone to wait for the quote to enter. It is a resting limit at the projected line, published at once; whether the quote has
+    # already left the line (never chased), the projection is stale, or the limit is not on a valid broker side is decided by the execution policy and the limit-side
+    # gate, each with its own recorded reason. The evidence is still measured against the interaction corridor, for the record only.
+    evidence = executable_quote_in_zone(
+      match.direction,
+      getattr(spot, "bid", None),
+      getattr(spot, "ask", None),
+      match.interaction_low if match.interaction_low is not None else match.entry_low,
+      match.interaction_high if match.interaction_high is not None else match.entry_high,
+      max(0.0, float(inst.execution.entry.contract_tolerance_pips) * pip_size),
+      pip_size=pip_size,
+    )
+    return evidence, True
   evidence = executable_quote_in_zone(
     match.direction,
     getattr(spot, "bid", None),
@@ -2167,6 +2182,7 @@ async def _publish_trade_plan_v8(
     cfg=None,
     available_target_room_pips=available_target_room_pips,
     metric_sink=_collect_fixed_rr_metric_sink(fixed_rr_metrics),
+    now=now_ts,
   )
   for metric_name, metric_symbol, metric_dims in fixed_rr_metrics:
     # Counters are telemetry: a Redis failure here must never block a plan.

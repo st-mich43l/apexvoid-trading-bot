@@ -40,6 +40,9 @@ const (
 	ReasonStructureClosedThrough ReasonCode = "STRUCTURE_CLOSED_THROUGH"
 	// ReasonZoneMitigated is the terminal reason of a live zone opportunity whose zone the strategy itself judged spent: touched past its limit, or filled.
 	ReasonZoneMitigated ReasonCode = "ZONE_MITIGATED"
+	// ReasonTrendlineBroken is the terminal reason of a live Trendline opportunity whose line the strategy judged broken (a close through it, never reclaimed) or no
+	// longer respected (degraded). A line that has simply left the frame's structure is ReasonZoneExpired.
+	ReasonTrendlineBroken ReasonCode = "TRENDLINE_BROKEN"
 	// ReasonZoneExpired is the terminal reason of a live zone opportunity whose zone the strategy no longer holds at all (it left the frame's structure).
 	ReasonZoneExpired ReasonCode = "ZONE_EXPIRED"
 )

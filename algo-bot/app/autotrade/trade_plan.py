@@ -687,6 +687,9 @@ class TradePlanEntry:
   # only on a ladder whose planner checked it (XAU); the executor enforces it on receipt and again against the live quote before each leg is submitted. None =
   # not declared (an older plan): validated as before.
   min_leg_spacing: Decimal | None = None
+  # TL-LIVE-2: on a single_limit entry, how far (price units) the live quote may be beyond the order price, against the trade, before the executor refuses to submit
+  # it (the line was left behind: never chased). None = no such guard (every older plan).
+  proximity: Decimal | None = None
 
   def to_dict(self) -> dict:
     payload = {
@@ -705,6 +708,8 @@ class TradePlanEntry:
       payload["risk_leg"] = self.risk_leg.to_dict()
     if self.min_leg_spacing is not None:
       payload["min_leg_spacing"] = str(self.min_leg_spacing)
+    if self.proximity is not None:
+      payload["proximity"] = str(self.proximity)
     return payload
 
   @classmethod
@@ -784,6 +789,13 @@ class TradePlanEntry:
       if min_leg_spacing <= 0:
         raise TradePlanError(f"entry.min_leg_spacing must be positive: {min_leg_spacing}")
 
+    raw_proximity = data.get("proximity")
+    proximity = None
+    if raw_proximity is not None:
+      proximity = _decimal(raw_proximity, "entry.proximity")
+      if proximity < 0 or entry_type != ENTRY_TYPE_SINGLE_LIMIT:
+        raise TradePlanError("entry.proximity must be >= 0 and is only valid on a single_limit entry")
+
     return cls(
       type=entry_type,
       zone_low=zone_low_d,
@@ -797,6 +809,7 @@ class TradePlanEntry:
       legs=legs,
       risk_leg=risk_leg,
       min_leg_spacing=min_leg_spacing,
+      proximity=proximity,
     )
 
   def entry_prices(self) -> tuple[Decimal, ...]:

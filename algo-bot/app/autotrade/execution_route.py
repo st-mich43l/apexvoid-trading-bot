@@ -58,6 +58,54 @@ class ExecutionRoutePlan:
   reject_code: str | None = None
 
 
+ENTRY_BEYOND_PROJECTED_LINE = "entry_beyond_projected_line"
+PROJECTION_STALE = "projection_stale"
+
+
+def resolve_single_price_route(
+  *,
+  direction: str,
+  price: float,
+  executable_quote: float,
+  proximity: float,
+  valid_until: int | float | None,
+  now: float,
+  digits: int,
+) -> ExecutionRoutePlan:
+  """The route of a ONE-PRICE opportunity (TL-LIVE-2): a single resting limit at the projected price, or a refusal. There is no ladder, no second leg, no risk leg and no
+  zone: the price is the line, rounded only to the broker's digits.
+
+  The limit is price-protected: a BUY limit at the line fills at the line or better, so a quote just through the line (within ``proximity``) is taken at the quote and
+  never above the line, which is the bounded-slippage entry a market order would have to be argued into. It is never chased: a quote beyond the line by more than
+  ``proximity`` (BUY below it, SELL above it) means price already left the line, and the opportunity is refused (``entry_beyond_projected_line``). A projection that
+  has gone stale (``valid_until`` passed) is refused (``projection_stale``) however good the quote looks.
+  """
+  side = direction.strip().upper()
+  planned = _round_price(float(price), digits)
+  quote = float(executable_quote)
+  if valid_until is not None and now >= float(valid_until):
+    return ExecutionRoutePlan(
+      ROUTE_SINGLE_LIMIT, quote, (), "stale", "projected trendline price is stale", False,
+      f"the projected line price {planned} was valid until {int(valid_until)} and is stale (now {int(now)}); it is not repriced",
+      reject_code=PROJECTION_STALE,
+    )
+  tolerance = max(0.0, float(proximity)) + 1e-9
+  beyond = quote < planned - tolerance if side == "BUY" else quote > planned + tolerance
+  if beyond:
+    return ExecutionRoutePlan(
+      ROUTE_SINGLE_LIMIT, quote, (), "beyond", "price already left the projected line", False,
+      f"the live quote {quote} is beyond the projected line {planned} by more than the {proximity:g} proximity; the entry is never chased",
+      reject_code=ENTRY_BEYOND_PROJECTED_LINE,
+    )
+  if side == "BUY":
+    geometry = "at_line" if quote <= planned else "above_line"
+  else:
+    geometry = "at_line" if quote >= planned else "below_line"
+  return ExecutionRoutePlan(
+    ROUTE_SINGLE_LIMIT, planned, (planned,), geometry, "execution policy: single price at the projected trendline", True,
+  )
+
+
 def _round_price(value: float, digits: int) -> float:
   quant = Decimal("1").scaleb(-max(0, digits))
   return float(

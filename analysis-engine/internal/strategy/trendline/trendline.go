@@ -28,7 +28,7 @@ import (
 )
 
 const ID strategy.StrategyID = "trendline"
-const Version = "v8"
+const Version = "v9"
 
 // frame is what one setup timeframe owns: the parameters that are measured in bars or in hours of that timeframe. Everything else (the interaction band, the close
 // violation, the approach, the invalidation buffer, the target distance) is in ATR of the frame and is shared.
@@ -43,6 +43,13 @@ type frame struct {
 
 type Strategy struct {
 	strategyutil.RefusalCounter
+	zones strategyutil.ZoneLedger
+	// singlePrice is the TL-LIVE-2 execution model: the executable entry is the line's projected price, published as one price (opportunity.SinglePriceExecution), and
+	// the interaction band stays the corridor a touch is detected in. false publishes the band as an entry zone, as before. proximityATR and maxDriftATR are in ATR
+	// of the frame; validityBars is how many bars of each frame a projected price may stay executable (further bounded by maxDriftATR over the line's slope).
+	singlePrice                                                   bool
+	proximityATR, maxDriftATR                                     float64
+	validityBars                                                  map[market.Timeframe]int
 	frames                                                        []frame
 	minimumValidationTouches, chopMinimumValidationTouches        int
 	invalidationATR, minimumTargetDistanceATR                     float64
@@ -109,8 +116,73 @@ func New(cfg strategy.Config) (strategy.Strategy, error) {
 	if s.frames, err = parseFrames(cfg.Parameters, defaultMaximumBars, defaultExpiryHours, s.legacy.ReactionLookbackBars); err != nil {
 		return nil, err
 	}
+	if err = s.parseSinglePrice(cfg.Parameters); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
+
+// parseSinglePrice reads the one-price execution leaves: single_price_execution (bool), single_price_proximity_atr, single_price_max_drift_atr and
+// single_price_validity_bars (a map of timeframe -> bars for every setup timeframe). All are required: a missing leaf fails startup.
+func (s *Strategy) parseSinglePrice(params map[string]any) error {
+	on, ok := params["single_price_execution"].(bool)
+	if !ok {
+		return fmt.Errorf("trendline: parameter %q must be boolean", "single_price_execution")
+	}
+	s.singlePrice = on
+	var err error
+	for key, dst := range map[string]*float64{"single_price_proximity_atr": &s.proximityATR, "single_price_max_drift_atr": &s.maxDriftATR} {
+		if *dst, err = strategyutil.Float(params, key); err != nil {
+			return err
+		}
+		if !(*dst > 0) {
+			return fmt.Errorf("trendline: %s must be > 0", key)
+		}
+	}
+	raw, ok := params["single_price_validity_bars"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("trendline: parameter %q must be a map of timeframe to bars", "single_price_validity_bars")
+	}
+	s.validityBars = map[market.Timeframe]int{}
+	for _, f := range s.frames {
+		bars, err := strategyutil.Int(raw, string(f.timeframe))
+		if err != nil || bars < 1 {
+			return fmt.Errorf("trendline: single_price_validity_bars.%s must be a positive integer", f.timeframe)
+		}
+		s.validityBars[f.timeframe] = bars
+	}
+	return nil
+}
+
+// project is the one-price execution of a line: its projected value at the open of the next bar (computed from the closed bars up to the one that just closed and
+// nothing later), with the time that price stays executable. ok is false when the line cannot carry a one-price entry: the projection leaves the interaction
+// corridor (the line is too steep for its corridor to mean anything) or moves so fast that not even one bar of validity fits inside maxDriftATR.
+func (s *Strategy) project(f frame, line technical.Trendline, bars []market.Candle, last int, atr float64, bandLow, bandHigh float64) (opportunity.SinglePriceExecution, bool) {
+	price := float64(technical.ValueAt(line, last+1))
+	slope := price - float64(technical.ValueAt(line, last))
+	if math.IsNaN(price) || math.IsInf(price, 0) || price < bandLow || price > bandHigh || !(atr > 0) {
+		return opportunity.SinglePriceExecution{}, false
+	}
+	n := s.validityBars[f.timeframe]
+	if drift := math.Abs(slope); drift > 0 {
+		if byDrift := int(math.Floor(s.maxDriftATR*atr/drift + 1e-9)); byDrift < n {
+			n = byDrift
+		}
+	}
+	if n < 1 {
+		return opportunity.SinglePriceExecution{}, false
+	}
+	step := int64(f.minutes) * 60
+	projectedAt := bars[last].Time + step
+	return opportunity.SinglePriceExecution{
+		Price: price, Timeframe: f.timeframe, ProjectedAt: projectedAt, ValidUntil: projectedAt + int64(n)*step,
+		Proximity: s.proximityATR * atr, SlopePerBar: slope,
+	}, true
+}
+
+// TakeZoneLiveness reports which of the frame's lines are standing, broken or gone (strategy.ZoneReporter): an opportunity on a line that broke or left the frame's
+// structure ends, and an unfilled order is withdrawn with it.
+func (s *Strategy) TakeZoneLiveness() (opportunity.ZoneLiveness, bool) { return s.zones.Take() }
 
 // parseFrames reads setup_timeframes and the per-timeframe overrides (timeframes.<TF>.{maximum_bars_since_last_touch, expiry_hours, reaction_lookback_bars}) over the
 // flat, M5-calibrated defaults. A timeframe without an override inherits the default; an unknown timeframe or key fails at startup.
@@ -239,6 +311,11 @@ func (s *Strategy) evaluateFrame(ctx *analysiscontext.MarketContext, f frame) []
 	}
 	bars := base.Frame.Bars
 	last := len(bars) - 1
+	// The lines of this frame and what happened to them, whether or not one is traded now: a line the frame still holds is live, one that broke (a close through it that
+	// was never reclaimed) or stopped being respected is terminal, and one the frame no longer holds has expired.
+	verdict := s.zones.Begin()
+	defer verdict.Publish()
+	recordLines(verdict, f.timeframe, base.Frame.Trendlines, bars)
 	band := math.Max(1e-9, s.interactionBandATR*math.Max(0, base.ATR))
 	lines := append([]technical.Trendline(nil), base.Frame.Trendlines...)
 	sort.SliceStable(lines, func(i, j int) bool {
@@ -246,6 +323,7 @@ func (s *Strategy) evaluateFrame(ctx *analysiscontext.MarketContext, f frame) []
 	})
 	cfg := technical.Config{InteractionBandATR: s.interactionBandATR, CloseViolationATR: s.closeViolationATR, ApproachMinDistanceATR: s.approachMinDistanceATR}
 	var best *strategyutil.TechniqueDecision
+	var bestExecution *opportunity.SinglePriceExecution
 	for _, line := range lines {
 		direction := market.Buy
 		side := "demand"
@@ -291,10 +369,20 @@ func (s *Strategy) evaluateFrame(ctx *analysiscontext.MarketContext, f frame) []
 		if result == nil {
 			continue
 		}
+		var execution *opportunity.SinglePriceExecution
+		if s.singlePrice {
+			projected, ok := s.project(f, line, bars, last, base.ATR, low, high)
+			if !ok {
+				continue
+			}
+			execution = &projected
+		}
 		if best == nil || result.Stars > best.Result.Stars {
+			bestExecution = execution
 			best = &strategyutil.TechniqueDecision{
 				Technique: "trendline", Direction: direction, Detector: d, Confirmation: conf, Result: result,
-				ID: lineID(f.timeframe, line, bars),
+				ID:             lineID(f.timeframe, line, bars),
+				ExecutionPrice: executionPrice(execution),
 				Score: func(dec *strategyutil.TechniqueDecision, g strategyutil.QualityGeometry) opportunity.StrategyQuality {
 					return scoreQuality(f.timeframe, line, touch, dec, g)
 				},
@@ -313,7 +401,37 @@ func (s *Strategy) evaluateFrame(ctx *analysiscontext.MarketContext, f frame) []
 	}
 	// The line lives on this timeframe: it is the structure behind the setup, and the bar that closed is the one the setup is observed on.
 	candidate.StructureTimeframe = f.timeframe
+	candidate.ZoneID = best.ID // the line: its break or expiry ends the opportunity (strategy.ZoneReporter)
+	if bestExecution != nil {
+		x := *bestExecution
+		// The opportunity ends at x.ValidUntil, whatever the strategy's own expiry is: opportunity.AtFirstObservation applies it when the engine observes the candidate.
+		candidate.Execution = &x
+	}
 	return []opportunity.Candidate{candidate}
+}
+
+// recordLines is the verdict on every line of the frame: live while the frame holds it standing, terminal (TRENDLINE_BROKEN) once a close went through it and was
+// never reclaimed or it stopped being respected; a line missing from this list has left the frame's structure and reads as expired.
+func recordLines(verdict *strategyutil.ZoneVerdict, tf market.Timeframe, lines []technical.Trendline, bars []market.Candle) {
+	verdict.Frame(tf)
+	for _, line := range lines {
+		if line.Kind != technical.KindSupport && line.Kind != technical.KindResistance {
+			continue
+		}
+		if id := lineID(tf, line, bars); line.State == technical.StateBroken || line.BrokenAt != nil || line.State == technical.StateDegraded {
+			verdict.Terminal(id, opportunity.ReasonTrendlineBroken)
+		} else {
+			verdict.Live(id)
+		}
+	}
+}
+
+func executionPrice(x *opportunity.SinglePriceExecution) *float64 {
+	if x == nil {
+		return nil
+	}
+	price := x.Price
+	return &price
 }
 
 // higherFrameBias is the bias of the closest higher frame the context holds with a decided read ("range" when none decides, "unknown" when none exists).

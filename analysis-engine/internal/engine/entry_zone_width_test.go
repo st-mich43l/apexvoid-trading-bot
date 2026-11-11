@@ -89,3 +89,37 @@ func TestProductionConfigEntryZoneMinimum(t *testing.T) {
 		}
 	}
 }
+
+// TL-LIVE-2: only an opportunity that DECLARES the typed single-price execution, from the one approved strategy, is exempt from the entry-zone minimum.
+func TestSinglePriceTrendlineIsTheOnlyExemptionFromTheMinimumWidth(t *testing.T) {
+	xau := market.Geometry{Symbol: "XAU", PipSize: 0.1, PriceDigits: 2}
+	declared := &opportunity.SinglePriceExecution{Price: 4300.15, Timeframe: market.M5, ProjectedAt: 1, ValidUntil: 2}
+	corridor := func(strategy opportunity.StrategyID, x *opportunity.SinglePriceExecution) opportunity.Candidate {
+		c := widthCandidate(strategy, 4299.60, 4300.40) // an 8-pip corridor
+		c.Execution = x
+		return c
+	}
+	cases := []struct {
+		name    string
+		c       opportunity.Candidate
+		refused bool
+	}{
+		{"Trendline declaring single price: exempt", corridor("trendline", declared), false},
+		{"Trendline without the declaration keeps the 30-pip minimum", corridor("trendline", nil), true},
+		{"another strategy declaring it is not exempt by declaring it", corridor("key_level", declared), true},
+		{"supply declaring it is not exempt", corridor("supply", declared), true},
+		{"break and retest without it is refused", corridor("break_retest", nil), true},
+		{"Trendline single price on an 8-pip corridor is not a scalp, yet is not refused", corridor("trendline", declared), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := EntryZoneBelowMinimumWidth(tc.c, xau, 30); got != tc.refused {
+				t.Fatalf("refused=%v, want %v", got, tc.refused)
+			}
+		})
+	}
+	// The exemption concerns the entry-zone width and nothing else: Trendline is still not classified as a scalp (it keeps the intraday stop envelope).
+	if strategyStopEnvelope["trendline"] == stopEnvelopeM1Scalp {
+		t.Fatal("Trendline must not be a scalp")
+	}
+}

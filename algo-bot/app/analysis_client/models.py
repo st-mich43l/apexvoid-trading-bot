@@ -47,6 +47,29 @@ class EntryZone(FrozenConfigModel):
     return self
 
 
+class ExecutionBlock(FrozenConfigModel):
+  """TL-LIVE-2: how the opportunity is traded when it is not an entry zone (contracts/analysis/opportunity-v1.schema.json, ``execution``).
+
+  ``model: single_price`` declares ONE executable price (Trendline only), read by the engine from the projected line using closed bars only. ``entry`` is then the
+  technical interaction corridor, not a zone to trade. The price is valid until ``valid_until``; ``proximity`` is how far beyond it, against the trade, the live
+  quote may be before the line counts as already passed and is never chased.
+  """
+
+  model: Literal["single_price"]
+  price: FiniteFloat
+  timeframe: Literal["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"]
+  projected_at: int = Field(ge=0)
+  valid_until: int = Field(ge=0)
+  proximity: FiniteFloat = Field(ge=0)
+  slope_per_bar: FiniteFloat
+
+  @model_validator(mode="after")
+  def validate_window(self):
+    if self.valid_until <= self.projected_at:
+      raise ValueError("execution.valid_until must be after execution.projected_at")
+    return self
+
+
 class Target(FrozenConfigModel):
   price: PriceLevel
 
@@ -311,11 +334,23 @@ class AnalysisOpportunity(FrozenConfigModel):
   recovered_at: int | None = Field(default=None, ge=0)
   technical_context: TechnicalContext | None = None
   stop_envelope: StopEnvelope | None = None
+  # Present only for a one-price opportunity (see ExecutionBlock); absent means the entry zone is traded as a zone, exactly as before.
+  execution: ExecutionBlock | None = None
 
   @model_validator(mode="after")
   def validate_trade_geometry(self):
     if self.expires_at < self.created_at:
       raise ValueError("expires_at must be >= created_at")
+    if self.execution is not None:
+      x = self.execution
+      if not self.entry.low <= x.price <= self.entry.high:
+        raise ValueError("execution.price must lie inside the interaction corridor (entry)")
+      if x.projected_at <= self.created_at:
+        raise ValueError("execution.projected_at must be after created_at (the price may use no later bar)")
+      if x.valid_until > self.expires_at:
+        raise ValueError("execution.valid_until must not be after expires_at")
+      if (self.direction == "BUY" and x.price <= self.invalidation.price) or (self.direction == "SELL" and x.price >= self.invalidation.price):
+        raise ValueError("execution.price must be on the entry side of the invalidation")
     if self.technical_context is not None and self.technical_context.reference_time > self.created_at:
       raise ValueError("technical_context.reference_time must be <= created_at (no look-ahead)")
     if self.technical_context is not None:
