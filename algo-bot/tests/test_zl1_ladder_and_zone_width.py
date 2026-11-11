@@ -29,7 +29,8 @@ from app.autotrade.trade_plan import TradePlan, TradePlanError  # noqa: E402
 from app.core.config import runtime_config  # noqa: E402
 from tests.test_trendline_timeframes import ENVELOPES, PIP, match_for  # noqa: E402
 
-LADDER = xau_ladder.LadderSettings()  # 10 pips, spread across the zone
+LADDER = xau_ladder.LadderSettings()  # the default: 10 pips between legs, one price unit per leg
+SPREAD = xau_ladder.LadderSettings(spread_across_zone=True)  # the optional layout out to the far edge
 ONE_UNIT = Decimal("1.0")
 
 
@@ -38,20 +39,30 @@ def _gaps(prices):
 
 
 class LadderPricesTests(unittest.TestCase):
-  def test_the_briefs_example_zone_gets_three_distinct_prices_spread_across_it(self):
+  def test_the_default_ladder_is_one_price_unit_per_leg_from_the_shallow_edge(self):
     prices, ratios = xau_ladder.price_ladder("BUY", 4303.00, 4300.00, settings=LADDER, strict=True)
-    self.assertEqual(prices, (4303.00, 4301.50, 4300.00))
+    self.assertEqual(prices, (4303.00, 4302.00, 4301.00))
     self.assertEqual(ratios, (0.6, 0.2, 0.2))
 
   def test_a_sell_ladder_mirrors_it(self):
     prices, ratios = xau_ladder.price_ladder("SELL", 4300.00, 4303.00, settings=LADDER, strict=True)
-    self.assertEqual(prices, (4300.00, 4301.50, 4303.00))
+    self.assertEqual(prices, (4300.00, 4301.00, 4302.00))
     self.assertEqual(ratios, (0.6, 0.2, 0.2))
 
-  def test_the_fixed_step_mode_keeps_the_old_one_unit_spacing(self):
-    fixed = xau_ladder.LadderSettings(spread_across_zone=False)
-    prices, _ = xau_ladder.price_ladder("BUY", 4303.00, 4300.00, settings=fixed, strict=True)
-    self.assertEqual(prices, (4303.00, 4302.00, 4301.00))
+  def test_the_optional_spread_mode_lays_the_legs_out_to_the_far_edge(self):
+    prices, _ = xau_ladder.price_ladder("BUY", 4303.00, 4300.00, settings=SPREAD, strict=True)
+    self.assertEqual(prices, (4303.00, 4301.50, 4300.00))
+    prices, _ = xau_ladder.price_ladder("SELL", 4300.00, 4303.00, settings=SPREAD, strict=True)
+    self.assertEqual(prices, (4300.00, 4301.50, 4303.00))
+
+  def test_the_configuration_ships_the_original_ladder(self):
+    from app.runtime.instruments import for_instrument
+    from app.core.config import runtime_config
+
+    for symbol in ("XAU", "EURUSD"):
+      settings = xau_ladder.ladder_settings(for_instrument(runtime_config, symbol))
+      self.assertFalse(settings.spread_across_zone)
+      self.assertEqual(settings.min_spacing_pips, Decimal("10"))
 
   def test_every_gap_is_at_least_the_minimum_after_rounding_for_any_zone(self):
     rng = random.Random(21)
@@ -120,7 +131,7 @@ class RouteTests(unittest.TestCase):
   def test_price_above_a_buy_zone_rests_three_distinct_limits_in_the_zone(self):
     plan = self.route("BUY", 4310.0, 4300.0, 4303.0)
     self.assertTrue(plan.valid)
-    self.assertEqual(plan.planned_leg_entry_prices, (4303.0, 4301.5, 4300.0))
+    self.assertEqual(plan.planned_leg_entry_prices, (4303.0, 4302.0, 4301.0))
     self.assertTrue(all(price <= 4303.0 and price >= 4300.0 for price in plan.planned_leg_entry_prices))
 
   def test_price_inside_the_zone_starts_the_ladder_at_the_quote_never_above_it(self):

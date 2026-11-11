@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by the manual /algo plan builder (manual_plan.py), the Auto Algo XAU entry policy (execution_route.py) and the Python calculator (xau_ladder.py). The RISK leg belongs to the planner: risk_leg.py declares it in entry.risk_leg (price and lots from these cases) and the executor (TradePlanRuntime.cs) places exactly the declared leg; its C# parity test pins the lots-to-volume conversion. It applies to XAU multi-leg plans regardless of technical-source provenance. Since 2026-11-06 the XAU entry ladder of both Auto Algo (execution_route.py) and Manual /algo (manual_plan.py) is the 60/20/20 three-price ladder one price unit apart (xau_ladder.price_ladder); ZL-1 (ladder_price_cases below): the three prices are distinct, spread from the shallow edge (the live quote inside the zone) to the far edge, every neighbouring pair at least min_leg_spacing_pips (10 pips = 1.00) apart judged after rounding, and a zone that cannot hold two such prices has no ladder (the Auto path refuses the plan, ladder_geometry_unavailable); this file's 0.8/0.2 shallow/deep cases remain the legacy two-leg geometry (kept for non-XAU manual ladders) and the risk-leg contract.",
+  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by the manual /algo plan builder (manual_plan.py), the Auto Algo XAU entry policy (execution_route.py) and the Python calculator (xau_ladder.py). The RISK leg belongs to the planner: risk_leg.py declares it in entry.risk_leg (price and lots from these cases) and the executor (TradePlanRuntime.cs) places exactly the declared leg; its C# parity test pins the lots-to-volume conversion. It applies to XAU multi-leg plans regardless of technical-source provenance. Since 2026-11-06 the XAU entry ladder of both Auto Algo (execution_route.py) and Manual /algo (manual_plan.py) is the 60/20/20 three-price ladder one price unit apart (xau_ladder.price_ladder); ZL-1 (ladder_price_cases below): the three prices are distinct, one price unit apart from the shallow edge (the live quote inside the zone), every neighbouring pair at least min_leg_spacing_pips (10 pips = 1.00) apart judged after rounding, and a zone that cannot hold two such prices has no ladder (the Auto path refuses the plan, ladder_geometry_unavailable); this file's 0.8/0.2 shallow/deep cases remain the legacy two-leg geometry (kept for non-XAU manual ladders) and the risk-leg contract.",
   "instrument": {
     "symbol": "XAU",
     "pip_size": "0.1",
@@ -196,14 +196,14 @@
   "min_leg_spacing_pips": "10",
   "ladder_price_cases": [
     {
-      "name": "buy_zone_30_pips_spreads_across_it",
+      "name": "buy_one_price_unit_per_leg",
       "direction": "BUY",
       "start": "4303.00",
       "far": "4300.00",
       "prices": [
         "4303.00",
-        "4301.50",
-        "4300.00"
+        "4302.00",
+        "4301.00"
       ],
       "ratios": [
         "0.6",
@@ -212,14 +212,14 @@
       ]
     },
     {
-      "name": "sell_zone_30_pips_mirrors_it",
+      "name": "sell_one_price_unit_per_leg",
       "direction": "SELL",
       "start": "4300.00",
       "far": "4303.00",
       "prices": [
         "4300.00",
-        "4301.50",
-        "4303.00"
+        "4301.00",
+        "4302.00"
       ],
       "ratios": [
         "0.6",
@@ -250,7 +250,7 @@
       "far": "4301.50",
       "prices": [
         "4303.00",
-        "4301.50"
+        "4302.00"
       ],
       "ratios": [
         "0.6",
@@ -271,8 +271,8 @@
       "far": "4300.01",
       "prices": [
         "4303.01",
-        "4301.51",
-        "4300.01"
+        "4302.01",
+        "4301.01"
       ],
       "ratios": [
         "0.6",
