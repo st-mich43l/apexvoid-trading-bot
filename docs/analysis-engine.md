@@ -136,14 +136,31 @@ stateDiagram-v2
   ACTIVE --> ACTIVE: DUPLICATE (no event)
   CREATED --> INVALIDATED: close beyond invalidation price<br/>or order_block structure closed through
   ACTIVE --> INVALIDATED: close beyond invalidation price<br/>or order_block structure closed through
-  CREATED --> EXPIRED: past expires_at
-  ACTIVE --> EXPIRED: past expires_at
+  CREATED --> INVALIDATED: its zone is terminal<br/>(invalidated, mitigated, closed through)
+  ACTIVE --> INVALIDATED: its zone is terminal<br/>(invalidated, mitigated, closed through)
+  CREATED --> EXPIRED: past expires_at<br/>or its zone ran out (ZONE_EXPIRED)
+  ACTIVE --> EXPIRED: past expires_at<br/>or its zone ran out (ZONE_EXPIRED)
   INVALIDATED --> [*]
   EXPIRED --> [*]
 ```
 
 Only CREATED, INVALIDATED and EXPIRED are published. A strategy that stops
-emitting a candidate does not end it: a published opportunity lives until a
+emitting a candidate does not end it, **but the zone it rests on does (ZL-1)**: a published opportunity must never outlive its zone.
+Supply, demand, order block and fair value gap candidates carry `ZoneID` (the zone's stable identity, the same string as `StructuralID`), and after every
+evaluation each of those strategies reports a verdict on the zones of the frames it read (`strategy.ZoneReporter`, `opportunity.ZoneLiveness`): *live*
+(still a zone, whether or not it is wide enough or near enough to enter now), *terminal with a reason* (`ZONE_INVALIDATED`: price accepted beyond it; `ZONE_MITIGATED`:
+spent by touches past the retest cap, or a gap that filled; `STRUCTURE_CLOSED_THROUGH`), or *no longer held at all* (`ZONE_EXPIRED`: it left the frame's structure).
+The worker then retires every live opportunity of that strategy resting on a terminal zone (`Book.RetireByZones`), before the bar's new observations: all of them,
+none of another zone's, none on a frame the strategy did not read, and a second verdict publishes nothing (a retired opportunity is a noop on every later
+observation, so a restart or a replay cannot reopen it). It publishes the existing invalidation event (`ZONE_EXPIRED` ends the opportunity as EXPIRED). A zone that is
+merely remote or dormant, wide or weak, is live and untouched: distance is not invalidation. The entry retest is itself a touch, so the strategy's
+`maximum_zone_touches` stays an admission limit (it stops a new publication) and does not cancel a ladder whose own fill raised the count. Counter
+`go_opportunity_zone_retired{reason}`. Algo Bot receives the event like any other terminal one: the match leaves the live set, the setup becomes
+INVALIDATED/EXPIRED, and a durable cancel intent (a tombstone, written even before the plan exists) makes the executor withdraw every unfilled leg; filled legs are
+positions and keep their stop and TP management. Not covered: key level, trendline, break and retest, CRT, iFVG, flip zone, confluence zone, round number, asia range
+and shock retest keep their own invalidation (their identities are theses, not zones the strategy re-detects).
+
+Beyond its zone, a published opportunity lives until a
 close beyond its own invalidation price (the stop level, not the structure edge),
 for an `order_block` a close of its structure's timeframe beyond the structural
 far edge (`STRUCTURE_CLOSED_THROUGH`), or until `expires_at` (formation time + the strategy's `expiry_hours`, 24 h for

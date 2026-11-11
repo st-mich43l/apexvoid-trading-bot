@@ -251,10 +251,13 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 
 // instanceID is the structure's stable identity: technique, side (always sell), the open time of the supply zone's own candle on the execution frame, and the
 // higher timeframe when the zone lives there.
-func (v *view) instanceID(in instance) string {
-	origin := in.OriginTime // the structure bar's own time, never an index: identity must not change when the origin leaves the M5 window
-	if in.Timeframe != "" {
-		return fmt.Sprintf("technique:supply_demand:sell:%d@%s", origin, in.Timeframe)
+func (v *view) instanceID(in instance) string { return zoneID(in.Timeframe, in.OriginTime) }
+
+// zoneID is that identity from its two facts: the zone's frame and the structure bar's own time, never an index (identity must not change when the origin
+// leaves the M5 window).
+func zoneID(timeframe market.Timeframe, origin int64) string {
+	if timeframe != "" {
+		return fmt.Sprintf("technique:supply_demand:sell:%d@%s", origin, timeframe)
 	}
 	return fmt.Sprintf("technique:supply_demand:sell:%d", origin)
 }

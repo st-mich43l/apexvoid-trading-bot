@@ -7,6 +7,8 @@ import (
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
@@ -249,11 +251,12 @@ func (s *Strategy) definitionRefusal(in instance, bars []market.Candle, atr floa
 // structureInstances are the gaps of one structure frame that are still gaps: not spent, not closed through, not filled, a real width, and passing the gap
 // definition. Where price is now is not asked here (a structure is a fact). refuse is told, once per gap, why a gap that reached the definition or the
 // close-through test did not survive.
-func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, refuse func(reason string)) []instance {
+func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, verdict *strategyutil.ZoneVerdict, refuse func(reason string)) []instance {
 	bars := frame.Bars
 	if len(bars) < 10 {
 		return nil
 	}
+	verdict.Frame(tf)
 	atr := medianATR(frame.ATR)
 	gaps := detectGaps(bars)
 	markTouches(gaps, bars)
@@ -261,7 +264,12 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	breaks := causalBreaks(frame.Swings, bars)
 	var out []instance
 	for _, g := range gaps {
+		id := ""
+		if g.Origin >= 0 && g.Origin < len(bars) {
+			id = zoneID(g.Side, tf, bars[g.Origin].Time)
+		}
 		if g.Mitigated && (g.Touches <= 0 || g.Touches > retestMaxTouches) {
+			verdict.Terminal(id, opportunity.ReasonZoneMitigated)
 			continue
 		}
 		in := instance{
@@ -271,15 +279,23 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		if low, high, clipped := clipEntry(g.Side, g.Low, g.High, s.cfg.EntryMaxWidthPrice); clipped {
 			in.EntryClipped, in.Low, in.High = true, low, high
 		}
-		if in.High-in.Low < s.cfg.PipSize {
-			continue
+		// The gap's own life is judged whatever its width, as a fact: a gap a close went through, or that price filled, is finished.
+		tooSmall := in.High-in.Low < s.cfg.PipSize
+		tooWide := atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr
+		closedThrough := s.closedThrough(in.Side, g.Low, g.High, bars, frame.ATR, g.Origin, atr)
+		if closedThrough {
+			verdict.Terminal(id, opportunity.ReasonStructureClosedThrough)
+		} else if !notFullyFilled(in.Side, in.Low, in.High, bars, g.Origin) {
+			verdict.Terminal(id, opportunity.ReasonZoneMitigated)
+		} else {
+			verdict.Live(id) // still a gap, whether or not it passes the entry definition right now
 		}
-		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
+		if tooSmall || tooWide {
 			continue
 		}
 		// Judged before the fill test: a close beyond the far edge has always traded through the whole gap, so after the fill test this rule could never be
 		// reached and a gap that died by a close would be dropped without a reason.
-		if s.closedThrough(in.Side, g.Low, g.High, bars, frame.ATR, g.Origin, atr) {
+		if closedThrough {
 			refuse(refusedGapClosedThrough)
 			continue
 		}

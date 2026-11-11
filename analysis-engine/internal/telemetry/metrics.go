@@ -109,6 +109,11 @@ const (
 	// strategy id, recorded with CountReason.
 	CounterOpportunityStructureClosedThrough Counter = "go_opportunity_structure_closed_through"
 
+	// CounterOpportunityZoneRetired counts live zone opportunities retired because the strategy that detects their zone judged the zone finished (spent,
+	// invalidated, closed through, filled) or no longer holds it. Labels: symbol, the zone's timeframe and, in the reason label, the terminal reason code
+	// (ZONE_MITIGATED, ZONE_INVALIDATED, STRUCTURE_CLOSED_THROUGH, ZONE_EXPIRED), recorded with CountReason.
+	CounterOpportunityZoneRetired Counter = "go_opportunity_zone_retired"
+
 	// Opportunity lifecycle transition counters,
 	// one counter per internal/opportunity.TransitionKind an operator can
 	// observe (TransitionNoop is deliberately not counted: it carries no

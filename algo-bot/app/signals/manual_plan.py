@@ -130,11 +130,12 @@ def _leg_prices(
 
 
 def _xau_ladder_legs(
-  intent: ManualTradeIntent, digits: int,
+  intent: ManualTradeIntent, digits: int, *, pip_size: Decimal, settings: xau_ladder.LadderSettings,
 ) -> tuple[tuple[Decimal, ...], tuple[Decimal, ...]]:
-  """The XAU 60/20/20 ladder over the owner's zone: from the shallow edge toward the far edge, one price unit apart.
+  """The XAU 60/20/20 ladder over the owner's zone: from the shallow edge toward the far edge, every price at least the minimum spacing apart.
 
-  A single-price zone has no span, so the ladder runs toward the stop and never goes past halfway to it (the old deep-leg rule).
+  A single-price zone has no span, so the ladder runs toward the stop and never goes past halfway to it (the old deep-leg rule). The owner's own zone is never
+  widened: a zone too shallow for two prices apart gives the single typed price, as the owner wrote it.
   """
   low = Decimal(str(min(intent.entry_low, intent.entry_high)))
   high = Decimal(str(max(intent.entry_low, intent.entry_high)))
@@ -144,7 +145,7 @@ def _xau_ladder_legs(
   else:
     start = low
     far = start + (Decimal(str(intent.sl)) - start) / 2
-  prices, ratios = xau_ladder.price_ladder(intent.direction, start, far, digits=digits)
+  prices, ratios = xau_ladder.price_ladder(intent.direction, start, far, digits=digits, pip_size=pip_size, settings=settings)
   return (
     tuple(Decimal(str(price)) for price in prices),
     tuple(Decimal(str(ratio)) for ratio in ratios),
@@ -202,7 +203,9 @@ def build_manual_trade_plan(
     leg_ratios: tuple[Decimal, ...] = (Decimal("1"),)
   else:
     if intent.symbol.upper() in _XAU_SYMBOLS:
-      ladder_prices, ladder_ratios = _xau_ladder_legs(intent, digits)
+      ladder_prices, ladder_ratios = _xau_ladder_legs(
+        intent, digits, pip_size=pip_size, settings=xau_ladder.ladder_settings(effective),
+      )
     else:
       ladder_prices, ladder_ratios = (shallow, deep), MANUAL_LADDER_RATIOS
     entry = TradePlanEntry(
@@ -225,6 +228,12 @@ def build_manual_trade_plan(
       account_equity=account_equity,
       cfg=effective,
     )
+    if intent.symbol.upper() in _XAU_SYMBOLS and len(entry.legs) >= 2:
+      # The same guarantee the Auto plans give: declared spacing, and a risk leg that never sits at an entry leg's price.
+      spacing = xau_ladder.ladder_settings(effective).min_spacing_price(pip_size)
+      if risk_leg is not None and any(abs(risk_leg.price - leg.price) < spacing for leg in entry.legs):
+        risk_leg = None
+      entry = replace(entry, min_leg_spacing=spacing)
     if risk_leg is not None:
       entry = replace(entry, risk_leg=risk_leg)
 

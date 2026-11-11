@@ -56,6 +56,57 @@ public sealed record TradePlanBreakEvenResult(
 /// </summary>
 public static class TradePlanExecutionEngine
 {
+  /// <summary>Why a resting limit leg was not submitted (persisted on the leg as "skipped:&lt;reason&gt;").</summary>
+  public const string LegSkippedMarketable = "limit_leg_marketable";
+  public const string LegSkippedCollision = "leg_price_collides_with_sibling";
+
+  /// <summary>
+  /// ZL-1: the last check before a LIMIT leg of a ladder reaches the broker. A
+  /// limit is a resting order or it is nothing: a BUY limit at or above the live
+  /// ask (a SELL limit at or below the bid) fills at once at the current price,
+  /// the same price as the leg before it - exactly what a DCA ladder exists to
+  /// avoid. So, judged on the leg's own declared price, the live quote and the
+  /// legs already owned (submitted pending, or filled at their real price):
+  ///   - not meaningfully off the market (at least max(spread, one tick) beyond
+  ///     the executable side) -> skipped, the price moved through it;
+  ///   - within the declared minimum spacing (or on the same tick when none was
+  ///     declared) of a sibling -> skipped.
+  /// A skipped leg is never resubmitted at another price and its size is never
+  /// moved to another leg: the plan declared those prices and that risk. Returns
+  /// null when the leg may be submitted.
+  /// </summary>
+  public static string? GuardRestingLeg(
+    bool buy,
+    decimal legPrice,
+    decimal bid,
+    decimal ask,
+    decimal tickSize,
+    decimal? minLegSpacing,
+    IEnumerable<decimal> siblingPrices
+  )
+  {
+    var spread = Math.Max(0m, ask - bid);
+    var buffer = Math.Max(spread, tickSize > 0m ? tickSize : 0m);
+    var resting = buy ? legPrice <= ask - buffer : legPrice >= bid + buffer;
+    if (!resting)
+    {
+      return LegSkippedMarketable;
+    }
+    var floor = minLegSpacing is decimal spacing && spacing > 0m
+      ? spacing
+      : (tickSize > 0m ? tickSize : 0m);
+    foreach (var sibling in siblingPrices)
+    {
+      var gap = Math.Abs(legPrice - sibling);
+      var collides = floor > 0m ? gap < floor : gap == 0m;
+      if (collides)
+      {
+        return LegSkippedCollision;
+      }
+    }
+    return null;
+  }
+
   public static TradePlan? DegradeScalpLadderForMinVolume(
     TradePlan plan,
     long totalVolume,

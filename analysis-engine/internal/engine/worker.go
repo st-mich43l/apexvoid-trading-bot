@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sort"
 	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/candle"
@@ -249,6 +250,18 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		}
 		w.observeTransition(withdrawn, symbolLabel, tfLabel, event.PublishesOpportunity())
 	}
+	// A zone's lifecycle governs the lifecycle of what rests on it: an opportunity whose zone its strategy has just judged finished (or no longer holds) ends
+	// now, before this bar's observations, whether or not price ever reached its stop. A zone that is only remote or ineligible is live and untouched.
+	for _, strategyID := range sortedZoneReporters(evaluation.Zones) {
+		for _, retired := range w.state.Opportunities.RetireByZones(strategyID, evaluation.Zones[strategyID], event.Candle.Time) {
+			frame := retired.Record.Candidate.StructureTimeframe
+			if frame == "" {
+				frame = retired.Record.Candidate.ObservedTimeframe
+			}
+			w.telemetry.CountReason(telemetry.CounterOpportunityZoneRetired, symbolLabel, string(frame), string(retired.Record.Terminal.Reason), 1)
+			w.observeTransition(retired, symbolLabel, tfLabel, event.PublishesOpportunity())
+		}
+	}
 	var enriched []opportunity.Candidate
 	for i := range evaluation.Candidates {
 		// Overwrite the strategy's own narrower per-strategy-parameters
@@ -268,6 +281,11 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 		if timingErr != nil {
 			doneOpp()
 			return AnalysisSnapshot{}, result, timingErr
+		}
+		if EntryZoneBelowMinimumWidth(candidate, w.settings.Geometry, w.settings.InstrumentEntryZoneMinimumWidthPips) {
+			// A real zone too thin to be an entry zone is refused as it is: width is never manufactured and the structural invalidation never moved to make it.
+			w.telemetry.CountStrategyRefusal(symbolLabel, string(candidate.Strategy), string(candidate.ObservedTimeframe), RefusedEntryZoneBelowMinimumWidth, 1)
+			continue
 		}
 		if level, blocked := w.settings.BlockedByDefendedLevel(candidate); blocked {
 			log.Info("opportunity not opened: buy into defended level", "symbol", w.state.Symbol, "strategy", candidate.Strategy, "defended_level", level, "entry_low", candidate.Entry.Low, "entry_high", candidate.Entry.High)
@@ -315,6 +333,16 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 	snap := SnapshotFrom(w.state, w.settings, event.Candle.Time)
 	doneSnap()
 	return snap, result, nil
+}
+
+// sortedZoneReporters is the strategies that reported a zone verdict, in a fixed order, so replays publish retirements in the same order.
+func sortedZoneReporters(zones map[opportunity.StrategyID]opportunity.ZoneLiveness) []opportunity.StrategyID {
+	ids := make([]opportunity.StrategyID, 0, len(zones))
+	for id := range zones {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
 }
 
 // countFeatures counts, once per created opportunity, the measured features a strategy published as quality measures (fvg and order_block v9: prior_sweep

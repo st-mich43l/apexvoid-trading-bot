@@ -345,6 +345,11 @@ class AnalysisOpportunity(FrozenConfigModel):
     return self
 
 
+# Terminal reason codes the analysis engine publishes for an opportunity that RAN OUT rather than being broken by price: its own deadline, or the zone it rests on
+# (the strategy that detects the zone no longer holds it). Any other reason is an invalidation. Both end the setup and cancel its unfilled plan.
+GO_EXPIRY_REASONS = frozenset({"SETUP_EXPIRED", "ZONE_EXPIRED"})
+
+
 class AnalysisOpportunityInvalidated(FrozenConfigModel):
   opportunity_id: str = Field(min_length=1)
   symbol: str = Field(min_length=1)

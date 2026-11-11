@@ -242,6 +242,31 @@ func (d *Document) StopEnvelopeFor(symbol string) (minPips, maxPips float64, err
 	return minPips, maxPips, nil
 }
 
+// EntryZoneMinimumWidthPipsFor returns the optional stop_envelope.min_entry_zone_width_pips of the instrument: the narrowest entry zone a non-scalping
+// opportunity may publish (ZL-1: XAU 30 pips). It is a rule on the zone the strategy found, never a width to be manufactured: a zone below it is refused.
+// 0 means the key is absent (no minimum).
+func (d *Document) EntryZoneMinimumWidthPipsFor(symbol string) (float64, error) {
+	merged, err := d.mergedInstrument(symbol)
+	if err != nil {
+		return 0, err
+	}
+	envelope, ok := merged["stop_envelope"].(stringMap)
+	if !ok {
+		return 0, nil
+	}
+	if _, present := envelope["min_entry_zone_width_pips"]; !present {
+		return 0, nil
+	}
+	v, err := numberField(envelope, "min_entry_zone_width_pips")
+	if err != nil {
+		return 0, fmt.Errorf("config: instrument %q stop_envelope: %w", symbol, err)
+	}
+	if !(v > 0) {
+		return 0, fmt.Errorf("config: instrument %q stop_envelope.min_entry_zone_width_pips must be > 0 when set, got %v", symbol, v)
+	}
+	return v, nil
+}
+
 // DeepEntryMinimumWidthPipsFor returns the optional stop_envelope.deep_entry_minimum_width_pips of the instrument: the narrowest entry band a strategy may
 // publish when it cuts the band to the part from which the structural stop is within max_pips. 0 means the key is absent (deep entry off).
 func (d *Document) DeepEntryMinimumWidthPipsFor(symbol string) (float64, error) {

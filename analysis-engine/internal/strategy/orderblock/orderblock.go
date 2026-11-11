@@ -31,6 +31,7 @@ const (
 // Strategy is the fair value gap strategy.
 type Strategy struct {
 	strategyutil.RefusalCounter
+	zones       strategyutil.ZoneLedger
 	cfg         Config
 	fingerprint string
 
@@ -66,13 +67,15 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	}
 	refusals := map[strategy.Refusal]int64{}
 	defer s.addRefusals(refusals)
+	verdict := s.zones.Begin()
+	defer verdict.Publish()
 	var instances []instance
 	for _, tf := range s.cfg.StructureTimeframes {
 		frameContext := ctx.Timeframes[tf]
 		if frameContext == nil || frameContext.Legacy == nil {
 			continue
 		}
-		found := s.structureInstances(frameContext.Legacy, tf, func(reason string) { refusals[strategy.Refusal{Reason: reason, Timeframe: tf}]++ })
+		found := s.structureInstances(frameContext.Legacy, tf, verdict, func(reason string) { refusals[strategy.Refusal{Reason: reason, Timeframe: tf}]++ })
 		instances = append(instances, bind(tf, frameContext.Legacy.Bars, base.frame.Bars, found, s.cfg.BindWithinExecutionWindow)...)
 	}
 	d := s.best(base, instances, func(in instance, reason string) {
@@ -101,6 +104,9 @@ func (s *Strategy) addRefusals(found map[strategy.Refusal]int64) {
 		s.refusals[k] += n
 	}
 }
+
+// TakeZoneLiveness reports which order blocks the last evaluation still held and which it judged finished (strategy.ZoneReporter).
+func (s *Strategy) TakeZoneLiveness() (opportunity.ZoneLiveness, bool) { return s.zones.Take() }
 
 // TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
 func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {

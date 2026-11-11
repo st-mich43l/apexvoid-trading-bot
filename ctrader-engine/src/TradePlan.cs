@@ -59,6 +59,46 @@ public static class TradePlanContract
   }
 }
 
+/// <summary>
+/// One definition of a valid price ladder, held identical to
+/// app/autotrade/xau_ladder.py:ladder_geometry_problem: distinct prices, each
+/// deeper than the one before (a BUY steps down, a SELL up), every gap at least
+/// the minimum. It never derives or repairs a price; it only says what is wrong.
+/// </summary>
+public static class TradePlanLadder
+{
+  public const string DuplicateLegPrice = "duplicate_leg_price";
+  public const string LegPricesNotOrdered = "leg_prices_not_ordered";
+  public const string LegSpacingBelowMinimum = "leg_spacing_below_minimum";
+  public const string RiskLegCollidesWithEntryLeg = "risk_leg_collides_with_entry_leg";
+
+  public static string? GeometryProblem(
+    bool buy,
+    IReadOnlyList<decimal> prices,
+    decimal? minSpacing
+  )
+  {
+    for (var i = 1; i < prices.Count; i++)
+    {
+      var earlier = prices[i - 1];
+      var later = prices[i];
+      if (later == earlier)
+      {
+        return DuplicateLegPrice;
+      }
+      if (buy ? later > earlier : later < earlier)
+      {
+        return LegPricesNotOrdered;
+      }
+      if (minSpacing is decimal spacing && Math.Abs(later - earlier) < spacing)
+      {
+        return LegSpacingBelowMinimum;
+      }
+    }
+    return null;
+  }
+}
+
 public sealed class TradePlanContractException : Exception
 {
   public TradePlanContractException(string message) : base(message) { }
@@ -222,7 +262,15 @@ public sealed record TradePlanEntry(
   [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
   decimal? OrderPrice = null,
   IReadOnlyList<TradePlanEntryLeg>? Legs = null,
-  TradePlanRiskLeg? RiskLeg = null
+  TradePlanRiskLeg? RiskLeg = null,
+  // ZL-1: the least distance, in price units, the planner requires between
+  // neighbouring entry-leg prices and between the risk leg and every entry
+  // leg. Declared only on a ladder the planner has checked (XAU non-scalp);
+  // null = an older plan, validated as before. The executor enforces it on
+  // receipt (TradePlanLadder.GeometryProblem) and again against the live
+  // quote before each leg is submitted (TradePlanExecutionEngine.GuardRestingLeg).
+  [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
+  decimal? MinLegSpacing = null
 )
 {
   // Every price at which this entry could actually fill. Used only to
@@ -508,6 +556,45 @@ public static class TradePlanValidator
     }
 
     ValidateEntryShape(plan.Entry);
+    ValidateLadderGeometry(plan.Entry, direction == "BUY");
+  }
+
+  // A planner that declared a spacing guarantees it. The plan is refused whole
+  // when its own prices break the guarantee; nothing here re-derives a price.
+  private static void ValidateLadderGeometry(TradePlanEntry entry, bool buy)
+  {
+    if (entry.MinLegSpacing is not decimal spacing)
+    {
+      return;
+    }
+    if (spacing <= 0m)
+    {
+      throw new TradePlanContractException(
+        $"entry.min_leg_spacing must be positive: {spacing}"
+      );
+    }
+    var legs = entry.Legs ?? Array.Empty<TradePlanEntryLeg>();
+    if (legs.Count < 2)
+    {
+      return;
+    }
+    var prices = legs.Select(leg => leg.Price).ToArray();
+    var problem = TradePlanLadder.GeometryProblem(buy, prices, spacing);
+    if (
+      problem is null
+      && entry.RiskLeg is { } riskLeg
+      && prices.Any(price => Math.Abs(riskLeg.Price - price) < spacing)
+    )
+    {
+      problem = TradePlanLadder.RiskLegCollidesWithEntryLeg;
+    }
+    if (problem is not null)
+    {
+      throw new TradePlanContractException(
+        $"entry ladder geometry is invalid ({problem}): legs="
+        + string.Join(",", prices) + $" min_leg_spacing={spacing}"
+      );
+    }
   }
 
   private static void ValidateEntryShape(TradePlanEntry entry)

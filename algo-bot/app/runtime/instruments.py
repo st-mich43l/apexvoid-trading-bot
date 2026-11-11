@@ -448,6 +448,16 @@ class EffectiveInstrument:
 
 
   @property
+  def entry_zone_min_width_pips(self) -> float:
+    """The narrowest entry zone a non-scalping opportunity may be planned from (``stop_envelope.min_entry_zone_width_pips``); 0 when the instrument has none."""
+    envelope = self._raw.get("stop_envelope") or {}
+    try:
+      value = float(envelope.get("min_entry_zone_width_pips") or 0.0)
+    except (TypeError, ValueError):
+      return 0.0
+    return value if value > 0 else 0.0
+
+  @property
   def opposite_position(self) -> OppositePositionPolicy:
     """Autonomous opposite-exposure policy; raises when undeclared/invalid."""
     return _opposite_position_policy(

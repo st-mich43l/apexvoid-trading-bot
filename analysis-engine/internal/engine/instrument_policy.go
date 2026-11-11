@@ -30,6 +30,9 @@ func ApplyInstrument(settings *Settings, doc *config.Document, symbol string) er
 	if settings.InstrumentDeepEntryMinimumWidthPips, err = doc.DeepEntryMinimumWidthPipsFor(symbol); err != nil {
 		return err
 	}
+	if settings.InstrumentEntryZoneMinimumWidthPips, err = doc.EntryZoneMinimumWidthPipsFor(symbol); err != nil {
+		return err
+	}
 	settings.InstrumentStopEnvelopeConfigured = true
 	settings.TechniqueZones.Technique.PipSize = geometry.PipSize
 	// MAD's sweep tolerance floor is one pip of the instrument (the frozen

@@ -79,6 +79,9 @@ type Settings struct {
 	InstrumentStopEnvelopeConfigured bool
 	// InstrumentDeepEntryMinimumWidthPips is the instrument's stop_envelope.deep_entry_minimum_width_pips (0 = absent: deep entry off). PR-E1.
 	InstrumentDeepEntryMinimumWidthPips float64
+	// InstrumentEntryZoneMinimumWidthPips is the instrument's stop_envelope.min_entry_zone_width_pips (0 = absent): the narrowest entry zone a
+	// non-scalping opportunity may publish. A scalp may enter at one price and is exempt. ZL-1.
+	InstrumentEntryZoneMinimumWidthPips float64
 
 	// ConfigVersion/ConfigFingerprint are the resolved document's own
 	// whole-document provenance (ConfigProvenanceFromConfig — the SAME

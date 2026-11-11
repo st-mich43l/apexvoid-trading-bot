@@ -70,6 +70,10 @@ jobs:
         working-directory: ctrader-engine
         run: dotnet build src/CTraderFeed.csproj --nologo
 
+      - name: Unit tests
+        working-directory: ctrader-engine
+        run: dotnet test tests/CTraderFeed.Tests.csproj --nologo
+
   repo-checks:
     name: Repository checks
     runs-on: ubuntu-latest

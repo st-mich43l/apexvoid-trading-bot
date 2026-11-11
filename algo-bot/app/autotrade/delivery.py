@@ -146,6 +146,10 @@ TELEGRAM_SILENT_LIFECYCLE_TYPES = frozenset({
   # card under one-root-card mode — progress edits the root instead.
   "plan_published",
   "v8_order_submitted",
+  # ZL-1: the executor skipped a ladder leg because the price had moved through it
+  # (or it would have sat on a sibling). The reason stays in Redis and metrics; the
+  # card is not the place for it.
+  "leg_skipped",
   # A single leg of a multi-leg group closing is not the group closing -
   # AutoTradeEngine.cs (ApplyOwnerCloseAsync and the reconcile-path missing-
   # position handler) emits this instead of "position_closed" whenever

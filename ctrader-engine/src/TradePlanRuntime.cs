@@ -2585,6 +2585,9 @@ public sealed partial class TradePlanRuntime(
             or TradePlanLegStages.Pending
             or TradePlanLegStages.Submitted
             or TradePlanLegStages.Managing
+            // ZL-1: a leg the guard skipped (cancelled, never owned by the broker)
+            // is a decision, not a gap: a restart never submits it under any price.
+            or TradePlanLegStages.Cancelled
         )
       )
       {
@@ -2603,7 +2606,108 @@ public sealed partial class TradePlanRuntime(
       var legClientOrderId = TradePlanOwnership.FormatClientOrderId(
         plan.PlanId, declared.LegId
       );
+      // ZL-1: every leg after the first is decided on a quote that is still
+      // fresh. Broker calls take time; a quote that has outlived the limit
+      // is not the market any more. The ladder stays Submitting and the next
+      // poll (which resumes at this leg) judges it on a fresh tick.
+      if (index > state.SubmittedLegCount && QuoteIsStale(quote))
+      {
+        await PersistStateAsync(
+          AggregateState(
+            state with
+            {
+              Legs = runtimeLegs.ToArray(),
+              PendingOrderIds = pendingOrderIds,
+              Stage = TradePlanRuntimeStage.Submitting,
+              GroupStage = TradePlanGroupStages.Submitting,
+            }
+          ),
+          cancellationToken
+        );
+        log(
+          $"v8 ladder paused on a stale quote id={plan.PlanId} next_leg={declared.LegId}"
+        );
+        return;
+      }
       var useMarket = ResolveLegUsesMarket(declared, direction, quote);
+      if (IsGuardedLimitLeg(plan, declared, index))
+      {
+        var siblingPrices = runtimeLegs
+          .Where(leg =>
+            leg.LegId != declared.LegId
+            && (
+              leg.BrokerPositionId is not null
+              || leg.BrokerOrderId is not null
+              || leg.Stage is TradePlanLegStages.Filled
+                or TradePlanLegStages.Pending
+                or TradePlanLegStages.Submitted
+                or TradePlanLegStages.Managing
+            )
+          )
+          .Select(leg => leg.FillPrice ?? leg.IntendedPrice)
+          .ToArray();
+        var skipReason = TradePlanExecutionEngine.GuardRestingLeg(
+          direction == TradeDirection.Buy,
+          declared.Price,
+          quote.Bid,
+          quote.Ask,
+          StopTrailPlanner.RequireTickSize(symbol),
+          plan.Entry.MinLegSpacing,
+          siblingPrices
+        );
+        if (skipReason is not null)
+        {
+          // The price moved through this leg, or it would sit on a sibling:
+          // submitting it would fill it at the current price next to the
+          // others. It is skipped - never resubmitted at another price, its
+          // size never moved to another leg - and the reason is persisted.
+          var skipped = new TradePlanLegRuntimeState(
+            LegId: declared.LegId,
+            IntendedPrice: declared.Price,
+            DeclaredRatio: declared.Ratio,
+            IntendedVolume: declared.Volume,
+            IntendedLots: declared.Lots,
+            ClientOrderId: legClientOrderId,
+            Stage: TradePlanLegStages.Cancelled,
+            LastError: $"skipped:{skipReason}"
+          );
+          UpsertLeg(runtimeLegs, skipped);
+          state = AggregateState(
+            state with
+            {
+              Legs = runtimeLegs.ToArray(),
+              PendingOrderIds = pendingOrderIds,
+              SubmittedLegCount = index + 1,
+              TotalIntendedVolume = declaredLegs.Sum(leg => leg.Volume),
+              GroupAbsoluteStop = absoluteStop,
+              CurrentStop = absoluteStop,
+              Stage = index + 1 < declaredLegs.Count
+                ? TradePlanRuntimeStage.Submitting
+                : DeriveRuntimeStage(runtimeLegs),
+              GroupStage = index + 1 < declaredLegs.Count
+                ? TradePlanGroupStages.Submitting
+                : DeriveGroupStage(runtimeLegs),
+            }
+          );
+          await PersistStateAsync(state, cancellationToken);
+          log(
+            $"v8 ladder leg skipped id={plan.PlanId} leg={declared.LegId} "
+            + $"reason={skipReason} price={declared.Price.ToString(CultureInfo.InvariantCulture)} "
+            + $"bid={quote.Bid.ToString(CultureInfo.InvariantCulture)} "
+            + $"ask={quote.Ask.ToString(CultureInfo.InvariantCulture)}"
+          );
+          await PublishEventAsync(
+            "leg_skipped",
+            $"LADDER LEG {declared.LegId} SKIPPED {plan.Analysis.Direction} "
+            + $"@ {FormatEventPrice(declared.Price, symbol)}: {skipReason}",
+            plan,
+            cancellationToken,
+            price: declared.Price,
+            eventKey: $"leg_skipped_{declared.LegId}"
+          );
+          continue;
+        }
+      }
       // Market legs use the live executable quote for relative SL;
       // resting limits use their declared limit price.
       var relativeEntry = useMarket
@@ -2732,6 +2836,17 @@ public sealed partial class TradePlanRuntime(
     );
     await PersistStateAsync(state, cancellationToken);
     var filledVolume = state.TotalFilledVolume;
+    if (pendingOrderIds.Count == 0 && filledVolume == 0)
+    {
+      // ZL-1: every leg was skipped (the price had moved through all of them):
+      // nothing was ordered and nothing filled. That is a rejection with its
+      // reason, not a "filled" plan.
+      await PersistPlanExecutionStateAsync(
+        plan.PlanId, "rejected", null, cancellationToken, "all_ladder_legs_skipped"
+      );
+      log($"v8 ladder skipped entirely id={plan.PlanId}");
+      return;
+    }
     await PersistPlanExecutionStateAsync(
       plan.PlanId,
       pendingOrderIds.Count == 0 ? "filled" : "submitted",
@@ -5049,6 +5164,43 @@ public sealed partial class TradePlanRuntime(
     decimal Lots,
     string? OrderType = null
   );
+
+  // ZL-1: a LADDER leg other than the first must be a real resting order. That
+  // is every leg declared LIMIT (market_with_limit_scale L2+, the planner's
+  // risk leg) and every undeclared leg of a limit_ladder after L1, which would
+  // otherwise be fired as a MARKET order the moment its price is at or through
+  // the quote - a deeper DCA leg filled at the current price next to L1. A
+  // single_limit entry is one deliberate order and keeps its own semantics;
+  // L1 of a limit_ladder keeps marketable detection (it may be the chase at
+  // the quote).
+  private static bool IsGuardedLimitLeg(
+    TradePlan plan,
+    DeclaredLeg declared,
+    int index
+  )
+  {
+    if (
+      plan.Entry.Type
+        is not (TradePlanContract.EntryTypeLimitLadder
+          or TradePlanContract.EntryTypeMarketWithLimitScale)
+    )
+    {
+      return false;
+    }
+    if (
+      string.Equals(
+        declared.OrderType,
+        TradePlanContract.OrderTypeLimit,
+        StringComparison.OrdinalIgnoreCase
+      )
+    )
+    {
+      return true;
+    }
+    return index > 0
+      && plan.Entry.Type == TradePlanContract.EntryTypeLimitLadder
+      && string.IsNullOrWhiteSpace(declared.OrderType);
+  }
 
   private static bool ResolveLegUsesMarket(
     DeclaredLeg declared,

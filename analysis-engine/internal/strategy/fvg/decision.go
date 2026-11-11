@@ -289,12 +289,15 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 
 // instanceID is the structure's stable identity: technique, side, the open time of the bar that completed the gap on the execution frame, and the
 // higher timeframe when the gap lives there.
-func (v *view) instanceID(in instance) string {
-	origin := in.OriginTime // the structure bar's own time, never an index: identity must not change when the origin leaves the M5 window
-	if in.Timeframe != "" {
-		return fmt.Sprintf("technique:fvg:%s:%d@%s", in.Side, origin, in.Timeframe)
+func (v *view) instanceID(in instance) string { return zoneID(in.Side, in.Timeframe, in.OriginTime) }
+
+// zoneID is that identity from its facts: the gap's side, its frame and the structure bar's own time, never an index (identity must not change when the
+// origin leaves the M5 window).
+func zoneID(side string, timeframe market.Timeframe, origin int64) string {
+	if timeframe != "" {
+		return fmt.Sprintf("technique:fvg:%s:%d@%s", side, origin, timeframe)
 	}
-	return fmt.Sprintf("technique:fvg:%s:%d", in.Side, origin)
+	return fmt.Sprintf("technique:fvg:%s:%d", side, origin)
 }
 
 // best is the single best confirmed reaction among instances: highest stars, nearest entry on a tie.
