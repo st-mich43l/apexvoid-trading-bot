@@ -366,7 +366,7 @@ async def _execute_delete(sid: int) -> dict:
     return {"action": "delete", "ok": False, "error": "not_found"}
   if result.get("error") == "has_rounds":
     return {"action": "delete", "ok": False, "error": "has_rounds"}
-  await delete_posts(
+  failed = await delete_posts(
     result.get("posts") or [], personal=bool(result.get("personal_trade")),
   )
   return {
@@ -374,6 +374,8 @@ async def _execute_delete(sid: int) -> dict:
     "ok": True,
     "row": result,
     "seq": _display_seq(result),
+    # Channel cards Telegram refused to delete (each with its error): the ack says so instead of claiming the card is gone.
+    "undeleted": failed,
   }
 
 
@@ -736,7 +738,13 @@ def render_result(
     seq = f"#{result['seq']} " if tier == "vip" else ""
     if result.get("pending"):
       return f"⏳ {seq}delete requested"
-    return f"🗑 {seq}deleted"
+    text = f"🗑 {seq}deleted"
+    undeleted = result.get("undeleted") or []
+    if undeleted:
+      text += f"\n⚠️ {len(undeleted)} channel card(s) could not be deleted - delete them by hand:"
+      for post in undeleted:
+        text += f"\n• {post.get('channel_id')} / message {post.get('message_id')}: {escape(str(post.get('error') or ''))}"
+    return text
   if action == "modify":
     seq = f"#{result['seq']} " if tier == "vip" else ""
     if result.get("pending"):

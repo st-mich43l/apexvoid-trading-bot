@@ -33,7 +33,7 @@ from aiogram.exceptions import TelegramBadRequest
 from app.autotrade.setup_execution_aggregate import STATUS_LINE_BY_PROJECTION_STATE
 from app.autotrade.setup_lifecycle import TERMINAL_STATES, load_setup
 from app.autotrade.strategy_match import StrategyMatch
-from app.autotrade.strategy_names import SUPPLY_DEMAND
+from app.autotrade.strategy_names import side_zone_label
 from app.autotrade.trade_card import (
   conservative_entry_reference,
   format_entry_line,
@@ -620,18 +620,8 @@ _ACTIVATED_HEADER_RE = re.compile(
 _LIVE_PRICE_MARKER_RE = re.compile(r"\s*<i>\(live\)</i>", re.IGNORECASE)
 
 def card_setup_label(strategy: str | None, direction: str | None) -> str:
-  """The setup name the root card shows. Display only: the strategy identity ("Supply Demand") is unchanged everywhere else.
-
-  The zone strategy is one identity for both sides, but a card reads better as the zone it trades: a SELL is a Supply zone, a BUY a Demand zone.
-  """
-  name = str(strategy or "").strip()
-  if name == SUPPLY_DEMAND:
-    side = str(direction or "").upper()
-    if side == "SELL":
-      return "Supply"
-    if side == "BUY":
-      return "Demand"
-  return name
+  """The setup name the root card shows (see ``side_zone_label``): "Supply" for a SELL zone, "Demand" for a BUY zone."""
+  return side_zone_label(strategy, direction)
 
 
 # The direction/strategy body line format.py always writes right after the
