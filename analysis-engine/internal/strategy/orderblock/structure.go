@@ -6,6 +6,8 @@ import (
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
 
@@ -352,6 +354,14 @@ func notInvalidated(side string, low, high float64, bars []market.Candle, origin
 	return true
 }
 
+// endReason names why a block that is spent is finished: invalidated when price was accepted beyond it, otherwise mitigated (touched past its limit).
+func endReason(side string, low, high float64, bars []market.Candle, origin int, atr, pip float64) opportunity.ReasonCode {
+	if !notInvalidated(side, low, high, bars, origin, atr, pip) {
+		return opportunity.ReasonZoneInvalidated
+	}
+	return opportunity.ReasonZoneMitigated
+}
+
 // spent: a block that was touched and has either taken too many touches or been invalidated.
 func spent(mitigated bool, touches int, side string, low, high float64, bars []market.Candle, origin int, atr, pip float64) bool {
 	if !mitigated {
@@ -398,11 +408,12 @@ func (s *Strategy) closedThroughRefusal(in instance, bars []market.Candle, atr f
 // structureInstances are the order blocks of one structure frame that are still blocks: not spent, not invalidated, a real width, a real body, not closed
 // through. Where price is now is not asked here (a structure is a fact). refuse is told, once per block, why a block that reached the close-break rule did
 // not survive.
-func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, refuse func(reason string)) []instance {
+func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, verdict *strategyutil.ZoneVerdict, refuse func(reason string)) []instance {
 	bars := frame.Bars
 	if len(bars) < 10 {
 		return nil
 	}
+	verdict.Frame(tf)
 	atr := medianATR(frame.ATR)
 	blocks := s.detectBlocks(bars, frame.ATR, causalBreaks(frame.Swings, bars))
 	markTouches(blocks, bars)
@@ -410,7 +421,12 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	pip := s.cfg.PipSize
 	var out []instance
 	for _, b := range blocks {
+		id := ""
+		if b.Origin >= 0 && b.Origin < len(bars) {
+			id = zoneID(b.Side, tf, bars[b.Origin].Time)
+		}
 		if spent(b.Mitigated, b.Touches, b.Side, b.Low, b.High, bars, b.Origin, atr, pip) {
+			verdict.Terminal(id, endReason(b.Side, b.Low, b.High, bars, b.Origin, atr, pip))
 			continue
 		}
 		in := instance{
@@ -422,16 +438,24 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 			in.Low, in.High = low, high
 		}
 		if spent(in.Mitigated, in.Touches, in.Side, in.Low, in.High, bars, b.Origin, atr, pip) || !notInvalidated(in.Side, in.Low, in.High, bars, b.Origin, atr, pip) {
+			verdict.Terminal(id, endReason(in.Side, in.Low, in.High, bars, b.Origin, atr, pip))
 			continue
 		}
+		// Dead for good once a close of its own frame went through it (rule C), whatever its width or body: that verdict does not depend on being tradable.
+		if s.closedThroughRefusal(in, bars, atr, frame.ATR, b.Origin) {
+			verdict.Terminal(id, opportunity.ReasonStructureClosedThrough)
+			if atr <= 0 || in.High-in.Low <= math.Max(0, s.cfg.MaximumZoneATR)*atr {
+				if originBodyFraction(bars[b.Origin]) >= s.cfg.MomentumBodyFraction {
+					refuse(refusedClosedThrough)
+				}
+			}
+			continue
+		}
+		verdict.Live(id) // still an order block, whether or not it is wide enough or strong enough to enter right now
 		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
 			continue
 		}
 		if originBodyFraction(bars[b.Origin]) < s.cfg.MomentumBodyFraction {
-			continue
-		}
-		if s.closedThroughRefusal(in, bars, atr, frame.ATR, b.Origin) {
-			refuse(refusedClosedThrough)
 			continue
 		}
 		out = append(out, in)

@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 
 from app.analysis_client.models import (
+  GO_EXPIRY_REASONS,
   AnalysisEvent,
   InvalidationEnvelope,
   OpportunityEnvelope,
@@ -29,8 +30,8 @@ class PostgresAnalysisOpportunityRepository:
 
   @staticmethod
   def _terminal_state(reason_code: str) -> str:
-    """Map only the Go lifecycle's technical setup-expiry reason to expiry."""
-    return "expired" if reason_code.upper() == "SETUP_EXPIRED" else "invalidated"
+    """Map the Go lifecycle's expiry reasons (its own deadline, or the zone it rests on running out) to expiry."""
+    return "expired" if reason_code.upper() in GO_EXPIRY_REASONS else "invalidated"
 
   async def apply(
     self,

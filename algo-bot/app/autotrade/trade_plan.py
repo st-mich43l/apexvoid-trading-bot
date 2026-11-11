@@ -683,6 +683,10 @@ class TradePlanEntry:
   order_price: Decimal | None = None
   legs: tuple[TradePlanEntryLeg, ...] = ()
   risk_leg: TradePlanRiskLeg | None = None
+  # ZL-1: the least distance, in price units, the planner requires between neighbouring entry-leg prices (and between the risk leg and every entry leg). Declared
+  # only on a ladder whose planner checked it (XAU); the executor enforces it on receipt and again against the live quote before each leg is submitted. None =
+  # not declared (an older plan): validated as before.
+  min_leg_spacing: Decimal | None = None
 
   def to_dict(self) -> dict:
     payload = {
@@ -699,6 +703,8 @@ class TradePlanEntry:
     }
     if self.risk_leg is not None:
       payload["risk_leg"] = self.risk_leg.to_dict()
+    if self.min_leg_spacing is not None:
+      payload["min_leg_spacing"] = str(self.min_leg_spacing)
     return payload
 
   @classmethod
@@ -771,6 +777,13 @@ class TradePlanEntry:
         )
       risk_leg = TradePlanRiskLeg.from_dict(raw_risk_leg)
 
+    raw_spacing = data.get("min_leg_spacing")
+    min_leg_spacing = None
+    if raw_spacing is not None:
+      min_leg_spacing = _decimal(raw_spacing, "entry.min_leg_spacing")
+      if min_leg_spacing <= 0:
+        raise TradePlanError(f"entry.min_leg_spacing must be positive: {min_leg_spacing}")
+
     return cls(
       type=entry_type,
       zone_low=zone_low_d,
@@ -783,6 +796,7 @@ class TradePlanEntry:
       expires_at=int(_require(data, "expires_at")),
       legs=legs,
       risk_leg=risk_leg,
+      min_leg_spacing=min_leg_spacing,
     )
 
   def entry_prices(self) -> tuple[Decimal, ...]:
@@ -1137,6 +1151,21 @@ class TradePlan:
         raise TradePlanError("BUY stop.price must be below entry.risk_leg.price")
       if direction != "BUY" and self.stop.price <= risk_leg.price:
         raise TradePlanError("SELL stop.price must be above entry.risk_leg.price")
+
+    spacing = self.entry.min_leg_spacing
+    if spacing is not None and len(self.entry.legs) >= 2:
+      # A planner that declared a spacing guarantees it: distinct prices, each deeper than the one before (BUY steps down, SELL up), every gap at least the
+      # spacing, and a risk leg the same distance from every entry leg. A plan that breaks it is refused whole; nothing here re-derives a price.
+      from app.autotrade.xau_ladder import ladder_geometry_problem
+
+      leg_prices = [leg.price for leg in self.entry.legs]
+      problem = ladder_geometry_problem(direction, leg_prices, min_spacing=spacing)
+      if problem is None and risk_leg is not None and any(
+        abs(risk_leg.price - price) < spacing for price in leg_prices
+      ):
+        problem = "risk_leg_collides_with_entry_leg"
+      if problem is not None:
+        raise TradePlanError(f"entry ladder geometry is invalid ({problem}): legs={[str(p) for p in leg_prices]} min_leg_spacing={spacing}")
 
     if not self.targets:
       raise TradePlanError("plan must declare at least one target")

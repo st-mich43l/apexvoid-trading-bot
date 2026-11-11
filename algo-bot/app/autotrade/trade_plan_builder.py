@@ -28,10 +28,11 @@ from dataclasses import replace
 from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
-from app.autotrade.execution_policy import evaluate_execution_policy
+from app.autotrade.execution_policy import ENTRY_ZONE_BELOW_MINIMUM_WIDTH, evaluate_execution_policy
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.card_prices import snap_measured_to_card_prices
 from app.autotrade.risk_leg import plan_risk_leg
+from app.autotrade.xau_ladder import LADDER_UNAVAILABLE, ladder_geometry_problem, ladder_settings
 from app.autotrade.strategy_catalog import exposure_lane
 from app.autotrade.strategy_match import StrategyMatch
 from app.autotrade.protective_stop import scalp_stop_limits
@@ -57,6 +58,9 @@ from app.autotrade.trade_plan import (
   TradePlanStop,
   TradePlanTarget,
 )
+
+
+PLANNING_REJECTIONS = frozenset({ENTRY_ZONE_BELOW_MINIMUM_WIDTH, LADDER_UNAVAILABLE})
 
 
 class TradePlanBuildRejected(Exception):
@@ -214,6 +218,38 @@ def fit_entry_legs_to_volume(
   kept = tuple(replace(leg, volume_ratio=ratio) for leg, ratio in zip(kept, new_ratios))
   kept = kept[:-1] + (replace(kept[-1], volume_ratio=Decimal("1") - sum(leg.volume_ratio for leg in kept[:-1])),)
   return replace(entry, legs=kept)
+
+
+def _declare_ladder_spacing(
+  entry: Any, *, risk_leg: Any, match: Any, direction: str, pip_size: Any, cfg: Any, measured: dict[str, Any],
+) -> tuple[Any, Any]:
+  """ZL-1: a non-scalp XAU ladder is checked here once more, on the prices it will be submitted at, and declares its spacing to the executor.
+
+  Distinct prices, each deeper than the one before, every gap at least the configured minimum: otherwise the plan is refused (``ladder_geometry_unavailable``);
+  it is never repaired by moving a price. The risk leg is the planner's own trade-off leg: when it would sit within the minimum of an entry leg it is not
+  declared (the plan keeps its ladder), so it can never become a second order at the same price. Scalps and every other instrument are untouched.
+  """
+  if (
+    str(getattr(match, "symbol", "") or "").upper() not in {"XAU", "XAUUSD"}
+    or len(entry.legs) < 2
+    or is_scalp_strategy(
+      str(getattr(match, "strategy", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or "") or None,
+    )
+    or str(getattr(match, "family", "") or "").casefold() == "scalp"
+  ):
+    return entry, risk_leg
+  spacing = ladder_settings(cfg).min_spacing_price(pip_size)
+  problem = ladder_geometry_problem(direction, [leg.price for leg in entry.legs], min_spacing=spacing)
+  if problem is not None:
+    raise TradePlanBuildRejected(
+      LADDER_UNAVAILABLE,
+      f"XAU ladder legs {[str(leg.price) for leg in entry.legs]} are not a valid ladder ({problem}; minimum spacing {spacing})",
+      {**measured, "ladder_problem": problem, "min_leg_spacing": str(spacing)},
+    )
+  if risk_leg is not None and any(abs(risk_leg.price - leg.price) < spacing for leg in entry.legs):
+    risk_leg = None
+  return replace(entry, risk_leg=risk_leg, min_leg_spacing=spacing), risk_leg
 
 
 def _equal_close_ratios(count: int) -> tuple[Decimal, ...]:
@@ -556,6 +592,10 @@ def build_trade_plan_from_strategy_match(
     # on the measured payload and never deny publication. Hard contract
     # failures (missing route/stop) still reject below.
     measured = dict(evaluation.measured)
+    if not evaluation.allowed and evaluation.reason_code in PLANNING_REJECTIONS:
+      # ZL-1: a zone too thin to be an entry zone, or one that cannot hold a price ladder, is refused under its own code (the worker rejects it at the gate before
+      # this point; a direct caller must see the same reason, not a missing stop).
+      raise TradePlanBuildRejected(evaluation.reason_code, evaluation.message, measured)
   if same_direction_stack:
     from app.autotrade.active_exposure import apply_same_direction_stack_sizing
 
@@ -867,6 +907,9 @@ def build_trade_plan_from_strategy_match(
   )
   if risk_leg is not None:
     entry = replace(entry, risk_leg=risk_leg)
+  entry, risk_leg = _declare_ladder_spacing(
+    entry, risk_leg=risk_leg, match=match, direction=direction, pip_size=pip_size, cfg=cfg_resolved, measured=measured,
+  )
 
   closes_at_first_target = (
     len(targets) == 1

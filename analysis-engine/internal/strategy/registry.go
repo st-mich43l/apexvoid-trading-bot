@@ -42,6 +42,9 @@ type Evaluation struct {
 	// Refusals counts, per strategy, the structures it refused in this evaluation by the strategy's own reason and the timeframe the structure was found
 	// on (nil when none). A strategy that owns its refusal reasons reports them through RefusalReporter.
 	Refusals map[StrategyID]map[Refusal]int64
+	// Zones is, per strategy that reports its zones' lifecycle (ZoneReporter), the verdict of this evaluation on the zones of the frames it read. The engine
+	// retires the opportunities resting on a zone the verdict calls terminal (nil when no strategy reported).
+	Zones map[StrategyID]opportunity.ZoneLiveness
 }
 
 // Refusal is one reason a strategy refused a structure, and the timeframe the structure lives on.
@@ -54,6 +57,13 @@ type Refusal struct {
 // Evaluate; a reporter never influences an evaluation.
 type RefusalReporter interface {
 	TakeRefusals() map[Refusal]int64
+}
+
+// ZoneReporter is implemented by a strategy whose opportunities rest on a zone it detects itself (supply, demand, order block, fair value gap). After every
+// Evaluate it reports which of those zones are still zones and which it judged finished, so that a zone's lifecycle governs the lifecycle of the
+// opportunities on it. ok is false when the strategy read no frame. The registry drains the verdict after every evaluation; a reporter never influences one.
+type ZoneReporter interface {
+	TakeZoneLiveness() (opportunity.ZoneLiveness, bool)
 }
 
 // StopBudgetReporter is implemented by a strategy that refuses a structural stop wider than the instrument cap. The registry drains the count after
@@ -246,6 +256,14 @@ func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Ti
 					result.UnsweptRefused = make(map[StrategyID]int)
 				}
 				result.UnsweptRefused[registered.config.ID] += int(n)
+			}
+		}
+		if reporter, ok := registered.strategy.(ZoneReporter); ok {
+			if liveness, reported := reporter.TakeZoneLiveness(); reported {
+				if result.Zones == nil {
+					result.Zones = make(map[StrategyID]opportunity.ZoneLiveness)
+				}
+				result.Zones[registered.config.ID] = liveness
 			}
 		}
 		if reporter, ok := registered.strategy.(RefusalReporter); ok {

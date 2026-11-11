@@ -224,7 +224,12 @@ instrument_packs:
       max_pips: 70
       # PR-E1: when the structural stop is wider than max_pips from the proximal edge of the entry band, the band is cut to the part within the cap
       # (the stop stays where structure puts it); a cut band narrower than this is refused.
-      deep_entry_minimum_width_pips: 3.0
+      # ZL-1: a non-scalping XAU opportunity needs a real entry zone of at least 30 pips (3.00 price units at pip_size 0.1), so a cut band thinner than that is
+      # refused too (it was 3.0).
+      deep_entry_minimum_width_pips: 30.0
+      # ZL-1: the narrowest entry zone a non-scalping XAU opportunity may publish. The zone is what the strategy found, never stretched toward the stop and never
+      # paired with a stop moved to make room: a thinner zone is refused (entry_zone_below_minimum_width). A scalp may enter at one price and is exempt.
+      min_entry_zone_width_pips: 30.0
       sl_distance: 10.0
     activation:
       trigger_maximum_age_bars: 3

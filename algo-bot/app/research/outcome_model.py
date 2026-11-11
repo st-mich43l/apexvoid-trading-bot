@@ -38,6 +38,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Callable
 
+from app.analysis_client.models import GO_EXPIRY_REASONS
 from app.research.bar_store import TIMEFRAME_SECONDS, find_gaps
 
 LABELLER_VERSION = "outcome-labeller-1"
@@ -212,7 +213,7 @@ def spec_from_rows(creation: dict, terminal: dict | None, *, pip: float) -> tupl
     reason = str((terminal.get("payload") or {}).get("reason_code") or "")
     terminal_reason = reason or None
     stamp = (terminal.get("payload") or {}).get("invalidated_at") or terminal.get("occurred_at")
-    if stamp is not None and reason.upper() != "SETUP_EXPIRED":
+    if stamp is not None and reason.upper() not in GO_EXPIRY_REASONS:
       terminal_at = int(stamp)
   version = components.get("quality_model_version")
   spec = OpportunitySpec(

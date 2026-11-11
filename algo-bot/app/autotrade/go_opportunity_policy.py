@@ -44,7 +44,7 @@ from app.analysis_client.provenance import (
   CATALOG_STRATEGY_IDS,
 )
 from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
-from app.analysis_client.models import ArbitrationEnvelope, InvalidationEnvelope, OpportunityEnvelope
+from app.analysis_client.models import GO_EXPIRY_REASONS, ArbitrationEnvelope, InvalidationEnvelope, OpportunityEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
 from app.autotrade import scalp_outcome, units
 from app.autotrade.go_containment import (
@@ -655,7 +655,7 @@ class GoOpportunityPolicy:
     # owns an outcome: no order was ever attempted. First outcome wins, so a published or rejected
     # one keeps its own.
     started = None if record is None else record.created_at
-    if str(payload.reason_code).upper() == "SETUP_EXPIRED":
+    if str(payload.reason_code).upper() in GO_EXPIRY_REASONS:
       await self._scalp_outcome(
         profile, payload, scalp_outcome.WAITING_RETEST_EXPIRED, None, started_at=started,
       )
@@ -667,7 +667,7 @@ class GoOpportunityPolicy:
     # What the invalidation event itself knows, in the legacy vocabulary the outcome uses.
     event_source = SimpleNamespace(strategy=profile.legacy_strategy, structural_source=f"go:{profile.catalog_id}")
     if record is not None and record.state not in _TERMINAL_OR_LIVE:
-      target = EXPIRED if payload.reason_code.upper() == "SETUP_EXPIRED" else INVALIDATED
+      target = EXPIRED if payload.reason_code.upper() in GO_EXPIRY_REASONS else INVALIDATED
       try:
         # The reason is stored on the setup itself, so a projection that fails here - or a
         # restart before it is retried - can still restore the original Go reason.
@@ -692,7 +692,7 @@ class GoOpportunityPolicy:
     # unfilled plan alive. The cancel intent is a tombstone (also stops a plan
     # being published concurrently); open positions are never touched.
     if len(kept) != len(matches) or record is not None:
-      expired = payload.reason_code.upper() == "SETUP_EXPIRED"
+      expired = payload.reason_code.upper() in GO_EXPIRY_REASONS
       await request_plan_cancel(
         client, plan_id_for_match(match_id), reason=payload.reason_code.lower(),
         source=SOURCE_EXPIRED if expired else SOURCE_INVALIDATED,

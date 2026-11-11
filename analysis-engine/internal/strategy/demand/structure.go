@@ -6,6 +6,8 @@ import (
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
 // The demand zone and its lifecycle, defined here and judged on the bars of the frame the zone was found on.
@@ -258,6 +260,14 @@ func notInvalidated(low float64, bars []market.Candle, origin int, atr, pip floa
 	return true
 }
 
+// endReason names why a zone that is spent is finished: invalidated when price was accepted beyond it, otherwise mitigated (touched past its limit).
+func endReason(low float64, bars []market.Candle, origin int, atr, pip float64) opportunity.ReasonCode {
+	if !notInvalidated(low, bars, origin, atr, pip) {
+		return opportunity.ReasonZoneInvalidated
+	}
+	return opportunity.ReasonZoneMitigated
+}
+
 // spent: a zone that was touched and has either taken too many touches or been invalidated.
 func spent(mitigated bool, touches int, low float64, bars []market.Candle, origin int, atr, pip float64) bool {
 	if !mitigated {
@@ -280,11 +290,12 @@ func clipEntry(low, high, maxWidth float64) (float64, float64, bool) {
 // structureInstances are the demand zones of one structure frame that are still zones: not spent, not invalidated, a real width. Where price is now is not
 // asked here (a structure is a fact). higher are this strategy's own zones on the frames above this one (a zone inside one scores the higher-timeframe
 // points); the second result is every zone this frame holds, for the frame below.
-func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, execBars []market.Candle, higher []band) ([]instance, []band) {
+func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, execBars []market.Candle, higher []band, verdict *strategyutil.ZoneVerdict) ([]instance, []band) {
 	bars := frame.Bars
 	if len(bars) < 10 {
 		return nil, nil
 	}
+	verdict.Frame(tf)
 	atr := medianATR(frame.ATR)
 	zones := s.detectZones(bars, frame.ATR)
 	markTouches(zones, bars)
@@ -307,7 +318,12 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	pip := s.cfg.PipSize
 	var out []instance
 	for _, z := range zones {
+		id := ""
+		if z.Origin >= 0 && z.Origin < len(bars) {
+			id = zoneID(tf, bars[z.Origin].Time)
+		}
 		if spent(z.Mitigated, z.Touches, z.Low, bars, z.Origin, atr, pip) {
+			verdict.Terminal(id, endReason(z.Low, bars, z.Origin, atr, pip))
 			continue
 		}
 		in := instance{
@@ -320,8 +336,10 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 			in.Low, in.High = low, high
 		}
 		if spent(in.Mitigated, in.Touches, in.Low, bars, z.Origin, atr, pip) || !notInvalidated(in.Low, bars, z.Origin, atr, pip) {
+			verdict.Terminal(id, endReason(in.Low, bars, z.Origin, atr, pip))
 			continue
 		}
+		verdict.Live(id) // still a demand zone, whether or not it is wide enough to enter right now
 		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
 			continue
 		}

@@ -290,6 +290,10 @@ type Candidate struct {
 	// bucket from price geometry. Empty when a strategy has no such
 	// persistent object to offer (never fabricated).
 	StructuralID string
+	// ZoneID is the identity of the zone this setup rests on, set only by a strategy that reports that zone's lifecycle (ZoneLiveness): while the zone stands
+	// the setup may stand, and when the strategy judges the zone terminal the Book retires every live opportunity carrying its ID (Book.RetireByZones). Empty
+	// for every setup that rests on no zone, which no zone verdict ever touches. The zone's timeframe is StructureTimeframe (ObservedTimeframe when empty).
+	ZoneID string
 
 	Entry        EntryZone
 	Invalidation market.PriceLevel

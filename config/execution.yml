@@ -61,6 +61,14 @@ execution:
     equity_floor: 1000
     pips_from_stop: 15
 
+  # The XAU entry price ladder (60/20/20 over up to three prices, shared by Auto Algo and Manual /algo). ZL-1: every neighbouring pair of prices is at least
+  # min_leg_spacing_pips apart (10 pips = 1.00 on gold), judged on the prices rounded to the broker's digits; spread_across_zone lays the legs from the shallow
+  # edge (or the live quote inside the zone) to the zone's far edge instead of a fixed step. A zone that cannot hold the ladder is refused
+  # (ladder_geometry_unavailable), never given a repeated price. xau_ladder.py; contracts/autotrade/trade-plan-v8.json carries the spacing to the executor.
+  xau_ladder:
+    min_leg_spacing_pips: 10
+    spread_across_zone: true
+
   scaling:
     add:
       min_stop_pips: 30

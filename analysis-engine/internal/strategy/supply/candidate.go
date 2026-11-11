@@ -81,6 +81,7 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 		return opportunity.Candidate{}, false
 	}
 	candidate.StructuralID = d.id
+	candidate.ZoneID = d.id
 	if d.inst.Timeframe != "" {
 		candidate.StructureTimeframe = d.inst.Timeframe
 	}

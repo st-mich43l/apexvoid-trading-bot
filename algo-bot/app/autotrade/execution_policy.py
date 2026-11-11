@@ -18,7 +18,7 @@ from app.analysis_client.provenance import (
 )
 from app.autotrade.go_containment import STRUCTURE_TIMEFRAME_TAG
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan
-from app.autotrade.xau_ladder import XAU_DIGITS, round_price as round_xau_price
+from app.autotrade.xau_ladder import XAU_DIGITS, ladder_settings, round_price as round_xau_price
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   approximate_structural_stop_price,
@@ -160,15 +160,13 @@ def _instrument_volume_multiplier(instrument_cfg: Any) -> float:
 # Version of the entry-plan contract (`planned_execution_route`,
 # `planned_entry_price`, `planned_leg_entry_prices`) shared with the executor.
 ENTRY_PLAN_VERSION = 1
-XAU_FVG_EXECUTION_MIN_PIPS = 30
-# Every XAU zone strategy trades a band of 30 to 50 pips (owner 2026-10-09): a thinner Go
-# zone is widened toward the stop to 30, a wider one is trimmed to its 50 pips nearest the
-# near edge. The shallow leg stays at the near edge and the deep leg at the band midpoint.
+# Every XAU zone strategy trades a band of 30 to 50 pips (owner 2026-10-09). ZL-1: the band is the zone the analysis engine published. A zone wider than 50 pips is
+# trimmed to its 50 pips nearest the near edge (a real part of the structure, the stop untouched); a zone thinner than 30 is NEVER widened toward the stop (that
+# manufactured width, and moved the stop with it): the engine refuses it at publication (entry_zone_below_minimum_width) and this policy refuses it again as a
+# second line, for an opportunity published before the rule or by an engine that does not enforce it.
 XAU_ZONE_BAND_MIN_PIPS = 30
 XAU_ZONE_BAND_MAX_PIPS = 50
-# A Break & Retest band is a level (median 0.26 on XAU). Its XAU entry band is widened to
-# 50 pips toward the stop and laid out like Manual Algo's zone ladder.
-XAU_RETEST_EXECUTION_MIN_PIPS = 50
+ENTRY_ZONE_BELOW_MINIMUM_WIDTH = "entry_zone_below_minimum_width"
 
 ROUTE_MARKET = "market"
 ROUTE_SINGLE_LIMIT = "single_limit"
@@ -188,7 +186,7 @@ def _execution_entry_zone(
   """Return the policy-owned entry band while preserving raw Go structure.
 
   ``zone_band``: this XAU zone strategy trades a 30-50 pip band (see
-  XAU_ZONE_BAND_*). The band is reported as changed when it was widened or trimmed.
+  XAU_ZONE_BAND_*). A wider zone is trimmed to its 50 pips nearest the near edge and reported as changed; a thinner one is never widened.
   """
   raw_low = float(getattr(match, "entry_low", 0.0))
   raw_high = float(getattr(match, "entry_high", 0.0))
@@ -201,47 +199,28 @@ def _execution_entry_zone(
     or pip_size <= 0
   ):
     return raw_low, raw_high, False
-  legacy_kind = kind in {"fvg", "ifvg", "break_retest"}
-  if not legacy_kind and not zone_band:
+  if not zone_band or kind in {"fvg", "ifvg", "break_retest"}:
     return raw_low, raw_high, False
 
   direction = str(getattr(match, "direction", "") or "").upper()
-  if legacy_kind:
-    if kind == "break_retest":
-      desired_width = XAU_RETEST_EXECUTION_MIN_PIPS * pip_size
-    else:
-      configured_max = float(
-        instrument_cfg.strategies.technique.fvg.entry_max_width_price
-      )
-      desired_width = min(
-        configured_max,
-        XAU_FVG_EXECUTION_MIN_PIPS * pip_size,
-      )
-    max_width = None
-  else:
-    desired_width = XAU_ZONE_BAND_MIN_PIPS * pip_size
-    max_width = XAU_ZONE_BAND_MAX_PIPS * pip_size
-
+  max_width = XAU_ZONE_BAND_MAX_PIPS * pip_size
   width = raw_high - raw_low
-  if max_width is not None and width > max_width + 1e-12:
+  if width > max_width + 1e-12:
     # Trim the far edge: the band keeps its 50 pips nearest the near edge. The stop is
     # Go's invalidation and is not pulled in - a trimmed band never shrinks the risk.
     if direction == "BUY":
       return raw_high - max_width, raw_high, True
     if direction == "SELL":
       return raw_low, raw_low + max_width, True
-    return raw_low, raw_high, False
-  if width >= desired_width - 1e-12:
-    return raw_low, raw_high, False
+  return raw_low, raw_high, False
 
-  low, high = raw_low, raw_high
-  # The stop follows the band: plan_go_invalidation_stop moves Go's
-  # invalidation out by the same distance the band grows here.
-  if direction == "BUY":
-    low = min(low, high - desired_width)
-  elif direction == "SELL":
-    high = max(high, low + desired_width)
-  return low, high, (high - low) > (raw_high - raw_low + 1e-12)
+
+def entry_zone_minimum_width_pips(instrument_cfg: Any) -> float:
+  """The instrument's minimum entry-zone width in pips (0 when it has none or the configuration cannot say)."""
+  try:
+    return float(getattr(instrument_cfg, "entry_zone_min_width_pips", 0.0) or 0.0)
+  except (TypeError, ValueError):
+    return 0.0
 
 
 def _band_extension_pips(
@@ -579,6 +558,34 @@ def evaluate_execution_policy(
       and (policy.entry_distribution == "zone_scale" or retest_ladder)
     ),
   )
+  xau_non_scalp = (
+    symbol.upper() in {"XAU", "XAUUSD"}
+    and not is_m1_scalp_strategy(str(getattr(match, "strategy", "") or ""))
+    and not is_scalp_strategy(
+      str(getattr(match, "strategy", "") or ""),
+      strategy_mode=str(getattr(match, "strategy_mode", "") or ""),
+    )
+  )
+  minimum_zone_pips = entry_zone_minimum_width_pips(instrument_cfg)
+  if go_origin and xau_non_scalp and minimum_zone_pips > 0:
+    # The zone Go published is the zone: its width is measured as published (before any trim) and is never manufactured here.
+    published_pips = (
+      float(getattr(match, "entry_high", high)) - float(getattr(match, "entry_low", low))
+    ) / pip
+    if round(published_pips, 3) < minimum_zone_pips:
+      return ExecutionPolicyEvaluation(
+        False,
+        ENTRY_ZONE_BELOW_MINIMUM_WIDTH,
+        f"non-scalping XAU entry zone is {published_pips:.1f} pips, below the {minimum_zone_pips:g}-pip minimum; the zone is not widened",
+        True,
+        {
+          "entry_zone_pips": round(published_pips, 3),
+          "minimum_entry_zone_pips": minimum_zone_pips,
+          "entry_low": float(getattr(match, "entry_low", low)),
+          "entry_high": float(getattr(match, "entry_high", high)),
+        },
+        policy,
+      )
   confluence = int(getattr(match, "confluence", 0) or 0)
   # The width gate judges the structure Go found; the XAU retest ladder widens the
   # traded band on purpose, so measure it on Go's own band.
@@ -706,17 +713,21 @@ def evaluate_execution_policy(
       SCALP_MICRO_CLIPS,
     )),
     manual_xau_ladder=manual_xau_ladder,
+    ladder_settings=ladder_settings(instrument_cfg),
   )
   if not route_plan.valid:
     return ExecutionPolicyEvaluation(
       False,
-      "execution_route_unresolved",
+      route_plan.reject_code or "execution_route_unresolved",
       route_plan.reject_reason or "execution route could not be resolved",
       True,
       {
         "order_type_preference": policy.order_type_preference,
         "entry_distribution": entry_distribution,
         "routing_reason": route_plan.routing_reason,
+        "planned_zone_low": low,
+        "planned_zone_high": high,
+        "executable_quote": quote,
       },
       policy,
     )

@@ -38,6 +38,10 @@ const (
 	// ReasonStructureClosedThrough is the terminal reason of a live zone opportunity whose structure was closed through: a close of the structure's own
 	// timeframe went beyond its far edge by more than the strategy's break buffer (Book.InvalidateByStructureClose).
 	ReasonStructureClosedThrough ReasonCode = "STRUCTURE_CLOSED_THROUGH"
+	// ReasonZoneMitigated is the terminal reason of a live zone opportunity whose zone the strategy itself judged spent: touched past its limit, or filled.
+	ReasonZoneMitigated ReasonCode = "ZONE_MITIGATED"
+	// ReasonZoneExpired is the terminal reason of a live zone opportunity whose zone the strategy no longer holds at all (it left the frame's structure).
+	ReasonZoneExpired ReasonCode = "ZONE_EXPIRED"
 )
 
 // Terminal records the one technical terminal transition for a Record.
