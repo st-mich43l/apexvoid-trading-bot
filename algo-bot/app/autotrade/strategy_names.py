@@ -146,6 +146,22 @@ SETUP_TYPE_ALIASES: dict[str, str] = {
 }
 
 
+def side_zone_label(name: str | None, direction: str | None) -> str:
+  """The setup name a card shows. Display only: the strategy identity ("Supply Demand") is unchanged everywhere else.
+
+  The zone strategy is one identity for both sides, but a card reads as the zone the trade is in: a SELL is a Supply zone, a BUY a Demand zone
+  ("BUY · Demand", "SELL · Supply"), never both names at once. Any other name, and a zone name with no direction, is returned as it is.
+  """
+  text = str(name or "").strip()
+  if text.casefold() == SUPPLY_DEMAND.casefold():
+    side = str(direction or "").upper()
+    if side == "SELL":
+      return "Supply"
+    if side == "BUY":
+      return "Demand"
+  return text
+
+
 def resolve_strategy(raw: str | None) -> StrategyName | None:
   if raw is None:
     return None

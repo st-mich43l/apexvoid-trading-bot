@@ -10,7 +10,7 @@ from app.persistence.store import (
   insert_signal_post,
 )
 from app.signals.pips_format import rr_entry
-from app.autotrade.strategy_names import resolve_strategy
+from app.autotrade.strategy_names import resolve_strategy, side_zone_label
 from app.autotrade.trade_card import (
   format_entry_line,
   format_r_multiple,
@@ -45,6 +45,8 @@ def _setup_line(sig: dict) -> str | None:
   base, separator, suffix = setup.partition("·")
   strategy = resolve_strategy(base.strip())
   label = strategy.canonical if strategy is not None else base.strip()
+  # The zone strategy reads as the zone the trade is in: a BUY is Demand, a SELL is Supply (never "Supply Demand").
+  label = side_zone_label(label, sig.get("action"))
   if separator:
     label = f"{label} ·{suffix}"
   confluence = sig.get("confluence")
@@ -133,24 +135,61 @@ async def _send_sticker(
   return await send_sticker(sticker, channel_id, reply_to)
 
 
-async def delete_posts(posts: list[dict], *, personal: bool = False) -> None:
+def _already_gone(error: Exception) -> bool:
+  """Telegram says the message is not there any more: the delete has nothing left to do."""
+  return "message to delete not found" in str(error).lower()
+
+
+async def delete_posts(posts: list[dict], *, personal: bool = False) -> list[dict]:
   """Remove already-delivered channel messages for a hard-deleted signal.
 
   Best-effort: a post may already be gone or older than Telegram's 48h delete
-  window, so per-message failures are swallowed rather than aborting the rest.
-  ``personal=True`` deletes via the scanner/algo bot instead of the main
-  bot - a bot can only delete messages it itself sent, and a /1r trade's
-  posts were sent by the scanner bot (see broadcast_entry).
+  window, so per-message failures never abort the rest. ``personal=True``
+  deletes via the scanner/algo bot instead of the main bot - a bot can only
+  delete messages it itself sent, and a /1r trade's posts were sent by the
+  scanner bot (see broadcast_entry). Either bot is tried for every post (a
+  forwarded Premium card or a card posted by the other identity must not stay
+  behind for want of the right bot), and a message Telegram no longer has counts
+  as deleted.
+
+  Returns the posts that could NOT be deleted, each with the Telegram error, so
+  the caller can tell the owner instead of claiming the card is gone.
   """
-  deleter = delete_scanner_message if personal else delete_message
+  primary, fallback = (
+    (delete_scanner_message, delete_message) if personal else (delete_message, delete_scanner_message)
+  )
+  failed: list[dict] = []
   for post in posts:
-    try:
-      await deleter(post["channel_id"], post["message_id"])
-    except Exception:
-      log.warning(
-        "could not delete post %s/%s",
-        post.get("channel_id"), post.get("message_id"),
-      )
+    channel_id, message_id = post.get("channel_id"), post.get("message_id")
+    error: Exception | None = None
+    for deleter in (primary, fallback):
+      try:
+        await deleter(channel_id, message_id)
+        error = None
+        break
+      except Exception as exc:  # noqa: BLE001 - per-message, best-effort
+        if _already_gone(exc):
+          error = None
+          break
+        error = error or exc
+    if error is not None:
+      log.warning("could not delete post %s/%s: %s", channel_id, message_id, error)
+      failed.append({**post, "error": str(error)})
+  return failed
+
+
+async def _tell_owner_undeleted(failed: list[dict], what: str) -> None:
+  """Best-effort DM so a card that stayed in a channel is never silent."""
+  owner_id = runtime_config.telegram.telegram_owner_id
+  if not failed or not owner_id:
+    return
+  lines = [f"⚠️ {what}: {len(failed)} channel card(s) could not be deleted - delete them by hand:"]
+  for post in failed:
+    lines.append(f"• {post.get('channel_id')} / message {post.get('message_id')}: {escape(str(post.get('error') or ''))}")
+  try:
+    await send_with_retry("\n".join(lines), chat_id=int(owner_id))
+  except Exception:  # noqa: BLE001
+    log.warning("could not tell the owner about undeleted cards", exc_info=True)
 
 
 async def replace_entry_posts(
@@ -168,7 +207,8 @@ async def replace_entry_posts(
   signal_id = int(sig["id"])
   old_posts = await get_signal_posts(signal_id)
   if old_posts:
-    await delete_posts(old_posts, personal=bool(sig.get("personal_trade")))
+    failed = await delete_posts(old_posts, personal=bool(sig.get("personal_trade")))
+    await _tell_owner_undeleted(failed, f"#{sig.get('daily_seq') or signal_id} modified")
   await clear_signal_posts(signal_id)
   return await broadcast_entry(sig, render_fn=render_fn, sticker=sticker)
 
