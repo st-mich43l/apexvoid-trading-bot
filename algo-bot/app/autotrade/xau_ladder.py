@@ -62,7 +62,8 @@ def entry_leg_prices(
 
 
 # Owner decision 2026-11-06: the XAU entry ladder (Auto Algo and Manual /algo) divides the volume 60% / 20% / 20% over three prices.
-# ZL-1: the prices are distinct and meaningfully apart. They start at the shallow edge (the live quote when it is inside the zone) and spread toward the zone's far
+# ZL-1: the prices are distinct and meaningfully apart. The default is the original ladder, one price unit (the minimum spacing) between legs from the shallow edge (the
+# live quote when it is inside the zone); ``spread_across_zone`` (off) would instead spread toward the zone's far
 # edge (for a single-price manual zone, halfway to the stop): L1 near the proximal edge, L2 deeper, L3 deeper again, closer to the structural invalidation. Every
 # gap between neighbouring prices is at least ``min_spacing_pips`` (10 pips = 1.00 on gold), measured AFTER rounding to the broker's digits. Where three prices do
 # not fit the depth, two (60/40) do; where not even two fit, the ladder is unavailable (the Auto path rejects the plan: ``ladder_geometry_unavailable``; it never
@@ -84,14 +85,14 @@ class LadderSettings:
   """The configured ladder rules (``execution.xau_ladder`` in config/execution.yml)."""
 
   min_spacing_pips: Decimal = DEFAULT_MIN_SPACING_PIPS
-  spread_across_zone: bool = True
+  spread_across_zone: bool = False
 
   def min_spacing_price(self, pip_size: float | Decimal = XAU_PIP_SIZE) -> Decimal:
     return _d(self.min_spacing_pips) * _d(pip_size)
 
 
 def ladder_settings(cfg: object | None) -> LadderSettings:
-  """The ladder rules from the runtime config; the defaults (10 pips, spread across the zone) when the section is absent."""
+  """The ladder rules from the runtime config; the defaults (10 pips, one price unit per leg) when the section is absent."""
   section = getattr(getattr(cfg, "execution", None), "xau_ladder", None)
   if section is None:
     return LadderSettings()
@@ -99,7 +100,7 @@ def ladder_settings(cfg: object | None) -> LadderSettings:
   spread = getattr(section, "spread_across_zone", None)
   return LadderSettings(
     min_spacing_pips=DEFAULT_MIN_SPACING_PIPS if spacing is None else _d(spacing),
-    spread_across_zone=True if spread is None else bool(spread),
+    spread_across_zone=False if spread is None else bool(spread),
   )
 
 

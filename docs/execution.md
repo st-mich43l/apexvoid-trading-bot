@@ -234,8 +234,8 @@ otherwise the leg is written off as already gone.
     (`deep_entry_minimum_width_pips: 30`) or the strategy refuses. A scalp (`impulse_pullback`, `range_scalp`, `impulse_retrace`: the strategy's own declared kind) may
     enter at one price and is exempt; FX is unchanged.
   - **The ladder is price legs that are really different.** The legs start at the proximal edge, or at the live quote once price is inside the zone (never above the
-    quote for a BUY: a leg priced through the market is not a resting order), and spread to the zone's far edge (`xau_ladder.price_ladder`; 4300.00-4303.00 gives
-    4303.00 / 4301.50 / 4300.00). Every neighbouring pair is at least `execution.xau_ladder.min_leg_spacing_pips` (10 pips = 1.00) apart, **judged after rounding** to
+    quote for a BUY: a leg priced through the market is not a resting order), and step one price unit (1.00) per leg toward the far edge, the original ladder (`xau_ladder.price_ladder`; 4300.00-4303.00 gives
+    4303.00 / 4302.00 / 4301.00; `execution.xau_ladder.spread_across_zone: true` would spread the legs out to the far edge instead, off by default). Every neighbouring pair is at least `execution.xau_ladder.min_leg_spacing_pips` (10 pips = 1.00) apart, **judged after rounding** to
     the broker's digits and again after the card snaps the prices; where three prices do not fit, two (60/40) do; where not even two fit (a quote near the far edge, a
     zone price has gone through) the plan is refused with `ladder_geometry_unavailable`: no repeated price, no widened zone, no push outside the structure, no market
     legs, no larger risk, no silent single entry. The plan declares the spacing it checked in `entry.min_leg_spacing`, the executor re-checks it on receipt, and the
