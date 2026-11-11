@@ -157,7 +157,7 @@ merely remote or dormant, wide or weak, is live and untouched: distance is not i
 `maximum_zone_touches` stays an admission limit (it stops a new publication) and does not cancel a ladder whose own fill raised the count. Counter
 `go_opportunity_zone_retired{reason}`. Algo Bot receives the event like any other terminal one: the match leaves the live set, the setup becomes
 INVALIDATED/EXPIRED, and a durable cancel intent (a tombstone, written even before the plan exists) makes the executor withdraw every unfilled leg; filled legs are
-positions and keep their stop and TP management. Not covered: key level, trendline, break and retest, CRT, iFVG, flip zone, confluence zone, round number, asia range
+positions and keep their stop and TP management. Trendline reports the same verdict for its lines (TL-LIVE-2: `TRENDLINE_BROKEN`; a line the frame no longer holds expires). Not covered: key level, break and retest, CRT, iFVG, flip zone, confluence zone, round number, asia range
 and shock retest keep their own invalidation (their identities are theses, not zones the strategy re-detects).
 
 Beyond its zone, a published opportunity lives until a

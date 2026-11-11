@@ -255,6 +255,38 @@ type TechnicalContext struct {
 	Confluence *ConfluenceContext
 }
 
+// ExecutionModel says how an opportunity is traded: as an entry ZONE (the default: the entry band is where orders are laid, a ladder on XAU) or at ONE
+// price (SinglePrice). It is a typed contract, never inferred from the strategy's name.
+type ExecutionModel string
+
+const (
+	ExecutionZone        ExecutionModel = "zone"
+	ExecutionSinglePrice ExecutionModel = "single_price"
+)
+
+// SinglePriceStrategies are the strategies the owner has approved to declare ExecutionSinglePrice (TL-LIVE-2: Trendline). Declaring it from any other strategy is a
+// contract violation, so the model can never become a way around the entry-zone rules.
+var SinglePriceStrategies = map[StrategyID]bool{"trendline": true}
+
+// SinglePriceExecution is the executable entry of a ONE-PRICE opportunity, kept apart from Candidate.Entry, which stays the technical interaction corridor
+// (where a touch is detected). The price is read from the projected line and is valid only for a bounded time: a projected line moves with every bar, so an old
+// static price must not stay executable after the line has materially moved.
+//
+//	Price        the line's projected value at ProjectedAt, computed only from closed bars (the opportunity's own observation bar and earlier).
+//	Timeframe    the timeframe whose bars the line lives on and the projection step is measured in.
+//	ProjectedAt  Unix seconds: the open of the bar after the observation bar, the first instant an order resting at Price is meaningful.
+//	ValidUntil   Unix seconds: the entry is stale from here on (the opportunity expires, an unfilled order is withdrawn). It is never later than ExpiresAt.
+//	Proximity    price units: how far beyond Price (against the trade) the live quote may be before the line is treated as already passed, never chased.
+//	SlopePerBar  price units the line moves per bar (signed), the fact the validity window was bounded with.
+type SinglePriceExecution struct {
+	Price       float64
+	Timeframe   market.Timeframe
+	ProjectedAt int64
+	ValidUntil  int64
+	Proximity   float64
+	SlopePerBar float64
+}
+
 // Candidate is one strategy's technical opportunity, as of the source
 // task's §24.
 type Candidate struct {
@@ -330,6 +362,16 @@ type Candidate struct {
 	// A nil value means the consumer must fail closed the same way a nil
 	// Technical does; it is never fabricated from a hardcoded default.
 	StopEnvelope *StopEnvelope
+	// Execution is non-nil only for a ONE-PRICE opportunity (ExecutionSinglePrice); nil means the entry zone is traded as a zone. See SinglePriceExecution.
+	Execution *SinglePriceExecution
+}
+
+// ExecutionModel is the typed model of this candidate.
+func (c Candidate) ExecutionModel() ExecutionModel {
+	if c.Execution != nil {
+		return ExecutionSinglePrice
+	}
+	return ExecutionZone
 }
 
 // StopEnvelope is the technical stop-distance bounds for one candidate —
@@ -481,11 +523,46 @@ func (c Candidate) Validate() error {
 	if c.Provenance.StructureVersion == "" || c.Provenance.LiquidityVersion == "" || c.Provenance.ZoneVersion == "" || c.Provenance.ConfigVersion <= 0 || c.Provenance.ConfigFingerprint == "" {
 		return fmt.Errorf("opportunity: complete analytical and configuration provenance is required")
 	}
+	if c.Execution != nil {
+		if err := c.validateSinglePrice(); err != nil {
+			return err
+		}
+	}
 	if c.StopEnvelope != nil {
 		e := c.StopEnvelope
 		if !finite(e.FloorPips) || !finite(e.CapPips) || !finite(e.DesiredMinimumPips) || e.FloorPips <= 0 || e.CapPips < e.FloorPips || e.DesiredMinimumPips < e.FloorPips || e.Source == "" {
 			return fmt.Errorf("opportunity: stop envelope needs a positive floor, a cap at or above the floor, and a desired minimum at or above the floor")
 		}
+	}
+	return nil
+}
+
+// validateSinglePrice is the contract of a one-price opportunity: an approved strategy, a finite price inside the interaction corridor and on the right side of
+// the invalidation and the targets, a projection that is of the future (after the observation, so it uses no later bar), and a validity window that ends inside the
+// opportunity's own life.
+func (c Candidate) validateSinglePrice() error {
+	x := c.Execution
+	if !SinglePriceStrategies[c.Strategy] {
+		return fmt.Errorf("opportunity: strategy %q may not declare a single-price execution", c.Strategy)
+	}
+	if !finite(x.Price) || !finite(x.Proximity) || x.Proximity < 0 || !finite(x.SlopePerBar) {
+		return fmt.Errorf("opportunity: single-price execution needs a finite price, proximity and slope")
+	}
+	if _, ok := x.Timeframe.Minutes(); !ok {
+		return fmt.Errorf("opportunity: single-price execution timeframe is invalid")
+	}
+	if x.Price < c.Entry.Low || x.Price > c.Entry.High {
+		return fmt.Errorf("opportunity: single-price execution price must lie inside the interaction corridor")
+	}
+	invalidation := float64(c.Invalidation.Price)
+	if c.Direction == market.Buy && !(x.Price > invalidation) || c.Direction == market.Sell && !(x.Price < invalidation) {
+		return fmt.Errorf("opportunity: single-price execution price must be on the entry side of the invalidation")
+	}
+	if x.ProjectedAt <= c.CreatedAt {
+		return fmt.Errorf("opportunity: single-price execution must be projected for a bar after the observation")
+	}
+	if x.ValidUntil <= x.ProjectedAt || x.ValidUntil > c.ExpiresAt {
+		return fmt.Errorf("opportunity: single-price execution must be valid after its projection and no later than the opportunity expires")
 	}
 	return nil
 }
@@ -510,6 +587,10 @@ func AtFirstObservation(candidate Candidate, observedAt int64) (Candidate, error
 	}
 	candidate.CreatedAt = observedAt
 	candidate.ExpiresAt = observedAt + ttl
+	if candidate.Execution != nil && candidate.Execution.ValidUntil < candidate.ExpiresAt {
+		// A projected entry is stale from ValidUntil: the opportunity ends there (an unfilled order is withdrawn), however long the strategy's own TTL is.
+		candidate.ExpiresAt = candidate.Execution.ValidUntil
+	}
 	return candidate, candidate.Validate()
 }
 

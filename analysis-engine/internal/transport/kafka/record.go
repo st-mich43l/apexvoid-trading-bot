@@ -34,6 +34,20 @@ type OpportunityPayload struct {
 	// strategy family; consumers fall back to their own legacy envelope
 	// lookup rather than fabricating one.
 	StopEnvelope *StopEnvelopePayload `json:"stop_envelope,omitempty"`
+	// Execution declares how the opportunity is traded. Omitted for the default (an entry zone); present, with model "single_price", for a one-price opportunity
+	// (TL-LIVE-2: Trendline). Consumers that do not know it must refuse such an event, never trade its corridor as a zone.
+	Execution *ExecutionPayload `json:"execution,omitempty"`
+}
+
+// ExecutionPayload mirrors opportunity.SinglePriceExecution.
+type ExecutionPayload struct {
+	Model       string  `json:"model"`
+	Price       float64 `json:"price"`
+	Timeframe   string  `json:"timeframe"`
+	ProjectedAt int64   `json:"projected_at"`
+	ValidUntil  int64   `json:"valid_until"`
+	Proximity   float64 `json:"proximity"`
+	SlopePerBar float64 `json:"slope_per_bar"`
 }
 
 // StructurePayload mirrors opportunity.StructureZone.

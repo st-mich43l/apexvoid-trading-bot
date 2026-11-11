@@ -281,6 +281,7 @@ otherwise the leg is written off as already gone.
   up). EURUSD and GBPUSD use $10 per lot per pip, USDJPY and GBPJPY their `contract.pip_value_per_lot`. Before this, FX used the equity table x 1.5 (0.18 lot at
   $1,000-$2,000), which risked 1.6-3.7% depending on the stop. XAU keeps the equity table; scalps keep their own sizing. The plan's `risk.risk_percent` and
   `sizing.mode` carry the rule, so a card shows what the executor will use.
+- **Trendline** (M5 and M15, all instruments) is the one strategy traded at **one price** (TL-LIVE-2, `docs/strategies/trendline.md`): the plan is a single resting `single_limit` at the projected line (its `execution.price`), valid until the projection goes stale (`entry.expires_at`), never chased (`entry.proximity`), with no ladder, no risk leg, no zone and no card rounding. The XAU 30-pip zone minimum and the ladder rules do not apply to it, and it is not a scalp: the instrument stop envelope, targets, exposure and overlap rules are the intraday ones.
 - **Scalps** (`impulse_pullback`, `range_scalp`, `impulse_retrace`) keep their own M1 stop book and ladder; XAU-only.
   **The scalp stop is capped at 40 pips** (SCALP-R40; `auto_algo.strategies.scalping.stop`: minimum 30, maximum 40). 40 is a hard eligibility limit on the planned stop,
   measured from every planned executable leg (the worst entry included) to the absolute SL at broker precision: not a target distance and not a risk percentage.

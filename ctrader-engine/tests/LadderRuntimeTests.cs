@@ -9,7 +9,7 @@ public class LadderRuntimeTests
   private const string PlanId = "v8:zl1-ladder";
   private static readonly SymbolInfo Xau = new("XAU", "XAUUSD", 1, 2, 1, 100, 100, 100000, 10000);
 
-  private sealed class FakeStore : IAutoTradeStore
+  internal sealed class FakeStore : IAutoTradeStore
   {
     public readonly Dictionary<string, string> Values = new();
     public readonly List<TradeStreamEntry> Stream = new();
@@ -41,7 +41,7 @@ public class LadderRuntimeTests
     }
   }
 
-  private sealed class FakeBroker : ICTraderTradeClient
+  internal sealed class FakeBroker : ICTraderTradeClient
   {
     private long _next = 100;
     public readonly List<MarketOrderRequest> Market = new();

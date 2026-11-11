@@ -227,6 +227,17 @@ class StrategyMatch:
   structure_low: float | None = None
   structure_high: float | None = None
   structure_formed_at: int | None = None
+  # TL-LIVE-2: how the setup is traded. "zone" (default, and every older cached match) trades entry_low..entry_high as a zone. "single_price" (Trendline only) trades
+  # execution_price alone: entry_low == entry_high == execution_price, and the technical interaction corridor Go detected the touch in is kept in interaction_low/high
+  # for display. The price is stale from execution_valid_until; execution_proximity is how far beyond it, against the trade, the quote may be before it is never chased.
+  execution_model: str = "zone"
+  execution_price: float | None = None
+  execution_timeframe: str | None = None
+  execution_projected_at: int | None = None
+  execution_valid_until: int | None = None
+  execution_proximity: float | None = None
+  interaction_low: float | None = None
+  interaction_high: float | None = None
 
   def to_json(self) -> str:
     return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
@@ -755,6 +766,35 @@ class StrategyMatch:
           None if payload.get("structure_formed_at") is None
           else int(payload["structure_formed_at"])
         ),
+        execution_model=str(payload.get("execution_model") or "zone"),
+        execution_price=(
+          None if payload.get("execution_price") is None
+          else float(payload["execution_price"])
+        ),
+        execution_timeframe=(
+          None if payload.get("execution_timeframe") is None
+          else str(payload["execution_timeframe"]).upper()
+        ),
+        execution_projected_at=(
+          None if payload.get("execution_projected_at") is None
+          else int(payload["execution_projected_at"])
+        ),
+        execution_valid_until=(
+          None if payload.get("execution_valid_until") is None
+          else int(payload["execution_valid_until"])
+        ),
+        execution_proximity=(
+          None if payload.get("execution_proximity") is None
+          else float(payload["execution_proximity"])
+        ),
+        interaction_low=(
+          None if payload.get("interaction_low") is None
+          else float(payload["interaction_low"])
+        ),
+        interaction_high=(
+          None if payload.get("interaction_high") is None
+          else float(payload["interaction_high"])
+        ),
       )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
       return None
@@ -834,7 +874,26 @@ def _identity_ok(match: StrategyMatch) -> bool:
   )
 
 
+def is_single_price_match(match: Any) -> bool:
+  """True when the match declares the typed one-price execution (TL-LIVE-2). The declared model, not the strategy name, decides."""
+  return (
+    str(getattr(match, "execution_model", "zone") or "zone") == "single_price"
+    and getattr(match, "execution_price", None) is not None
+  )
+
+
 def _valid_match(match: StrategyMatch) -> bool:
+  if match.execution_model not in {"zone", "single_price"}:
+    return False
+  if match.execution_model == "single_price" and not (
+    match.execution_price is not None
+    and math.isfinite(match.execution_price)
+    and match.execution_valid_until is not None
+    and match.execution_projected_at is not None
+    and match.execution_proximity is not None
+    and match.entry_low == match.entry_high == match.execution_price
+  ):
+    return False
   numeric = (
     match.key_level,
     match.entry_low,

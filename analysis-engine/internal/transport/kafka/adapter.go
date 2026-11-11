@@ -62,8 +62,15 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 	if c.Structure != nil {
 		structurePayload = &StructurePayload{Timeframe: string(c.Structure.Timeframe), Low: c.Structure.Low, High: c.Structure.High, FormedAt: c.Structure.FormedAt}
 	}
+	var execution *ExecutionPayload
+	if x := c.Execution; x != nil {
+		execution = &ExecutionPayload{
+			Model: string(opportunity.ExecutionSinglePrice), Price: x.Price, Timeframe: string(x.Timeframe),
+			ProjectedAt: x.ProjectedAt, ValidUntil: x.ValidUntil, Proximity: x.Proximity, SlopePerBar: x.SlopePerBar,
+		}
+	}
 	return OpportunityPayload{
-		TechnicalContext: technical, StopEnvelope: stopEnvelope, Structure: structurePayload,
+		Execution: execution, TechnicalContext: technical, StopEnvelope: stopEnvelope, Structure: structurePayload,
 		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), StructureTimeframe: string(c.StructureTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},

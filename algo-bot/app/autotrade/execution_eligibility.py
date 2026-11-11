@@ -94,7 +94,7 @@ class ExecutionEligibility:
           result.planned_entry_price,
         )
       )
-      or result.entry_high <= result.entry_low
+      or result.entry_high < result.entry_low  # equal: a one-price entry (TL-LIVE-2)
       or result.state not in {STATIC_ELIGIBLE, ANALYSIS_ONLY}
       or result.allowed == result.hard_block
       or result.allowed != (result.state == STATIC_ELIGIBLE)

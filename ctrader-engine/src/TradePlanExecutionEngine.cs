@@ -166,13 +166,42 @@ public static class TradePlanExecutionEngine
       TradePlanContract.EntryTypeMarket =>
         EvaluateMarket(plan, bid, ask, spreadTicks, tickSize),
       TradePlanContract.EntryTypeSingleLimit =>
-        new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit),
+        EvaluateSingleLimit(plan, bid, ask),
       TradePlanContract.EntryTypeLimitLadder =>
         EvaluateLadder(plan, bid, ask, tickSize),
       TradePlanContract.EntryTypeMarketWithLimitScale =>
         EvaluateLadder(plan, bid, ask, tickSize),
       _ => new TradePlanEntryDecision(TradePlanEntryAction.Wait, "unknown_entry_type"),
     };
+  }
+
+  /// <summary>
+  /// TL-LIVE-2: a one-price limit that declares a proximity is never chased. The
+  /// limit is price-protected (a BUY limit at the line fills at the line or
+  /// better), but once the executable quote has moved beyond the line against
+  /// the trade by more than the declared proximity, price has left the line:
+  /// the order is not submitted (and the plan expires with its projection).
+  /// Without a declared proximity the entry is submitted as before.
+  /// </summary>
+  private static TradePlanEntryDecision EvaluateSingleLimit(
+    TradePlan plan,
+    decimal bid,
+    decimal ask
+  )
+  {
+    if (plan.Entry.Proximity is decimal proximity && plan.Entry.OrderPrice is decimal price)
+    {
+      var buy = string.Equals(plan.Analysis.Direction, "BUY", StringComparison.OrdinalIgnoreCase);
+      var beyond = buy ? ask < price - proximity : bid > price + proximity;
+      if (beyond)
+      {
+        return new TradePlanEntryDecision(
+          TradePlanEntryAction.Wait,
+          "entry_beyond_projected_line"
+        );
+      }
+    }
+    return new TradePlanEntryDecision(TradePlanEntryAction.SubmitLimit);
   }
 
   /// <summary>

@@ -2,6 +2,7 @@ package opportunity
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
@@ -72,6 +73,13 @@ func NormalizeGeometry(candidate Candidate, geometry market.Geometry) (Candidate
 	}
 	candidate.Invalidation.Price = market.Price(invalid)
 	candidate.Targets = targets
+	if candidate.Execution != nil {
+		// The executable price is the projected line itself: it moves by at most half a tick (to the nearest tick, never toward a safer side), and stays inside the
+		// corridor, which only ever widened above.
+		execution := *candidate.Execution
+		execution.Price = math.Min(candidate.Entry.High, math.Max(candidate.Entry.Low, geometry.RoundToTick(execution.Price)))
+		candidate.Execution = &execution
+	}
 	if err := candidate.Validate(); err != nil {
 		return Candidate{}, fmt.Errorf("opportunity: normalized candidate is invalid: %w", err)
 	}

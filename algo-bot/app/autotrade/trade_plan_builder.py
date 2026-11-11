@@ -29,12 +29,13 @@ from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
 from app.autotrade.execution_policy import ENTRY_ZONE_BELOW_MINIMUM_WIDTH, evaluate_execution_policy
+from app.autotrade.execution_route import ENTRY_BEYOND_PROJECTED_LINE, PROJECTION_STALE
 from app.analysis_client.provenance import GO_ORIGIN_TAG
 from app.autotrade.card_prices import snap_measured_to_card_prices
 from app.autotrade.risk_leg import plan_risk_leg
 from app.autotrade.xau_ladder import LADDER_UNAVAILABLE, ladder_geometry_problem, ladder_settings
 from app.autotrade.strategy_catalog import exposure_lane
-from app.autotrade.strategy_match import StrategyMatch
+from app.autotrade.strategy_match import StrategyMatch, is_single_price_match
 from app.autotrade.protective_stop import scalp_stop_limits
 from app.autotrade.strategy_taxonomy import is_m1_scalp_strategy, is_scalp_strategy
 from app.autotrade.trade_plan import (
@@ -60,7 +61,7 @@ from app.autotrade.trade_plan import (
 )
 
 
-PLANNING_REJECTIONS = frozenset({ENTRY_ZONE_BELOW_MINIMUM_WIDTH, LADDER_UNAVAILABLE})
+PLANNING_REJECTIONS = frozenset({ENTRY_ZONE_BELOW_MINIMUM_WIDTH, LADDER_UNAVAILABLE, PROJECTION_STALE, ENTRY_BEYOND_PROJECTED_LINE})
 
 
 class TradePlanBuildRejected(Exception):
@@ -375,12 +376,15 @@ def _build_entry(
       max_slippage_ticks=max_slippage_ticks,
     )
   if route == "single_limit":
+    single_price = measured.get("execution_model") == "single_price"
     return TradePlanEntry(
       type=ENTRY_TYPE_SINGLE_LIMIT,
       expires_at=expires_at,
       order_price=Decimal(str(measured["planned_entry_price"])),
       max_spread_ticks=max_spread_ticks,
       max_slippage_ticks=max_slippage_ticks,
+      # TL-LIVE-2: the executor never submits a one-price limit once the quote has left the line by more than this (price units), however long the plan has been waiting.
+      proximity=Decimal(str(measured["execution_proximity"])) if single_price and measured.get("execution_proximity") is not None else None,
     )
   if route == "market_with_limit_scale":
     leg_prices = measured.get("planned_leg_entry_prices") or []
@@ -587,6 +591,7 @@ def build_trade_plan_from_strategy_match(
       opposing_zone_id=opposing_zone_id,
       executable_quote=executable_quote,
       trigger_wick_extreme=trigger_wick_extreme,
+      now=now_ts,
     )
     # Builder plans geometry/stop/route only. Preference misses are telemetry
     # on the measured payload and never deny publication. Hard contract
@@ -709,6 +714,10 @@ def build_trade_plan_from_strategy_match(
   published_expires_at = (
     int(match.expires_at) if now_ts is None else int(now_ts) + ttl_seconds
   )
+  if is_single_price_match(match):
+    # TL-LIVE-2: a projected price is valid until the instant Go published and not a second longer. Re-anchoring the window to publication time (above) would keep a
+    # stale line's order alive, so a one-price plan expires exactly at valid_until and the executor withdraws an unfilled order then.
+    published_expires_at = int(match.execution_valid_until)
 
   formation_bar_ts = _parse_bar_ts(
     str(match.touch_bar_ts or match.event_ts), match.issued_at,

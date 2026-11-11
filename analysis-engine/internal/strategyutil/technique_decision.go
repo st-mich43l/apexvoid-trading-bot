@@ -49,6 +49,9 @@ type TechniqueDecision struct {
 	ID string
 	// FormedAt/ConfirmedAt time a decision with no reaction (Confirmation nil).
 	FormedAt, ConfirmedAt int64
+	// ExecutionPrice, when set, is the ONE price the decision is traded at (a projected line, TL-LIVE-2). It replaces the proximal edge of the published band as
+	// the reference the stop budget, the target distance and the quality room are measured from; the band stays the technical interaction corridor.
+	ExecutionPrice *float64
 	// Score, when set, is the strategy's own quality model (a trendline, a flip); the zone family leaves it nil.
 	Score QualityFunc
 }

@@ -546,7 +546,7 @@ analysis:
       # level's band that make a break accepted (the flip's required role).
       breakout_accept_bars: 2
     trendline:
-      version: v8
+      version: v9
       enabled: true
       # The timeframes a line is found, reacted to and published on, each against its own closed candles (M5 and M15 are independent setups of this one strategy).
       setup_timeframes: [M5, M15]
@@ -571,6 +571,19 @@ analysis:
       close_violation_atr: 0.15
       approach_min_distance_atr: 0.10
       maximum_bars_since_last_touch: 30
+      # TL-LIVE-2 (owner-approved exception): Trendline is traded at ONE price, the line itself, and publishes no entry zone. `entry` stays the interaction corridor
+      # (interaction_band_atr: where a touch is detected); the executable price is the line's projected value at the open of the next bar, computed from closed bars
+      # only, published in the typed `execution` block (model single_price). A projected line moves with every bar, so the price is bounded in time: it stays
+      # executable for at most single_price_validity_bars bars of the frame and for no longer than the line takes to move single_price_max_drift_atr x ATR, then the
+      # opportunity expires and an unfilled order is withdrawn (never repriced). single_price_proximity_atr is how far beyond the price, against the trade, the live
+      # quote may be before Algo Bot treats the line as already passed and does not chase it. false publishes the corridor as an entry zone again (the XAU 30-pip
+      # minimum then applies to Trendline like any other zone strategy).
+      single_price_execution: true
+      single_price_proximity_atr: 0.10
+      single_price_max_drift_atr: 0.25
+      single_price_validity_bars:
+        M5: 6
+        M15: 4
       # Per-timeframe values (docs/strategies/trendline.md, "Timeframes"). The flat values above are the defaults; a timeframe lists only what it owns. Everything that is
       # in ATR (the interaction band, the close violation, the approach, the stop buffer, the target distance) is shared: ATR is already the frame's own. Measured on
       # the production captures, a line's anchor spacing and slope in ATR per bar are the same on M5 and M15 (median 8 and 9 bars between anchors, 0.129 and 0.120
