@@ -121,6 +121,13 @@ class TradePlanAnalysis:
   mad_sweep_penetration_atr: float | None = None
   mad_reclaim_depth_atr: float | None = None
   mad_reason_code: str | None = None
+  mad_timeframe: str | None = None
+  mad_active: bool | None = None
+  mad_alignment: str | None = None
+  mad_alignment_reasons: list[str] | None = None
+  mad_range_id: str | None = None
+  mad_sequence_id: str | None = None
+  mad_sequence_status: str | None = None
   # Candle Confirmation V2 context telemetry (§28) — descriptive only,
   # never a gate. See app/analysis/candle_evidence.py CandleEvidence.
   candle_version: int | None = None
@@ -212,6 +219,13 @@ class TradePlanAnalysis:
       "mad_sweep_penetration_atr": self.mad_sweep_penetration_atr,
       "mad_reclaim_depth_atr": self.mad_reclaim_depth_atr,
       "mad_reason_code": self.mad_reason_code,
+      "mad_timeframe": self.mad_timeframe,
+      "mad_active": self.mad_active,
+      "mad_alignment": self.mad_alignment,
+      "mad_alignment_reasons": self.mad_alignment_reasons,
+      "mad_range_id": self.mad_range_id,
+      "mad_sequence_id": self.mad_sequence_id,
+      "mad_sequence_status": self.mad_sequence_status,
       "candle_version": self.candle_version,
       "candle_primary_pattern": self.candle_primary_pattern,
       "candle_patterns": self.candle_patterns,
@@ -376,6 +390,16 @@ class TradePlanAnalysis:
         None if data.get("mad_reason_code") is None
         else str(data["mad_reason_code"])
       ),
+      mad_timeframe=None if data.get("mad_timeframe") is None else str(data["mad_timeframe"]),
+      mad_active=None if data.get("mad_active") is None else bool(data["mad_active"]),
+      mad_alignment=None if data.get("mad_alignment") is None else str(data["mad_alignment"]),
+      mad_alignment_reasons=(
+        None if data.get("mad_alignment_reasons") is None
+        else [str(item) for item in data["mad_alignment_reasons"]]
+      ),
+      mad_range_id=None if data.get("mad_range_id") is None else str(data["mad_range_id"]),
+      mad_sequence_id=None if data.get("mad_sequence_id") is None else str(data["mad_sequence_id"]),
+      mad_sequence_status=None if data.get("mad_sequence_status") is None else str(data["mad_sequence_status"]),
       candle_version=(
         None if data.get("candle_version") is None
         else int(data["candle_version"])

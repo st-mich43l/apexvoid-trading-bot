@@ -292,7 +292,7 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			continue
 		}
 		candidate.ObservedTimeframe = event.Timeframe
-		candidate.Technical = w.technicalContext(event, candidate.Strategy, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.Reaction)
+		candidate.Technical = w.technicalContext(event, candidate.Strategy, candidate.Direction, candidate.Entry.Low, candidate.Entry.High, candidate.FormedAt, candidate.Reaction)
 		if candidate.Technical != nil {
 			candidate.Technical.Confluence = w.confluenceContext(event, candidate, candidate.Technical)
 			if candidate.DetectorConfluence != nil {
@@ -525,7 +525,7 @@ func (w *SymbolWorker) techniqueZones(original zone.ZoneState) zone.ZoneState {
 // close as the geometric reference, and the engine's structural bias. Returns
 // nil — never a placeholder — when the ATR series is not yet available, so a
 // consumer sees "unavailable" and fails closed instead of guessing.
-func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, strategyID opportunity.StrategyID, direction market.Direction, entryLow, entryHigh float64, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
+func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, strategyID opportunity.StrategyID, direction market.Direction, entryLow, entryHigh float64, formedAt int64, reaction *opportunity.ReactionConfirmation) *opportunity.TechnicalContext {
 	atrSeries := w.state.Measurements.ATR(event.Timeframe)
 	if len(atrSeries) == 0 {
 		return nil
@@ -537,9 +537,17 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, strategyID op
 	facts := &opportunity.TechnicalContext{
 		ATR: atr, ReferencePrice: event.Candle.Close, ReferenceTime: event.Candle.Time,
 	}
-	if snapshot := w.state.Context.MAD; snapshot.Version > 0 && snapshot.Phase != "" {
+	// The AMD context is the snapshot of the timeframe that observed the setup,
+	// not the primary timeframe's: an M1 scalp or an H1 key level must not read an
+	// unrelated timeframe's phase. A timeframe with no snapshot carries none.
+	if tf := w.state.Context.Timeframes[event.Timeframe]; tf != nil && tf.MAD.Version > 0 && tf.MAD.Phase != "" {
+		snapshot := tf.MAD
 		affinity := mad.Affinity(snapshot, string(direction), string(strategyID))
-		facts.MAD = madTechnicalContext(snapshot, affinity.Final)
+		relation := mad.Relate(snapshot, mad.Setup{
+			Strategy: string(strategyID), Direction: string(direction), FormedAt: formedAt,
+			ObservedAt: event.Candle.Time, ObservedTimeframe: event.Timeframe,
+		}, w.settings.MAD)
+		facts.MAD = madTechnicalContext(snapshot, affinity.Final, relation)
 	}
 	if bias := w.state.Context.Bias; bias.Direction.IsValid() {
 		facts.BiasDirection = bias.Direction
@@ -566,7 +574,7 @@ func (w *SymbolWorker) technicalContext(event marketdata.BarEvent, strategyID op
 	return facts
 }
 
-func madTechnicalContext(snapshot mad.Snapshot, affinity float64) *opportunity.MADContext {
+func madTechnicalContext(snapshot mad.Snapshot, affinity float64, relation mad.Relation) *opportunity.MADContext {
 	ctx := &opportunity.MADContext{
 		Version: snapshot.Version, Phase: snapshot.Phase, Confidence: snapshot.Confidence,
 		Affinity: affinity, Direction: snapshot.ManipulationDirection,
@@ -576,6 +584,8 @@ func madTechnicalContext(snapshot mad.Snapshot, affinity float64) *opportunity.M
 		DisplacementATR:     measuredPointer(snapshot, "displacement_atr"),
 		SweepPenetrationATR: measuredPointer(snapshot, "sweep_penetration_atr"),
 		ReclaimDepthATR:     measuredPointer(snapshot, "reclaim_depth_atr"),
+		Timeframe:           string(snapshot.Timeframe), Active: snapshot.Active, ObservedAt: snapshot.ObservedAt,
+		Relation: relation.Status, RelationReasons: append([]string(nil), relation.Reasons...), EvidenceIDs: append([]string(nil), relation.EvidenceIDs...),
 	}
 	if ctx.Direction == "" {
 		ctx.Direction = snapshot.ExpansionDirection
@@ -583,6 +593,27 @@ func madTechnicalContext(snapshot mad.Snapshot, affinity float64) *opportunity.M
 	if value, ok := snapshot.Measured["accepted_closes"]; ok {
 		count := int(value)
 		ctx.AcceptanceCloses = &count
+	}
+	if a := snapshot.Asia; a != nil {
+		ctx.Range = &opportunity.MADRange{
+			ID: a.ID, Kind: "asia", Timeframe: string(a.Timeframe), High: a.High, Low: a.Low,
+			FormedFrom: a.Start, SealedAt: a.SealedAt, BarCount: a.BarCount, ExpectedBars: a.ExpectedBars,
+		}
+	}
+	if q := snapshot.Sequence; q != nil {
+		seq := &opportunity.MADSequence{
+			ID: q.ID, Status: q.Status, Stages: append([]string(nil), q.Stages...), Direction: q.Direction,
+			InvalidationReason: q.InvalidationReason, Note: q.Note,
+		}
+		if sw := q.Sweep; sw != nil {
+			seq.SweepSide, seq.SweptLevel, seq.SweepAt, seq.ReclaimAt = sw.Side, sw.Level, sw.At, sw.ReclaimAt
+			seq.SweepPenetrationATR, seq.ReclaimDepthATR = sw.PenetrationATR, sw.ReclaimDepthATR
+		}
+		if ex := q.Expansion; ex != nil {
+			seq.ExpansionDirection, seq.ExpansionBasis = ex.Direction, ex.Basis
+			seq.ExpansionStartedAt, seq.ExpansionConfirmedAt, seq.ExpansionStrength = ex.StartedAt, ex.ConfirmedAt, ex.Strength
+		}
+		ctx.Sequence = seq
 	}
 	return ctx
 }

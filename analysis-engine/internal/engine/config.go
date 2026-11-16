@@ -153,6 +153,10 @@ func MADConfigFromConfig(doc *config.Document) (mad.Config, error) {
 	if err != nil {
 		return mad.Config{}, err
 	}
+	validityHours, err := readFloat("analysis.mad.sequence.validity_hours")
+	if err != nil {
+		return mad.Config{}, err
+	}
 	asiaStart, err := getInt(doc, "analysis.sessions.asia_start")
 	if err != nil {
 		return mad.Config{}, err
@@ -161,7 +165,7 @@ func MADConfigFromConfig(doc *config.Document) (mad.Config, error) {
 	if err != nil {
 		return mad.Config{}, err
 	}
-	return mad.Config{AsiaStartHour: asiaStart, LondonStartHour: londonStart, AccumMinimumRQ: minRQ, AccumMaximumRQ: maxRQ, ExpandBreakATR: breakATR, ExpandDisplacementATR: displacementATR, ExpandAcceptCloses: acceptCloses, ManipMinimumPenetrationATR: minPen, ManipMinimumReclaimATR: minReclaim, PipSize: pipSize}, nil
+	return mad.Config{AsiaStartHour: asiaStart, LondonStartHour: londonStart, AccumMinimumRQ: minRQ, AccumMaximumRQ: maxRQ, ExpandBreakATR: breakATR, ExpandDisplacementATR: displacementATR, ExpandAcceptCloses: acceptCloses, ManipMinimumPenetrationATR: minPen, ManipMinimumReclaimATR: minReclaim, PipSize: pipSize, SequenceValidityHours: validityHours}, nil
 }
 
 // ConfluenceConfigFromConfig reads the versioned technical confluence scorer.

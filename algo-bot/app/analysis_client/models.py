@@ -199,6 +199,45 @@ class CandleEvidence(FrozenConfigModel):
   all_patterns: list[str] = Field(default_factory=list)
 
 
+class MADRange(FrozenConfigModel):
+  """The accumulation range behind an AMD context (Go-owned)."""
+
+  id: str = Field(min_length=1)
+  kind: Literal["asia"]
+  timeframe: str = Field(min_length=1)
+  high: FiniteFloat
+  low: FiniteFloat
+  formed_from: int = Field(ge=0)
+  sealed_at: int | None = Field(default=None, ge=0)
+  bar_count: int = Field(ge=0)
+  expected_bars: int = Field(ge=0)
+
+
+class MADSequence(FrozenConfigModel):
+  """The dated sweep -> reclaim -> expansion sequence of the range (Go-owned).
+
+  A zero/absent event time means the event has not happened.
+  """
+
+  id: str = Field(min_length=1)
+  status: Literal["partial", "complete", "invalidated", "stale"]
+  stages: list[Literal["range", "sweep", "reclaim", "expansion"]]
+  direction: Literal["BUY", "SELL"] | None = None
+  sweep_side: Literal["high", "low"] | None = None
+  swept_level: FiniteFloat | None = None
+  sweep_at: int | None = Field(default=None, ge=0)
+  reclaim_at: int | None = Field(default=None, ge=0)
+  sweep_penetration_atr: FiniteFloat | None = None
+  reclaim_depth_atr: FiniteFloat | None = None
+  expansion_direction: Literal["BUY", "SELL"] | None = None
+  expansion_basis: Literal["break_accepted", "displacement"] | None = None
+  expansion_started_at: int | None = Field(default=None, ge=0)
+  expansion_confirmed_at: int | None = Field(default=None, ge=0)
+  expansion_strength: FiniteFloat | None = Field(default=None, ge=0, le=1)
+  invalidation_reason: str | None = None
+  note: str | None = None
+
+
 class MADContext(FrozenConfigModel):
   """Go-owned MAD phase facts and soft affinity telemetry.
 
@@ -221,6 +260,16 @@ class MADContext(FrozenConfigModel):
   sweep_penetration_atr: FiniteFloat | None = None
   reclaim_depth_atr: FiniteFloat | None = None
   reason_code: str = Field(min_length=1)
+  # Event-linked AMD context (Go mad v3). All optional: an older event omits them.
+  # Go computes every one; Python records and reports them and never derives one.
+  timeframe: str | None = None
+  active: bool | None = None
+  observed_at: int | None = Field(default=None, ge=0)
+  range: MADRange | None = None
+  sequence: MADSequence | None = None
+  relation: Literal["aligned", "conflicting", "partial", "irrelevant", "unavailable"] | None = None
+  relation_reasons: list[str] = Field(default_factory=list)
+  evidence_ids: list[str] = Field(default_factory=list)
 
 
 class ConfluenceFactors(FrozenConfigModel):

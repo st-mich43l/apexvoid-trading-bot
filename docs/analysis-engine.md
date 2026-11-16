@@ -213,4 +213,7 @@ a record label no decision reads.
 
 Session is context and a confluence input, never a clock gate: no London/NY
 window blocks a plan. The MAD Asia-phase classifier (accumulation, manipulation,
-expansion) is soft context stamped onto opportunities.
+expansion) is soft context stamped onto opportunities: a dated, event-linked
+sweep -> reclaim -> expansion sequence of the Asia range plus its relation to the
+setup (aligned, conflicting, partial, irrelevant, unavailable). It is never a gate,
+a strategy input or a score; see [amd-context.md](amd-context.md).

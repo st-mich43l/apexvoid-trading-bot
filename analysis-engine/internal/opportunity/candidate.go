@@ -174,6 +174,58 @@ type MADContext struct {
 	SweepPenetrationATR *float64
 	ReclaimDepthATR     *float64
 	ReasonCode          string
+
+	// The fields below are the event-linked AMD context (mad v3). They are all
+	// optional and descriptive: nothing downstream gates, sizes or ranks on them.
+	// Timeframe is the observed timeframe whose closed bars measured the context.
+	Timeframe string
+	// Active is false when the evidence is stale, invalidated or unavailable: the
+	// facts stay for audit but are not current.
+	Active     bool
+	ObservedAt int64
+	Range      *MADRange
+	Sequence   *MADSequence
+	// Relation is the setup-specific read (aligned, conflicting, partial,
+	// irrelevant, unavailable) with its reason codes; EvidenceIDs name what was read.
+	Relation        string
+	RelationReasons []string
+	EvidenceIDs     []string
+}
+
+// MADRange is the accumulation range behind the context: its identity (the same on
+// every timeframe), source timeframe, boundaries, formation window and quality.
+type MADRange struct {
+	ID           string
+	Kind         string
+	Timeframe    string
+	High         float64
+	Low          float64
+	FormedFrom   int64
+	SealedAt     int64
+	BarCount     int
+	ExpectedBars int
+}
+
+// MADSequence is the dated sweep -> reclaim -> expansion sequence of the range.
+// Zero event times mean the event has not happened; a missing stage is never filled in.
+type MADSequence struct {
+	ID                   string
+	Status               string
+	Stages               []string
+	Direction            string
+	SweepSide            string
+	SweptLevel           float64
+	SweepAt              int64
+	ReclaimAt            int64
+	SweepPenetrationATR  float64
+	ReclaimDepthATR      float64
+	ExpansionDirection   string
+	ExpansionBasis       string
+	ExpansionStartedAt   int64
+	ExpansionConfirmedAt int64
+	ExpansionStrength    float64
+	InvalidationReason   string
+	Note                 string
 }
 
 // ConfluenceFactors are the named technical inputs used by the versioned
@@ -624,6 +676,17 @@ func cloneCandidate(c Candidate) Candidate {
 			mad.SweepPenetrationATR = cloneFloat(c.Technical.MAD.SweepPenetrationATR)
 			mad.ReclaimDepthATR = cloneFloat(c.Technical.MAD.ReclaimDepthATR)
 			mad.AcceptanceCloses = cloneInt(c.Technical.MAD.AcceptanceCloses)
+			if c.Technical.MAD.Range != nil {
+				rng := *c.Technical.MAD.Range
+				mad.Range = &rng
+			}
+			if c.Technical.MAD.Sequence != nil {
+				seq := *c.Technical.MAD.Sequence
+				seq.Stages = append([]string(nil), seq.Stages...)
+				mad.Sequence = &seq
+			}
+			mad.RelationReasons = append([]string(nil), mad.RelationReasons...)
+			mad.EvidenceIDs = append([]string(nil), mad.EvidenceIDs...)
 			technical.MAD = &mad
 		}
 		if c.Technical.Confluence != nil {
