@@ -164,15 +164,14 @@ func Build(
 			rangeHigh, rangeLow, hasRange = float64(input.Fib.Range.High), float64(input.Fib.Range.Low), true
 		}
 		regimeState := regime.Classify(input.Candles, input.ATRSeries, input.Structure.Swings, DeriveBias(input.Structure).Trend.String(), rangeHigh, rangeLow, hasRange, input.RegimeConfig)
-		asia := input.MADAsia
 		madConfig := input.MADConfig
 		if input.Geometry.PipSize > 0 {
 			madConfig.PipSize = input.Geometry.PipSize
 		}
-		if asia == nil && len(input.Candles) > 0 {
-			asia = mad.UpdateAsiaRangeSeal(input.Candles, lastCandleTime(input.Candles), input.Session.Active, madConfig)
-		}
-		madState := mad.Classify(input.Candles, input.ATR, 0, input.Session.Active, DeriveBias(input.Structure).Trend.String(), asia, lastCandleTime(input.Candles), input.MADConfig)
+		madState := mad.Classify(mad.Input{
+			Candles: input.Candles, Timeframe: tf, ATR: input.ATR, ATRSeries: input.ATRSeries,
+			Structure: DeriveBias(input.Structure).Trend.String(), Asia: input.MADAsia, Config: madConfig,
+		})
 		timeframes[tf] = &TimeframeContext{
 			Timeframe: tf, Candles: append([]market.Candle(nil), input.Candles...), Structure: input.Structure, Liquidity: input.Liquidity, Zones: input.Zones,
 			Trendline: input.Trendline, KeyLevel: input.KeyLevel, Session: input.Session, Fib: input.Fib, Regime: regimeState, MAD: madState, Momentum: input.Momentum, Geometry: input.Geometry,

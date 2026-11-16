@@ -115,14 +115,37 @@ func madContextPayload(m *opportunity.MADContext) *MADContextPayload {
 	if m == nil {
 		return nil
 	}
-	return &MADContextPayload{
+	active := m.Active
+	payload := &MADContextPayload{
 		Version: m.Version, Phase: m.Phase, Confidence: m.Confidence, Affinity: m.Affinity,
 		Direction: m.Direction, SweepSide: m.SweepSide, Reclaim: m.Reclaim,
 		RangeQualityATR: m.RangeQualityATR, BreakDistanceATR: m.BreakDistanceATR,
 		DisplacementATR: m.DisplacementATR, AcceptanceCloses: m.AcceptanceCloses,
 		SweepPenetrationATR: m.SweepPenetrationATR, ReclaimDepthATR: m.ReclaimDepthATR,
 		ReasonCode: m.ReasonCode,
+		Timeframe:  m.Timeframe, ObservedAt: m.ObservedAt, Relation: m.Relation,
+		RelationReasons: append([]string(nil), m.RelationReasons...), EvidenceIDs: append([]string(nil), m.EvidenceIDs...),
 	}
+	if m.Timeframe != "" {
+		payload.Active = &active
+	}
+	if r := m.Range; r != nil {
+		payload.Range = &MADRangePayload{
+			ID: r.ID, Kind: r.Kind, Timeframe: r.Timeframe, High: r.High, Low: r.Low, FormedFrom: r.FormedFrom,
+			SealedAt: r.SealedAt, BarCount: r.BarCount, ExpectedBars: r.ExpectedBars,
+		}
+	}
+	if q := m.Sequence; q != nil {
+		payload.Sequence = &MADSequencePayload{
+			ID: q.ID, Status: q.Status, Stages: append([]string(nil), q.Stages...), Direction: q.Direction,
+			SweepSide: q.SweepSide, SweptLevel: q.SweptLevel, SweepAt: q.SweepAt, ReclaimAt: q.ReclaimAt,
+			SweepPenetrationATR: q.SweepPenetrationATR, ReclaimDepthATR: q.ReclaimDepthATR,
+			ExpansionDirection: q.ExpansionDirection, ExpansionBasis: q.ExpansionBasis,
+			ExpansionStartedAt: q.ExpansionStartedAt, ExpansionConfirmedAt: q.ExpansionConfirmedAt,
+			ExpansionStrength: q.ExpansionStrength, InvalidationReason: q.InvalidationReason, Note: q.Note,
+		}
+	}
+	return payload
 }
 
 func candleEvidencePayload(e *candle.Evidence) *CandleEvidencePayload {

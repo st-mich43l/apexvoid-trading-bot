@@ -225,6 +225,9 @@ func LoadSettings(doc *config.Document, primary market.Timeframe, allowReplaceFo
 	if err != nil {
 		return Settings{}, err
 	}
+	// The Asia range follows the same daylight-saving calendar as the session
+	// domain: MAD's own fixed UTC hours are only the fallback of isolated tests.
+	madConfig.AsiaWindow = func(at int64) (int64, int64, bool) { return sessionConfig.Window(session.Asia, at) }
 	settings := Settings{
 		Candle: candle.DefaultConfig(), Confluence: confluenceConfig, ATR: atr, Structure: structureSettings, Liquidity: liquidityConfig, Zone: zoneConfig,
 		Trendline: trendlineConfig, KeyLevel: keyLevelConfig, Session: sessionConfig, Fib: fibConfig, Momentum: momentumConfig, LegacyRead: legacyReadConfig, LegacyDetector: legacyDetector, RequireCandleConfirmation: requireCandleConfirmation,

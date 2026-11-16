@@ -144,6 +144,52 @@ type MADContextPayload struct {
 	SweepPenetrationATR *float64 `json:"sweep_penetration_atr,omitempty"`
 	ReclaimDepthATR     *float64 `json:"reclaim_depth_atr,omitempty"`
 	ReasonCode          string   `json:"reason_code"`
+
+	// Event-linked AMD context (mad v3). Every field is optional so an older
+	// consumer and an older event stay compatible.
+	Timeframe       string              `json:"timeframe,omitempty"`
+	Active          *bool               `json:"active,omitempty"`
+	ObservedAt      int64               `json:"observed_at,omitempty"`
+	Range           *MADRangePayload    `json:"range,omitempty"`
+	Sequence        *MADSequencePayload `json:"sequence,omitempty"`
+	Relation        string              `json:"relation,omitempty"`
+	RelationReasons []string            `json:"relation_reasons,omitempty"`
+	EvidenceIDs     []string            `json:"evidence_ids,omitempty"`
+}
+
+// MADRangePayload mirrors opportunity.MADRange.
+type MADRangePayload struct {
+	ID           string  `json:"id"`
+	Kind         string  `json:"kind"`
+	Timeframe    string  `json:"timeframe"`
+	High         float64 `json:"high"`
+	Low          float64 `json:"low"`
+	FormedFrom   int64   `json:"formed_from"`
+	SealedAt     int64   `json:"sealed_at,omitempty"`
+	BarCount     int     `json:"bar_count"`
+	ExpectedBars int     `json:"expected_bars"`
+}
+
+// MADSequencePayload mirrors opportunity.MADSequence. A zero event time means the
+// event has not happened.
+type MADSequencePayload struct {
+	ID                   string   `json:"id"`
+	Status               string   `json:"status"`
+	Stages               []string `json:"stages"`
+	Direction            string   `json:"direction,omitempty"`
+	SweepSide            string   `json:"sweep_side,omitempty"`
+	SweptLevel           float64  `json:"swept_level,omitempty"`
+	SweepAt              int64    `json:"sweep_at,omitempty"`
+	ReclaimAt            int64    `json:"reclaim_at,omitempty"`
+	SweepPenetrationATR  float64  `json:"sweep_penetration_atr,omitempty"`
+	ReclaimDepthATR      float64  `json:"reclaim_depth_atr,omitempty"`
+	ExpansionDirection   string   `json:"expansion_direction,omitempty"`
+	ExpansionBasis       string   `json:"expansion_basis,omitempty"`
+	ExpansionStartedAt   int64    `json:"expansion_started_at,omitempty"`
+	ExpansionConfirmedAt int64    `json:"expansion_confirmed_at,omitempty"`
+	ExpansionStrength    float64  `json:"expansion_strength,omitempty"`
+	InvalidationReason   string   `json:"invalidation_reason,omitempty"`
+	Note                 string   `json:"note,omitempty"`
 }
 
 type CandleEvidencePayload struct {

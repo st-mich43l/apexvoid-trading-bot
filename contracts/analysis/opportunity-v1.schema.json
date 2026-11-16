@@ -271,7 +271,53 @@
             "acceptance_closes": { "type": "integer", "minimum": 0 },
             "sweep_penetration_atr": { "type": "number" },
             "reclaim_depth_atr": { "type": "number" },
-            "reason_code": { "type": "string", "minLength": 1 }
+            "reason_code": { "type": "string", "minLength": 1 },
+            "timeframe": { "type": "string", "minLength": 1, "description": "The observed timeframe whose closed bars measured this AMD context." },
+            "active": { "type": "boolean", "description": "False when the evidence is stale, invalidated or unavailable; the facts stay for audit but are not current." },
+            "observed_at": { "type": "integer", "minimum": 0, "description": "Open time (Unix seconds) of the last closed bar read." },
+            "range": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "kind", "timeframe", "high", "low", "formed_from", "bar_count", "expected_bars"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "kind": { "type": "string", "enum": ["asia"] },
+                "timeframe": { "type": "string", "minLength": 1 },
+                "high": { "type": "number" },
+                "low": { "type": "number" },
+                "formed_from": { "type": "integer", "minimum": 0 },
+                "sealed_at": { "type": "integer", "minimum": 0 },
+                "bar_count": { "type": "integer", "minimum": 0 },
+                "expected_bars": { "type": "integer", "minimum": 0 }
+              }
+            },
+            "sequence": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "status", "stages"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "status": { "type": "string", "enum": ["partial", "complete", "invalidated", "stale"] },
+                "stages": { "type": "array", "items": { "type": "string", "enum": ["range", "sweep", "reclaim", "expansion"] } },
+                "direction": { "type": "string", "enum": ["BUY", "SELL"] },
+                "sweep_side": { "type": "string", "enum": ["high", "low"] },
+                "swept_level": { "type": "number" },
+                "sweep_at": { "type": "integer", "minimum": 0 },
+                "reclaim_at": { "type": "integer", "minimum": 0 },
+                "sweep_penetration_atr": { "type": "number" },
+                "reclaim_depth_atr": { "type": "number" },
+                "expansion_direction": { "type": "string", "enum": ["BUY", "SELL"] },
+                "expansion_basis": { "type": "string", "enum": ["break_accepted", "displacement"] },
+                "expansion_started_at": { "type": "integer", "minimum": 0 },
+                "expansion_confirmed_at": { "type": "integer", "minimum": 0 },
+                "expansion_strength": { "type": "number", "minimum": 0, "maximum": 1 },
+                "invalidation_reason": { "type": "string" },
+                "note": { "type": "string" }
+              }
+            },
+            "relation": { "type": "string", "enum": ["aligned", "conflicting", "partial", "irrelevant", "unavailable"], "description": "How the AMD evidence stands to this setup. Descriptive only." },
+            "relation_reasons": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "evidence_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } }
           }
         },
         "confluence": {

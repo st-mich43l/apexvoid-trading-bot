@@ -136,6 +136,15 @@ class StrategyMatch:
   mad_sweep_penetration_atr: float | None = None
   mad_reclaim_depth_atr: float | None = None
   mad_reason_code: str | None = None
+  # AMD relation to this setup (Go mad v3): measured and classified by the Analysis
+  # Engine, recorded here verbatim. Descriptive only; nothing reads it as a gate.
+  mad_timeframe: str | None = None
+  mad_active: bool | None = None
+  mad_alignment: str | None = None
+  mad_alignment_reasons: list[str] | None = None
+  mad_range_id: str | None = None
+  mad_sequence_id: str | None = None
+  mad_sequence_status: str | None = None
   # Shadow confluence telemetry. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
@@ -506,6 +515,18 @@ class StrategyMatch:
         mad_reason_code=(
           None if payload.get("mad_reason_code") is None
           else str(payload["mad_reason_code"])
+        ),
+        mad_timeframe=None if payload.get("mad_timeframe") is None else str(payload["mad_timeframe"]),
+        mad_active=None if payload.get("mad_active") is None else bool(payload["mad_active"]),
+        mad_alignment=None if payload.get("mad_alignment") is None else str(payload["mad_alignment"]),
+        mad_alignment_reasons=(
+          None if payload.get("mad_alignment_reasons") is None
+          else [str(item) for item in payload["mad_alignment_reasons"]]
+        ),
+        mad_range_id=None if payload.get("mad_range_id") is None else str(payload["mad_range_id"]),
+        mad_sequence_id=None if payload.get("mad_sequence_id") is None else str(payload["mad_sequence_id"]),
+        mad_sequence_status=(
+          None if payload.get("mad_sequence_status") is None else str(payload["mad_sequence_status"])
         ),
         confluence_v1=(
           None if payload.get("confluence_v1") is None

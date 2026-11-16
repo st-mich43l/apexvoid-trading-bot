@@ -1,6 +1,16 @@
-// Package mad ports the Python MAD-0 Asia-range classifier. It is a pure
-// technical-analysis domain: it owns no Redis, account, execution, or
-// strategy-policy state.
+// Package mad is the Accumulation / Manipulation / Distribution (AMD) market
+// context of the Go Analysis Engine. It is a pure technical-analysis domain: it
+// owns no Redis, account, execution, or strategy-policy state, and nothing here is
+// a gate. AMD is supporting evidence only.
+//
+// Version 3 reads the Asia range as an event-linked sequence over closed bars: the
+// range is sealed when its session window closes, a sweep of its edge and the
+// reclaim of that edge are dated events, and an expansion is confirmed from a later
+// bar. Every event is causal (it is only ever read from bars that have closed) and
+// ordered range sealed <= sweep <= reclaim <= expansion <= observation. A phase is
+// never manufactured to complete a sequence: a lone sweep or a lone expansion is a
+// partial sequence, and evidence that has gone stale or been invalidated is not
+// reported as current.
 package mad
 
 import (
@@ -12,7 +22,7 @@ import (
 )
 
 const (
-	Version      = 2
+	Version      = 3
 	PhaseAccum   = "accum"
 	PhaseManip   = "manip"
 	PhaseExpand  = "expand"
@@ -33,24 +43,49 @@ type Config struct {
 	ManipMinimumPenetrationATR float64
 	ManipMinimumReclaimATR     float64
 	PipSize                    float64
+	// SequenceValidityHours is how long after its last event (or, with no event,
+	// after the range sealed) a sequence still counts as current evidence. It is a
+	// descriptive freshness bound, never an eligibility gate.
+	SequenceValidityHours float64
+	// AsiaWindow returns the [start, end) of the most recent Asia session that has
+	// opened at or before at. The engine supplies the session calendar here, so the
+	// range follows daylight saving exactly like the session domain. Nil falls back
+	// to the fixed UTC hours above (isolated tests only).
+	AsiaWindow func(at int64) (start, end int64, ok bool)
 }
 
+// AsiaRangeSeal is the accumulation range: the Asia session's high and low over
+// the closed bars of its own window. ID is stable for the session occurrence and
+// identical on every timeframe; Timeframe records which bars measured it.
 type AsiaRangeSeal struct {
-	DayKey    string
-	High      float64
-	Low       float64
-	Sealed    bool
-	SealedAt  int64
-	BarCount  int
-	Source    string
-	UpdatedAt int64
+	ID           string
+	DayKey       string
+	Timeframe    market.Timeframe
+	High         float64
+	Low          float64
+	Start        int64 // window open, Unix seconds
+	End          int64 // window close; the range is sealed by the first bar at or after it
+	Sealed       bool
+	SealedAt     int64 // End when sealed, else 0
+	BarCount     int
+	ExpectedBars int
+	Source       string
+	UpdatedAt    int64
 }
 
 func (r AsiaRangeSeal) Width() float64 { return math.Max(0, r.High-r.Low) }
 
+// Snapshot is one timeframe's AMD read as of its last closed bar. The phase and
+// direction fields are the compatible summary; Sequence carries the dated events
+// they were derived from. Active is false whenever the evidence is stale,
+// invalidated or unavailable: the facts stay for audit but are not current.
 type Snapshot struct {
 	Phase                 string
 	Asia                  *AsiaRangeSeal
+	Sequence              *Sequence
+	Timeframe             market.Timeframe
+	Active                bool
+	ObservedAt            int64 // open time of the last closed bar read
 	RangeQualityATR       *float64
 	PriceVsAsia           string
 	SweepSide             string
@@ -75,6 +110,10 @@ type AffinityScore struct {
 	StrategyScore  float64
 	Confidence     float64
 	Final          float64
+	// Neutral marks a read that is deliberately not evidence for or against a
+	// setup (accumulation, or no phase): Final is 0 and it must not be read as a
+	// penalty.
+	Neutral bool
 }
 
 // StrategyKey maps the registered Go strategy IDs to the same MAD affinity
@@ -93,20 +132,34 @@ func StrategyKey(strategy string) string {
 	}
 }
 
-// Affinity computes the Python MAD affinity formula exactly: phase evidence,
-// directional agreement, strategy-family agreement, and snapshot confidence
-// are multiplied and clamped to [0,1].
+// Affinity is the bounded, directional MAD affinity: phase evidence, directional
+// agreement, strategy-family agreement and snapshot confidence, multiplied and
+// clamped to [0,1]. It feeds only the V2 confluence telemetry; the selected (V1)
+// stars never read it.
+//
+// Accumulation is neutral by definition. A box that has not been left says nothing
+// about which way a setup should trade, so it carries no directional and no
+// family evidence and Final is 0 with Neutral set. (The formula used to give the
+// same 0 only because StrategyScore was never assigned in this phase while
+// DirectionScore was set to 1 for any direction; the zero was an accident of the
+// multiplication. A bonus here would be arbitrary and none is given.) Evidence that
+// is not Active (stale, invalidated, unavailable) scores 0 as well, so old context
+// can never lift a setup.
 func Affinity(snapshot Snapshot, direction, strategy string) AffinityScore {
 	features := Features(snapshot)
 	want := normalize(direction)
 	key := StrategyKey(strategy)
 	score := AffinityScore{Confidence: clamp(snapshot.Confidence)}
+	if !snapshot.Active {
+		score.Neutral = snapshot.Phase == PhaseUnclear || snapshot.Phase == ""
+		return score
+	}
 	switch snapshot.Phase {
 	case PhaseAccum:
+		score.Neutral = true
 		score.PhaseScore = features.Accum
-		if want == "BUY" || want == "SELL" {
-			score.DirectionScore = 1
-		}
+		score.Confidence = clamp(snapshot.Confidence)
+		return score
 	case PhaseManip:
 		score.PhaseScore = features.Manip
 		if snapshot.ManipulationDirection != "" && normalize(snapshot.ManipulationDirection) == want {
@@ -129,130 +182,6 @@ func Affinity(snapshot Snapshot, direction, strategy string) AffinityScore {
 	score.StrategyScore = clamp(score.StrategyScore)
 	score.Final = clamp(score.PhaseScore * score.DirectionScore * score.StrategyScore * score.Confidence)
 	return score
-}
-
-// AsiaDayKey matches mad_phase.py's session-day identity. UTC is explicit so
-// a host timezone can never change the technical read.
-func AsiaDayKey(ts int64, asiaStartHour, londonStartHour int) string {
-	d := time.Unix(ts, 0).UTC()
-	if d.Hour() < londonStartHour || d.Hour() >= 24 {
-		d = d.AddDate(0, 0, -1)
-	} else if d.Hour() < asiaStartHour {
-		d = d.AddDate(0, 0, -1)
-	}
-	return time.Date(d.Year(), d.Month(), d.Day(), asiaStartHour, 0, 0, 0, time.UTC).Format("2006-01-02")
-}
-
-// UpdateAsiaRangeSeal derives the current day's Asia box from closed bars.
-// The input must be time ascending and include the latest closed bar.
-func UpdateAsiaRangeSeal(candles []market.Candle, now int64, session string, cfg Config) *AsiaRangeSeal {
-	if len(candles) == 0 {
-		return nil
-	}
-	day := AsiaDayKey(now, cfg.AsiaStartHour, cfg.LondonStartHour)
-	start, end := asiaBounds(now, cfg.AsiaStartHour, cfg.LondonStartHour)
-	var high, low float64
-	count := 0
-	for _, c := range candles {
-		if c.Time < start || c.Time >= end {
-			continue
-		}
-		if count == 0 || c.High > high {
-			high = c.High
-		}
-		if count == 0 || c.Low < low {
-			low = c.Low
-		}
-		count++
-	}
-	if count == 0 {
-		return nil
-	}
-	sealed := session != "ASIA" && session != "asia"
-	var sealedAt int64
-	if sealed {
-		sealedAt = now
-	}
-	return &AsiaRangeSeal{DayKey: day, High: high, Low: low, Sealed: sealed, SealedAt: sealedAt, BarCount: count, Source: "m5", UpdatedAt: now}
-}
-
-func Classify(candles []market.Candle, atr, atrLong float64, session, structure string, asia *AsiaRangeSeal, now int64, cfg Config) Snapshot {
-	base := Snapshot{Phase: PhaseUnclear, Asia: asia, ReasonCode: "asia_range_missing", Version: Version, Measured: map[string]float64{}}
-	if asia == nil || asia.Width() <= 0 {
-		return base
-	}
-	if now > 0 && asia.DayKey != AsiaDayKey(now, cfg.AsiaStartHour, cfg.LondonStartHour) {
-		base.ReasonCode = "asia_range_stale_or_missing"
-		return base
-	}
-	atr = positive(atr)
-	if atr <= 0 {
-		return base
-	}
-	rq := asia.Width() / atr
-	base.RangeQualityATR = &rq
-	price := candles[len(candles)-1].Close
-	vs := priceVsAsia(price, *asia)
-	base.PriceVsAsia = vs
-	base.Measured["session"] = 0 // presence marker; string is carried by ReasonCode/fields in the envelope
-	if atrLong > 0 {
-		base.Measured["atr_short_long_ratio"] = atr / atrLong
-	}
-	if vs == "above" {
-		base.Measured["break_distance_atr"] = (price - asia.High) / atr
-	}
-	if vs == "below" {
-		base.Measured["break_distance_atr"] = (asia.Low - price) / atr
-	}
-	base.Measured["displacement_atr"] = displacementATR(candles, atr, 5)
-	base.Measured["accepted_closes"] = float64(acceptedCloses(candles, *asia, vs))
-
-	last := candles[len(candles)-1]
-	base.SweepSide, base.Reclaim = sweepReclaim(last, *asia, math.Max(cfg.PipSize, atr*0.05))
-	if base.SweepSide == "both" {
-		base.ReasonCode = "asia_double_sweep"
-		return base
-	}
-	if base.SweepSide != "" && base.Reclaim {
-		base.Phase, base.ReasonCode = PhaseManip, "asia_sweep_reclaim"
-		base.ManipulationDirection = map[string]string{"high": "SELL", "low": "BUY"}[base.SweepSide]
-		base.Measured["sweep_penetration_atr"], base.Measured["reclaim_depth_atr"], base.Measured["close_location"] = manipQuality(last, *asia, atr, base.SweepSide)
-		base.Confidence = manipConfidence(base.Measured, cfg)
-		return base
-	}
-	breakOK := base.Measured["break_distance_atr"] >= cfg.ExpandBreakATR && base.Measured["accepted_closes"] >= float64(max1(cfg.ExpandAcceptCloses))
-	displacedOK := base.Measured["displacement_atr"] >= cfg.ExpandDisplacementATR
-	if asia.Sealed && (vs == "above" || vs == "below") && (breakOK || displacedOK) {
-		base.Phase = PhaseExpand
-		base.ReasonCode = "asia_strong_displacement"
-		if breakOK {
-			base.ReasonCode = "asia_break_accepted"
-		}
-		if vs == "above" {
-			base.ExpansionDirection = "BUY"
-		} else {
-			base.ExpansionDirection = "SELL"
-		}
-		base.Confidence = expandConfidence(base.Measured, cfg)
-		return base
-	}
-	building := (session == "ASIA" || session == "asia") && !asia.Sealed && vs == "inside" && rq >= cfg.AccumMinimumRQ && rq <= 24
-	// Match Python's grouped predicate exactly: a building Asia box still
-	// requires the canonical range/unknown structure read.  The previous Go
-	// expression let `|| building` bypass that owner boundary.
-	structureOK := structure == "range" || structure == "unknown" || structure == ""
-	sealedRQOK := rq >= cfg.AccumMinimumRQ && rq <= cfg.AccumMaximumRQ
-	buildingRQOK := building
-	if (vs == "inside" || building) && structureOK && (sealedRQOK || buildingRQOK) {
-		base.Phase, base.ReasonCode = PhaseAccum, "asia_box_accum"
-		if building && rq > cfg.AccumMaximumRQ {
-			base.ReasonCode = "asia_building_accum"
-		}
-		base.Confidence = accumConfidence(rq, building, cfg)
-		return base
-	}
-	base.ReasonCode = "no_mad_signature"
-	return base
 }
 
 func Features(s Snapshot) FeatureScores {
@@ -278,21 +207,6 @@ func Features(s Snapshot) FeatureScores {
 		f.Expand = math.Max(f.Expand, .78)
 	}
 	return f
-}
-
-func sweepReclaim(c market.Candle, a AsiaRangeSeal, tolerance float64) (string, bool) {
-	high := c.High > a.High+tolerance
-	low := c.Low < a.Low-tolerance
-	if high && low {
-		return "both", false
-	}
-	if high {
-		return "high", c.Close <= a.High+tolerance
-	}
-	if low {
-		return "low", c.Close >= a.Low-tolerance
-	}
-	return "", false
 }
 
 func asiaBounds(ts int64, asiaStart, londonStart int) (int64, int64) {
@@ -339,30 +253,6 @@ func displacementATR(c []market.Candle, atr float64, lookback int) float64 {
 		k = len(c) - 1
 	}
 	return math.Abs(c[len(c)-1].Close-c[len(c)-1-k].Close) / atr
-}
-func acceptedCloses(c []market.Candle, a AsiaRangeSeal, vs string) int {
-	if vs != "above" && vs != "below" {
-		return 0
-	}
-	n := 0
-	for i := len(c) - 1; i >= 0; i-- {
-		ok := c[i].Close > a.High
-		if vs == "below" {
-			ok = c[i].Close < a.Low
-		}
-		if !ok {
-			break
-		}
-		n++
-	}
-	return n
-}
-func manipQuality(c market.Candle, a AsiaRangeSeal, atr float64, side string) (float64, float64, float64) {
-	r := c.High - c.Low
-	if side == "high" {
-		return (c.High - a.High) / atr, (a.High - c.Close) / atr, safe(c.High-c.Close, r)
-	}
-	return (a.Low - c.Low) / atr, (c.Close - a.Low) / atr, safe(c.Close-c.Low, r)
 }
 func safe(a, b float64) float64 {
 	if b <= 0 {

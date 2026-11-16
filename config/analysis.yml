@@ -142,10 +142,17 @@ analysis:
     min_primary_htf_warmup_bars: 50
     allow_counter_trend: true
 
-  # MAD-0 Asia phase classifier. These are descriptive technical inputs and
-  # never execution gates; the Go engine owns the resulting phase context.
+  # AMD (Accumulation / Manipulation / Distribution) context, read from the Asia
+  # range over closed bars as dated events (docs/amd-context.md). These are
+  # descriptive technical inputs and never execution gates, strategy filters or
+  # score weights; the Go engine owns the resulting context.
   mad:
     pip_size: 0.0001
+    sequence:
+      # How long after its last event (or, with none, after the range sealed) a
+      # sequence still counts as current evidence. Past it the facts are kept for
+      # audit but reported inactive/stale. A freshness bound, not a gate.
+      validity_hours: 8
     accum:
       minimum_rq: 0.8
       maximum_rq: 6.0

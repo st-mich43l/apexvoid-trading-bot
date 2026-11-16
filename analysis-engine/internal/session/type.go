@@ -190,3 +190,17 @@ func (b *Book) Get(tf market.Timeframe) (State, bool) {
 	state, ok := b.ByTimeframe[tf]
 	return state, ok
 }
+
+// Window returns the [start, end) of the most recent occurrence of the named
+// session (Asia, London or NY) that has opened at or before at, on the
+// configured calendar, so a daylight-saving change moves it. ok is false when no
+// occurrence is found. A session ends where the next session opens.
+func (c Config) Window(name string, at int64) (start, end int64, ok bool) {
+	var found window
+	for _, w := range c.occurrences(at, at) {
+		if w.name == name && w.start <= at && (!ok || w.start > found.start) {
+			found, ok = w, true
+		}
+	}
+	return found.start, found.end, ok
+}
