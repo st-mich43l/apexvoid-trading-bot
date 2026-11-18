@@ -95,6 +95,8 @@ type SwingZone struct {
 	// DepartureConfirmedAt is the open time of the leg's last bar; ConfirmedIndex the first bar index by which the swing AND the departure are both known.
 	DepartureConfirmedAt int64
 	ConfirmedIndex       int
+	// ConfirmedAt is the open time of the bar at ConfirmedIndex: the zone is formed, and touchable, only from the CLOSE of that bar.
+	ConfirmedAt int64
 
 	// BodyLow and BodyHigh are the extremes of the base candles' BODIES (open and close), wicks excluded: the proximal body edge is an internal level of the base.
 	BodyLow, BodyHigh float64
@@ -104,124 +106,267 @@ type SwingZone struct {
 	Strength          Strength
 	TooWide           bool // wider than a zone: a region
 	TooNarrow         bool // an incidental candle region
+	// Aged is the zone's CURRENT validity, apart from its formation: the swing is older than RelevanceBars as of the last bar given. It ends tradeability and never changes
+	// Strength, which is fixed at formation.
+	Aged bool
+}
+
+// Why a candidate departure made no zone. Every one is a fact about the bars, deterministic and causal.
+const (
+	RejectNoBase           = "no_base_before_departure"              // the candle before the departure is not a quiet candle of a base
+	RejectNoSwing          = "no_confirmed_swing_in_base"            // the base holds no confirmed swing of the kind
+	RejectExtremeNotSwing  = "base_extreme_is_not_a_confirmed_swing" // the base's extreme candle is not a confirmed swing: the association is ambiguous, so it is not guessed
+	RejectAwaitingSwing    = "awaiting_swing_confirmation"           // the extreme candle's right window has not closed yet (formed later, not rejected for good)
+	RejectSwingTooFar      = "swing_too_far_from_departure"          // the anchoring swing is more than base_departure_gap_bars before the departure
+	RejectSwingAlreadyUsed = "swing_already_anchors_a_zone"          // one structural event is one zone
+	RejectRegionTooWide    = "region_wider_than_a_zone"              // the structure around the swing is wider than maximum_zone_atr: a region, not a zone
+)
+
+// Rejection records a displacement leg that made no zone and why.
+type Rejection struct {
+	LegStart  int
+	Departure int
+	Reason    string
 }
 
 // FormSwingZones returns the zones anchored on the swings of bars. legs are the departure legs of the direction the zone needs (down for supply, up for demand).
-// The result is in swing order. bars/atr are the closed bars of the frame and its ATR series.
+// The result is in departure order. bars/atr are the closed bars of the frame and its ATR series.
 func FormSwingZones(supply bool, bars []market.Candle, atr []float64, legs []Leg, cfg ZoneConfig) []SwingZone {
+	zones, _ := FormSwingZonesDetailed(supply, bars, atr, legs, cfg)
+	return zones
+}
+
+// FormSwingZonesDetailed is FormSwingZones with the reason every leg that made no zone made none.
+//
+// The base is built FROM THE DEPARTURE BACKWARDS, so it is by construction the region the departure left: from the last candle before the departure's first bar, a candle joins
+// while it is a quiet candle (its range is at most base_max_candle_atr x ATR), overlaps the base so far, and the base is under base_max_candles candles (counted over the whole
+// base, the candles between the swing and the departure included, and the departure's first candle) and the base stays within maximum_zone_atr (a slow trend is not absorbed one candle at a time). A candle that is a confirmed swing may join even when impulsive, by its rejected part only (a supply swing
+// candle by its range from its body top to its high); the candles before it must then overlap that part, which a move into the structure does not. If the candle before the departure is none of these, the
+// departure did not leave a base and there is no zone. The departure's first candle always contributes only what it traded before leaving (from its open to its extreme): its own
+// travel is the departure.
+//
+// The zone is anchored on the swing that IS the base's extreme: the highest confirmed swing high of a supply base (the lowest swing low of a demand base). A base whose extreme
+// candle is not a confirmed swing is ambiguous and is rejected, never guessed; a swing that already anchors a zone does not anchor a second one (one structural event, one zone);
+// and AnchorPrice is that swing's own extreme, equal to the base's.
+func FormSwingZonesDetailed(supply bool, bars []market.Candle, atr []float64, legs []Leg, cfg ZoneConfig) ([]SwingZone, []Rejection) {
 	if cfg.Valid() != nil || len(bars) == 0 {
-		return nil
+		return nil, nil
 	}
 	kind := PivotHigh
 	if !supply {
 		kind = PivotLow
 	}
+	swings := map[int]MajorSwing{}
+	for _, sw := range ClassifyMajor(bars, atr, cfg.Major) {
+		if sw.Kind == kind {
+			swings[sw.BarIndex] = sw
+		}
+	}
 	var out []SwingZone
-	used := map[int]bool{}
+	var rejected []Rejection
+	anchored := map[int]bool{}
 	atFormation := map[int][]MajorSwing{} // classification of the bars up to a formation index, shared by the zones formed on that bar
-	for _, swing := range ClassifyMajor(bars, atr, cfg.Major) {
-		if swing.Kind != kind {
+	last := len(bars) - 1
+	for _, leg := range legs {
+		var zone *SwingZone
+		reason, departure := RejectNoBase, leg.Start
+		for _, d := range departureStarts(bars, atr, leg, swings, cfg) {
+			departure = d
+			b, why := baseBefore(bars, atr, d, swings, supply, last, cfg)
+			if why != "" {
+				reason = why
+				continue
+			}
+			if b.anchor.BarIndex < d-cfg.DepartureGapBars {
+				reason = RejectSwingTooFar
+				continue
+			}
+			if anchored[b.anchor.BarIndex] {
+				reason = RejectSwingAlreadyUsed
+				continue
+			}
+			z := assemble(supply, bars, atr, leg, d, b, cfg)
+			zone = &z
+			break
+		}
+		if zone == nil {
+			rejected = append(rejected, Rejection{LegStart: leg.Start, Departure: departure, Reason: reason})
 			continue
 		}
-		i := swing.BarIndex
-		leg, departure, ok := departureFrom(bars, atr, legs, i, cfg, used)
-		if !ok {
-			continue
-		}
-		used[leg.Start] = true
-		unit := atrAt(atr, i)
-		start, end := baseBounds(bars, atr, i, departure, cfg)
-		low, high := bars[start].Low, bars[start].High
-		bodyLow, bodyHigh := math.Min(bars[start].Open, bars[start].Close), math.Max(bars[start].Open, bars[start].Close)
-		for j := start; j <= end; j++ {
-			low, high = math.Min(low, bars[j].Low), math.Max(high, bars[j].High)
-			bodyLow, bodyHigh = math.Min(bodyLow, math.Min(bars[j].Open, bars[j].Close)), math.Max(bodyHigh, math.Max(bars[j].Open, bars[j].Close))
-		}
-		z := SwingZone{
-			Supply: supply, Low: low, High: high, BodyLow: bodyLow, BodyHigh: bodyHigh, Swing: swing, BaseStart: start, BaseEnd: end, BaseFormedAt: bars[end].Time,
-			LegStart: departure, LegEnd: leg.End, DepartureConfirmedAt: bars[leg.End].Time,
-			ConfirmedIndex: maxInt(leg.End, i+cfg.Major.PivotRightBars),
-		}
-		if supply {
-			z.Proximal, z.Distal, z.AnchorPrice = low, high, high
-		} else {
-			z.Proximal, z.Distal, z.AnchorPrice = high, low, low
-		}
-		z.WidthATR = (high - low) / unit
-		z.TooWide = z.WidthATR > cfg.MaximumZoneATR
-		z.TooNarrow = z.WidthATR < cfg.MinimumZoneATR
-		z.DepartureATR, z.Efficiency = legMeasure(bars, atr, Leg{Start: departure, End: leg.End}, supply)
+		anchored[zone.Swing.BarIndex] = true
 		// The strength is the evidence available when the zone was FORMED: the swing is known (its right window closed) and the departure has closed. It is read from the bars
-		// up to that bar only, so a later shift, a later extension of the departure or a later close is never an upgrade of a zone that was formed without it (those are the
-		// lifecycle's and the quality's business), and the strength is the same at every later bar.
-		if _, cached := atFormation[z.ConfirmedIndex]; !cached {
-			atFormation[z.ConfirmedIndex] = ClassifyMajor(bars[:z.ConfirmedIndex+1], atr[:minInt(len(atr), z.ConfirmedIndex+1)], cfg.Major)
+		// up to that bar only, so a later shift, a later extension of the departure or a later close is never an upgrade of a zone that was formed without it, and the strength is
+		// the same at every later bar. Whether the zone is still tradeable now (too old, closed through, spent) is the lifecycle's: Aged below and the strategy's verdicts.
+		if _, cached := atFormation[zone.ConfirmedIndex]; !cached {
+			atFormation[zone.ConfirmedIndex] = ClassifyMajor(bars[:zone.ConfirmedIndex+1], atr[:minInt(len(atr), zone.ConfirmedIndex+1)], cfg.Major)
 		}
-		formed := swing
-		for _, f := range atFormation[z.ConfirmedIndex] {
-			if f.Kind == swing.Kind && f.BarIndex == swing.BarIndex {
+		formed := zone.Swing
+		for _, f := range atFormation[zone.ConfirmedIndex] {
+			if f.Kind == formed.Kind && f.BarIndex == formed.BarIndex {
 				formed = f
 			}
 		}
-		z.Swing = formed
-		z.Strength = strengthOf(formed, standing(bars, formed, z.ConfirmedIndex, supply, cfg.Major), z.DepartureATR, cfg)
-		out = append(out, z)
+		zone.Swing = formed
+		zone.Strength = strengthOf(formed, standing(bars, formed, zone.ConfirmedIndex, supply), zone.DepartureATR, cfg)
+		zone.Aged = last-formed.BarIndex > cfg.Major.RelevanceBars
+		out = append(out, *zone)
 	}
-	return out
+	return out, rejected
 }
 
-// departureFrom finds the leg that left the swing and the bar where the departure began. A leg that begins on the swing candle or within DepartureGapBars after it
-// is the departure from its first candle. A leg that began BEFORE the swing candle is a run of same-direction candles that contains the consolidation (the base
-// candles that happen to be the leg's colour): the departure begins at the first impulse candle after the swing (its range above BaseMaxCandleATR x ATR), and a run
-// that began more than a base ago, or never produces an impulse candle after the swing, did not leave it.
-func departureFrom(bars []market.Candle, atr []float64, legs []Leg, swing int, cfg ZoneConfig, used map[int]bool) (Leg, int, bool) {
-	for _, l := range legs {
-		if used[l.Start] || l.End < swing || l.Start > swing+cfg.DepartureGapBars || l.Start < swing-cfg.BaseMaxCandles {
-			continue
-		}
-		d := l.Start
-		if l.Start < swing {
-			d = -1
-			for j := swing + 1; j <= l.End; j++ {
-				if bars[j].High-bars[j].Low > cfg.BaseMaxCandleATR*atrAt(atr, j) {
-					d = j
-					break
-				}
-			}
-			if d < 0 {
-				continue
+// departureStarts are the bars a leg's departure may begin at, in the order they are tried: the leg's first bar, and, when the leg is a run that began inside the
+// consolidation (the base candles happen to be the leg's colour), its first impulse candle that is not itself a swing candle.
+func departureStarts(bars []market.Candle, atr []float64, leg Leg, swings map[int]MajorSwing, cfg ZoneConfig) []int {
+	starts := []int{leg.Start}
+	if quiet(bars[leg.Start], atrAt(atr, leg.Start), cfg) {
+		for j := leg.Start + 1; j <= leg.End; j++ {
+			// A swing candle that happens to be tall is the structure's extreme, not the first bar of the move away from it.
+			if _, isSwing := swings[j]; !quiet(bars[j], atrAt(atr, j), cfg) && !isSwing {
+				starts = append(starts, j)
+				break
 			}
 		}
-		if d-swing > cfg.DepartureGapBars {
-			continue
-		}
-		return l, d, true
 	}
-	return Leg{}, 0, false
+	return starts
 }
 
-// baseBounds finds the base around the swing candle and before the leg. The swing candle is always in it; earlier candles join while they are not impulses, overlap the
-// base so far and the base has room; the base ends at the candle before the leg (or at the swing candle when the leg starts on it).
-func baseBounds(bars []market.Candle, atr []float64, swing, legStart int, cfg ZoneConfig) (start, end int) {
-	end = maxInt(swing, legStart-1)
-	start = swing
-	low, high := bars[swing].Low, bars[swing].High
-	for j := swing + 1; j <= end; j++ {
-		low, high = math.Min(low, bars[j].Low), math.Max(high, bars[j].High)
+// quiet reports a candle small enough to be part of a base.
+func quiet(c market.Candle, unit float64, cfg ZoneConfig) bool {
+	return unit > 0 && c.High-c.Low <= cfg.BaseMaxCandleATR*unit
+}
+
+// span is a price interval.
+type span struct{ lo, hi float64 }
+
+func (s span) overlaps(o span) bool { return s.lo <= o.hi && s.hi >= o.lo }
+
+// rejected is the part of a candle a base takes when the candle is impulsive: what it traded before moving away, from the body edge to the extreme the structure is about.
+func rejectedPart(c market.Candle, supply bool) span {
+	if supply {
+		return span{lo: math.Max(c.Open, c.Close), hi: c.High}
 	}
-	for j := swing - 1; j >= 0 && end-j+1 <= cfg.BaseMaxCandles; j-- {
+	return span{lo: c.Low, hi: math.Min(c.Open, c.Close)}
+}
+
+// base is the region a departure left.
+type base struct {
+	start, end     int
+	lo, hi         float64
+	bodyLo, bodyHi float64
+	anchor         MajorSwing
+}
+
+// baseBefore builds the base of a departure that begins at d and finds its anchor; a non-empty reason means there is none.
+func baseBefore(bars []market.Candle, atr []float64, d int, swings map[int]MajorSwing, supply bool, last int, cfg ZoneConfig) (base, string) {
+	var b base
+	have := false
+	include := func(j int, s span, bodyLo, bodyHi float64) {
+		if !have {
+			b = base{start: j, end: j, lo: s.lo, hi: s.hi, bodyLo: bodyLo, bodyHi: bodyHi}
+			have = true
+			return
+		}
+		b.start = j
+		b.lo, b.hi = math.Min(b.lo, s.lo), math.Max(b.hi, s.hi)
+		b.bodyLo, b.bodyHi = math.Min(b.bodyLo, bodyLo), math.Max(b.bodyHi, bodyHi)
+	}
+	// The departure's first candle contributes what it traded before leaving (a supply candle: from its body top to its high). Whether or not it is a swing, so the zone does not
+	// change when that candle's right window closes later: if its extreme is the base's extreme it must be a confirmed swing, and until it is the zone is "awaiting", not different.
+	p := rejectedPart(bars[d], supply)
+	include(d, p, p.lo, p.hi)
+	b.end = d
+	capped := false
+	count := 0 // base_max_candles counts the consolidation candles before the departure, not the departure's own first candle
+	for j := d - 1; j >= 0 && count < cfg.BaseMaxCandles; j-- {
 		c := bars[j]
-		unit := atrAt(atr, j)
-		if !(unit > 0) || c.High-c.Low > cfg.BaseMaxCandleATR*unit {
-			break // an impulse candle is the move into the base, not part of it
+		_, isSwing := swings[j]
+		full := span{c.Low, c.High}
+		bodyLo, bodyHi := math.Min(c.Open, c.Close), math.Max(c.Open, c.Close)
+		s := full
+		if !quiet(c, atrAt(atr, j), cfg) {
+			if !isSwing {
+				break
+			}
+			s = rejectedPart(c, supply)
+			bodyLo, bodyHi = s.lo, s.hi
 		}
-		if c.Low > high || c.High < low {
-			break // no overlap: the candle belongs to a different price area
+		if have && !s.overlaps(span{b.lo, b.hi}) {
+			break
 		}
-		start = j
-		low, high = math.Min(low, c.Low), math.Max(high, c.High)
+		if have && math.Max(b.hi, s.hi)-math.Min(b.lo, s.lo) > cfg.MaximumZoneATR*atrAt(atr, d) {
+			capped = true
+			break // a base is a LOCAL consolidation: a candle that would stretch it past a zone's width is the trend into it, not part of it
+		}
+		if !have {
+			b.end = j
+		}
+		include(j, s, bodyLo, bodyHi)
+		count++
 	}
-	return start, end
+	if !have {
+		return base{}, RejectNoBase
+	}
+	extreme := b.hi
+	if !supply {
+		extreme = b.lo
+	}
+	var candidates []MajorSwing
+	for j := b.start; j <= b.end; j++ {
+		if sw, ok := swings[j]; ok && float64(sw.Price) == extreme {
+			candidates = append(candidates, sw)
+		}
+	}
+	if len(candidates) == 0 && capped {
+		return base{}, RejectRegionTooWide
+	}
+	if len(candidates) == 0 {
+		// Is the extreme candle simply not confirmed yet? Then the zone forms later; otherwise the base's extreme is not a swing and the association is ambiguous.
+		for j := b.start; j <= b.end; j++ {
+			e := bars[j].High
+			if !supply {
+				e = bars[j].Low
+			}
+			if e == extreme && j+cfg.Major.PivotRightBars > last {
+				return base{}, RejectAwaitingSwing
+			}
+		}
+		for j := b.start; j <= b.end; j++ {
+			if _, ok := swings[j]; ok {
+				return base{}, RejectExtremeNotSwing
+			}
+		}
+		return base{}, RejectNoSwing
+	}
+	// Equal extremes: the most significant swing, then the earliest.
+	best := candidates[0]
+	for _, c := range candidates[1:] {
+		if c.Class > best.Class {
+			best = c
+		}
+	}
+	b.anchor = best
+	return b, ""
+}
+
+// assemble builds the zone of a departure from its base.
+func assemble(supply bool, bars []market.Candle, atr []float64, leg Leg, d int, b base, cfg ZoneConfig) SwingZone {
+	i := b.anchor.BarIndex
+	unit := atrAt(atr, d) // widths are judged against the volatility the zone formed in (the departure's bar), the same ATR the base was bounded by
+	z := SwingZone{
+		Supply: supply, Low: b.lo, High: b.hi, BodyLow: b.bodyLo, BodyHigh: b.bodyHi, Swing: b.anchor, BaseStart: b.start, BaseEnd: b.end, BaseFormedAt: bars[b.end].Time,
+		LegStart: d, LegEnd: leg.End, DepartureConfirmedAt: bars[leg.End].Time, ConfirmedIndex: maxInt(leg.End, i+cfg.Major.PivotRightBars),
+	}
+	z.ConfirmedAt = bars[z.ConfirmedIndex].Time
+	if supply {
+		z.Proximal, z.Distal, z.AnchorPrice = b.lo, b.hi, float64(b.anchor.Price)
+	} else {
+		z.Proximal, z.Distal, z.AnchorPrice = b.hi, b.lo, float64(b.anchor.Price)
+	}
+	z.WidthATR = (b.hi - b.lo) / unit
+	z.TooWide = z.WidthATR > cfg.MaximumZoneATR
+	z.TooNarrow = z.WidthATR < cfg.MinimumZoneATR
+	z.DepartureATR, z.Efficiency = legMeasure(bars, atr, Leg{Start: d, End: leg.End}, supply)
+	return z
 }
 
 // legMeasure is the leg's net move in ATR of its last bar and its efficiency (net move over the sum of the bars' ranges).
@@ -243,13 +388,9 @@ func legMeasure(bars []market.Candle, atr []float64, leg Leg, supply bool) (depa
 	return departureATR, efficiency
 }
 
-// standing reports whether the swing was still a structure when the zone was formed and is not too old: no close beyond it between the swing and the bar by which the
-// zone was known, and not older than RelevanceBars. A later close beyond the far edge is the lifecycle's business (the strategy's breach verdict forgives a reclaimed
-// sweep and retires an accepted break), never a downgrade of the structure that was formed.
-func standing(bars []market.Candle, s MajorSwing, confirmedIndex int, supply bool, cfg MajorConfig) bool {
-	if len(bars)-1-s.BarIndex > cfg.RelevanceBars {
-		return false
-	}
+// standing reports whether the swing was still a structure when the zone was formed: no close beyond it between the swing and the bar by which the zone was known. Age is NOT a
+// part of the formation (adding bars must never downgrade a formed zone); it ends the zone's tradeability (SwingZone.Aged), which is the lifecycle's.
+func standing(bars []market.Candle, s MajorSwing, confirmedIndex int, supply bool) bool {
 	price := float64(s.Price)
 	for j := s.BarIndex + 1; j <= confirmedIndex && j < len(bars); j++ {
 		if (supply && bars[j].Close > price) || (!supply && bars[j].Close < price) {

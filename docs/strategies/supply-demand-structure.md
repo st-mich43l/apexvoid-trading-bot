@@ -1,6 +1,6 @@
 # Supply and demand: major-swing structure and AE-owned entry (SD-1 to SD-7)
 
-`supply` v13 and `demand` v11. The mirror of one another: everything below is written for supply (SELL, a zone above price) and holds for demand with every price
+`supply` v14 and `demand` v12. The mirror of one another: everything below is written for supply (SELL, a zone above price) and holds for demand with every price
 reflected (a swing LOW, an upward departure, the proximal edge is the zone's HIGH). The Analysis Engine owns every fact on this page; Algo Bot records a few of
 them and decides nothing from them.
 
@@ -47,19 +47,26 @@ added; its class is "as of the last bar given", and a decision published on it k
 
 ## SD-3: the zone from the swing (`structure.FormSwingZones`)
 
-* The **swing** is a high (supply) / low (demand) with a departure leg (the strategy's own displacement leg) that starts on the swing candle or within
-  `base_departure_gap_bars` after it. A run that began inside the consolidation (the base candles happen to be the leg's colour) departs at its first impulse
-  candle after the swing.
-* The **base** is found from the candles: from the swing candle back while a candle is not an impulse (range <= `base_max_candle_atr` x ATR), overlaps the base so
-  far and the base is under `base_max_candles` candles; to the last candle before the departure. Wicks included: the structural range is the whole base and no later
-  entry decision narrows it.
-* `proximal_price` is the edge price meets first, `distal_price` the far edge the structure is invalidated beyond, `swing_anchor_price` the swing's extreme.
-  `swing_confirmed_at`, `base_formed_at` and `departure_confirmed_at` are open times of closed bars; the zone is touchable from the later of the swing and the
-  departure.
-* **Strong**: a MAJOR swing that still stands with a departure of at least `strong_departure_atr`. **Moderate**: at least INTERMEDIATE and still standing. **Weak**:
-  anything else. A structure wider than `maximum_zone_atr` is a region and one narrower than `minimum_zone_atr` an incidental candle region: neither publishes.
-* Only `minimum_zone_strength` or better publishes (shipped: moderate). A weak zone is context: it is counted when it would otherwise have traded
-  (`zone_strength_below_minimum`) and never gives higher-timeframe confluence. FVG, order block or a sweep are not required; they are evidence, not a precondition.
+The zone is the base the departure LEFT, built from the departure backwards, and anchored on the swing that is that base's extreme.
+
+* **Departure.** The strategy's own displacement leg. It begins at the leg's first bar; for a run that began inside the consolidation (the base candles happen to be the leg's colour) the
+  next attempt is its first impulse candle that is not itself a swing candle.
+* **Base.** From the departure's first candle, which contributes only what it traded before leaving (a supply candle: from its body top to its high; its own travel is the departure),
+  backwards: a candle joins while it is quiet (range <= `base_max_candle_atr` x ATR), overlaps the base so far, the base stays within `maximum_zone_atr` (a slow trend is not absorbed one
+  candle at a time) and there are at most `base_max_candles` consolidation candles (counted over the complete base, the candles between the swing and the departure included). A confirmed
+  swing candle may join even when impulsive, by its rejected part only. Wicks are included; no later entry decision narrows the structure.
+* **Anchor.** The base's extreme candle must be a confirmed swing of the kind: the highest swing high of a supply base (equal extremes: the most significant, then the earliest),
+  `AnchorPrice` is that swing's own extreme and equals the base's high. A base with no swing, or whose extreme candle is not a confirmed swing (equal adjacent highs), is rejected with its
+  reason, never guessed; an extreme whose right window has not closed yet is "awaiting" and forms later; one swing anchors one zone; the swing must be within
+  `base_departure_gap_bars` of the departure.
+* `proximal_price` is the edge price meets first, `distal_price` the far edge the structure is invalidated beyond. `swing_confirmed_at`, `base_formed_at` and `departure_confirmed_at` are
+  open times of closed bars; the zone is formed, and touchable, only from the close of the bar by which the swing AND the departure are both known (`ConfirmedAt`).
+* **Strong**: a MAJOR swing that still stood at formation with a departure of at least `strong_departure_atr`. **Moderate**: at least INTERMEDIATE and standing at formation. **Weak**:
+  anything else. Strength is read from the bars up to the formation bar and never changes. **Aged** (the swing older than `swing_relevance_bars` as of the last bar) is the zone's CURRENT
+  validity, separate from its strength: an aged zone is not offered for new entries and gives no confluence (`zone_aged`). A structure wider than `maximum_zone_atr` is a region
+  (`region_wider_than_a_zone`) and one narrower than `minimum_zone_atr` an incidental candle region: neither publishes.
+* Only `minimum_zone_strength` or better publishes (shipped: moderate). A weak zone is context: it is counted when it would otherwise have traded (`zone_strength_below_minimum`). FVG,
+  order block or a sweep are not required; they are evidence, not a precondition.
 
 ## SD-4: quality
 
@@ -187,3 +194,66 @@ Concrete examples (XAU H1; bar times are open times, a bar is known at its close
 ## Rollback of the audit
 
 Nothing new to switch: `zone_model: legacy` still restores the three-candle zone. The classifier fix itself is the previous behaviour's defect; to compare, check out #886.
+
+## SD-3 audit (v14 / v12)
+
+Audit of the zone formation as merged in #886/#887. Each defect has a test that failed on it (`swingzone_audit_test.go`):
+
+| Finding | What it did | Fix |
+|---|---|---|
+| Forward candles (between the swing and the departure) joined the base unconditionally | a 2.8-ATR rebound candle unrelated to the base stretched the zone down to its low | the base is built from the departure backwards and must be contiguous; an unrelated impulse breaks it |
+| `base_max_candles` bounded only the backward extension | a 4-candle base with a limit of 3 | counted over the complete base |
+| The first swing in bar order claimed the departure; the base then ran forward to the departure and took a HIGHER extreme with it | `AnchorPrice` was not the anchoring swing's price (**226 of 1 043 zones, 22 %**) | the base's extreme swing anchors it; one swing, one zone |
+| A swing candle that was itself the departure's first impulsive candle belonged to the base with its whole range | the zone swallowed the departure's own travel | only what it traded before leaving (open to extreme) |
+| `standing()` read the length of the whole history | adding bars downgraded a formed zone to WEAK once the swing was 150 bars old | formation strength is fixed; age is the separate `Aged` state |
+| Each candle only had to overlap the base so far | a slowly rising staircase was absorbed into a "base" that is a trend (7 candles, 3.1 ATR) | the base stays within `maximum_zone_atr` |
+| The zone depended on whether the departure's first candle's swing had been confirmed yet | a different anchor and identity once it closed | that candle always contributes its pre-departure part; if it is the extreme and unconfirmed, the zone is "awaiting" |
+
+Correct and kept: the departure legs, the swing classification and the strengths' definitions, the lifecycle of SD-1, every threshold (`base_departure_gap_bars: 3`, `base_max_candles: 6`,
+`base_max_candle_atr: 1.5`, `minimum_zone_atr: 0.2`, `maximum_zone_atr: 3.0`, `strong_departure_atr: 2.0`, `minimum_zone_strength: moderate`: **no config value changed**).
+
+Tests: the defects above; prefix replay (no zone before its swing and departure are confirmed, the base never moves, identity is the same at every later bar); a minor pivot before the major one,
+several internal pivots, a departure on the swing candle and 1 to 3 bars after it (4 is rejected), a small first departure then a larger one, an ambiguous extreme; a property test over 60
+pseudo-random markets checking every invariant (anchor = swing = base extreme, consolidation <= `base_max_candles`, no impulse in the base except a swing candle, no candle outside the structure,
+swing inside the base and within the gap, one zone per swing, confirmed no earlier than swing and departure) and that **demand is the exact price mirror of supply** (same bases, anchors,
+strengths, confirmation, mirrored prices); the entry band never rewrites the structural boundaries; an aged zone is refused as `zone_aged` with its strength intact.
+
+Real data (production closed bars, 9-12 days, five symbols, supply and demand, M15 window 250 and H1 400, evaluated bar by bar; baseline = #887 as merged):
+
+| | merged | corrected |
+|---|---|---|
+| confirmed swings / displacement legs | 3 611 / 1 874 | same |
+| unique zones | 1 043 | 918 |
+| `AnchorPrice` is not the swing's price | 226 | 0 |
+| base with an unrelated impulse candle | 30 | 0 |
+| wider than a zone (published as a region) | 104 | 0 (33 departures rejected as `region_wider_than_a_zone`) |
+| strength [strong / moderate / weak] | 23 / 575 / 445 | 28 / 756 / 134 |
+| median structure width | 1.92 ATR | 1.52 ATR |
+| later terminal (breach never reclaimed) | 231 | 269 |
+| median bars from swing to formation | 2 to 3 | 2 to 3 |
+| zones in both / only merged / only corrected | 915 / 128 / 3 | |
+
+Departures that made no zone (corrected): 1 426 had no confirmed swing in their base (a displacement from nowhere, not from a swing), 206 an extreme that is not a confirmed swing, 201 a swing
+too far from the departure, 201 awaiting the swing's confirmation (formed later), 33 regions, 2 swings already anchoring a zone. Of the 128 merged-only zones: 74 were mis-anchored, 29 had no swing in
+their genuine base, 16 are the same departure now anchored on its extreme swing, 6 too far, 3 other. The remaining 14 zones with two anchors for one departure occur only where the rolling window
+evicts the swing's own left side (older than the relevance horizon).
+
+Published (replay through the engine): **410 -> 380 opportunities, 67 -> 62 zones**; STRONG 20 -> 30, MAJOR 26 -> 36; XAU 42 -> 79 opportunities on 6 -> 10 zones (5 of the 10 have the same geometry as before
+with their identity moved by one bar; the others are different bases). Other strategies' 3 073 events are byte-identical. Hypothetical outcomes, same simulator and assumptions as SD-1 to SD-5, first fill per
+zone: merged +0.02R [-0.27, +0.30] (53 zones), corrected -0.03R [-0.32, +0.26] (53 zones); XAU 9 zones -0.14R [-0.74, +0.72]. **No performance claim**: nothing here is distinguishable from zero and the
+correction was made for structural correctness, not for these numbers.
+
+XAU examples (H1; open times; a bar is known at its close):
+* **Supply, MAJOR, strong.** High 4219.29 at 1790769600 (ATR 14.42, class MAJOR: prominence 3.81, departure 3.81, external, CHoCH). That candle is a 2.5-ATR rally with a long upper wick; the next candle
+  (1790773200, a 2.3-ATR bearish candle) is the departure. The base is the rejected part of each: from the rally candle's close 4208.54 up to 4219.29 (and the departure candle's open 4208.69 to its high
+  4214.65, inside it): structure 4208.54..4219.29 (0.65 ATR), proximal 4208.54, distal 4219.29, departure 2.53 ATR (efficiency 0.75). The swing is known when its confirmation bar (opened 1790776800) closes; the zone is formed from the same close.
+* **Demand, MAJOR, strong.** Low 3995.97 at 1785333600 (ATR 12.91; prominence 8.82, CHoCH) inside a 2-candle base (1785333600 and the departure's first candle 1785337200): structure 3995.97..4010.12
+  (1.16 ATR), departure 5.58 ATR (efficiency 0.81). The swing is known when its confirmation bar (opened 1785340800) closes and the zone is formed once the departure has closed (bar opened 1785348000).
+* **Supply, MAJOR, strong, six candles.** High 4435.06 at 1789020000, the departure's first candle itself: the base is the six candles 1789002000..1789016400 (4400.25..4431.29) plus that candle's
+  open-to-high part: structure 4400.25..4435.06 (2.39 ATR, inside the 3.0 limit: a version of this change without the width bound absorbed a seventh candle, 1788998400, and reached 3.11 ATR, a region).
+* **Rejected.** A displacement whose base holds no confirmed swing (1 426 departures in the window) makes no zone however large the move: its reason is `no_confirmed_swing_in_base`.
+
+## Release and rollback
+
+Analysis Engine only; no contract or config change (the `swing` and `entry_plan` blocks are unchanged). Strategy versions change, so opportunity IDs change once at deploy; `structure.formed_at` is now the
+open time of the departure's first candle. Rollback: revert the change, or `zone_model: legacy`.
