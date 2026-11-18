@@ -229,6 +229,10 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 		refuse(refusedZoneStrength)
 		return nil
 	}
+	if in.aged() {
+		refuse(refusedZoneAged)
+		return nil
+	}
 	conf := v.reactionFrom(structLow, structHigh, v.zoneGrab(z), in.TouchableFrom)
 	if conf == nil {
 		return nil

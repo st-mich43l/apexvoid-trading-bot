@@ -75,7 +75,7 @@ func TestAMajorSwingWithItsDepartureFormsAStrongSupplyZone(t *testing.T) {
 	if z.Proximal != z.Low || z.Distal != z.High || z.AnchorPrice != z.High || z.AnchorPrice != bars[swing].High {
 		t.Fatalf("a supply zone is entered from below and invalidated above its swing high: %+v", z)
 	}
-	if z.BaseEnd != legStart-1 || z.LegStart != legStart || z.DepartureConfirmedAt != bars[legEnd].Time {
+	if z.BaseEnd != legStart || z.LegStart != legStart || z.DepartureConfirmedAt != bars[legEnd].Time {
 		t.Fatalf("the base ends where the leg begins: %+v", z)
 	}
 	if z.BaseFormedAt != bars[z.BaseEnd].Time {
@@ -101,8 +101,8 @@ func TestTheBaseIsTheActualConsolidationNotAFixedCount(t *testing.T) {
 			t.Fatalf("base %d: want one zone, got %d", n, len(zones))
 		}
 		z := zones[0]
-		lengths = append(lengths, z.BaseEnd-z.BaseStart+1)
-		if got := z.BaseEnd - z.BaseStart + 1; got != n {
+		lengths = append(lengths, z.BaseEnd-z.BaseStart)
+		if got := z.BaseEnd - z.BaseStart; got != n { // the consolidation candles before the departure's first candle
 			t.Fatalf("a %d-candle consolidation must be a %d-candle base (the impulse before it excluded), got %d [%d..%d]", n, n, got, z.BaseStart, z.BaseEnd)
 		}
 	}
@@ -153,9 +153,9 @@ func TestZoneWidthIsJudgedOnTheWholeStructure(t *testing.T) {
 	bars, atr := candlesOf(specs)
 	cfg := zoneTestConfig()
 	cfg.MaximumZoneATR = 0.8
-	zones := FormSwingZones(true, bars, atr, []Leg{{legStart, legEnd}}, cfg)
-	if len(zones) != 1 || !zones[0].TooWide {
-		t.Fatalf("a structure wider than the limit is a region: %+v", zones)
+	zones, rejected := FormSwingZonesDetailed(true, bars, atr, []Leg{{legStart, legEnd}}, cfg)
+	if len(zones) != 0 || len(rejected) != 1 || rejected[0].Reason != RejectRegionTooWide {
+		t.Fatalf("a structure wider than the limit is a region, not a zone: %+v %+v", zones, rejected)
 	}
 	cfg = zoneTestConfig()
 	cfg.MinimumZoneATR = 5

@@ -97,8 +97,8 @@ func TestAMajorSwingDepartureIsAStrongTradableZone(t *testing.T) {
 	}
 	// The structure is the whole base, not three candles and not the entry slice.
 	low, high := in.structural()
-	if low != f.Low || high != f.High || f.BaseEnd-f.BaseStart+1 != 5 {
-		t.Fatalf("structural %v..%v for a five-candle base %+v", low, high, f)
+	if low != f.Low || high != f.High || f.BaseEnd-f.BaseStart != 5 {
+		t.Fatalf("structural %v..%v for a five-candle consolidation before the departure %+v", low, high, f)
 	}
 	if in.FrameConfirmed < f.LegEnd || in.FrameConfirmed < f.Swing.BarIndex+2 {
 		t.Fatalf("the zone is touchable only once its swing and its departure are closed: confirmed %d", in.FrameConfirmed)
@@ -186,17 +186,15 @@ func TestLegacyModelIsTheRollback(t *testing.T) {
 	}
 }
 
-// A zone whose structure is wider than the limit is a region however narrow its entry slice: refused before clipping.
+// A structure wider than the limit is a region, not a zone: the base is never stretched past it (it stops at the width of a zone), so no zone is formed from it and nothing is
+// offered. A region that never was a zone has no opportunity to retire.
 func TestASwingZoneWiderThanTheLimitIsARegion(t *testing.T) {
 	frame, _ := majorSupplyFrame()
 	s := swingStrategy(structure.StrengthWeak)
 	s.cfg.Formation.Zone.MaximumZoneATR = 0.8
-	instances, held, liveness := readWith(t, s, frame)
+	instances, held, _ := readWith(t, s, frame)
 	if len(instances) != 0 || len(held) != 0 {
 		t.Fatalf("a region is not offered: %d instances %d held", len(instances), len(held))
-	}
-	if len(liveness.Live) != 1 {
-		t.Fatalf("it is still a live structure (nothing is retired for being a region): %+v", liveness)
 	}
 }
 
@@ -286,5 +284,46 @@ func TestStructureEvidenceIsTouchableFromTheCloseOfItsConfirmationBar(t *testing
 		if first < closeOfConfirmation || (bound[0].TouchableFrom > 0 && execBars[bound[0].TouchableFrom-1].Time >= closeOfConfirmation) {
 			t.Fatalf("%s: touchable from %d, the structure bar closes at %d", tf, first, closeOfConfirmation)
 		}
+	}
+}
+
+// Age ends a zone's tradeability, never its formation: an aged zone is not offered for entry (counted as zone_aged) and gives no confluence, and its formation strength is unchanged.
+func TestAnAgedZoneIsNotOfferedAndKeepsItsFormationStrength(t *testing.T) {
+	frame, _ := majorSupplyFrame()
+	s := swingStrategy(structure.StrengthModerate)
+	instances, held, _ := readWith(t, s, frame)
+	if len(instances) != 1 || len(held) != 1 {
+		t.Fatalf("setup: %d instances %d held", len(instances), len(held))
+	}
+	in := instances[0]
+	strength := in.Formation.Strength
+	aged := *in.Formation
+	aged.Aged = true
+	in.Formation = &aged
+	structLow, structHigh := in.structural()
+	_, _ = structLow, structHigh
+	var reason string
+	d := s.publish(execView(s, in, structLow), in, func(r string) { reason = r })
+	if d != nil || reason != refusedZoneAged {
+		t.Fatalf("an aged zone must be refused as zone_aged, got %v / %q", d, reason)
+	}
+	if in.Formation.Strength != strength {
+		t.Fatalf("age must not change the formation strength: %s -> %s", strength, in.Formation.Strength)
+	}
+}
+
+// The tradable entry slice never rewrites the structure: whatever band the planner publishes, the zone's own boundaries are the validated base.
+func TestTheEntryBandNeverRewritesTheStructuralBoundaries(t *testing.T) {
+	frame, _ := majorSupplyFrame()
+	s := swingStrategy(structure.StrengthModerate)
+	s.cfg.EntryMaxWidthPrice = 0.9 // a much narrower slice than the 1.7-wide structure
+	instances, _, _ := readWith(t, s, frame)
+	in := instances[0]
+	low, high := in.structural()
+	if low != in.Formation.Low || high != in.Formation.High {
+		t.Fatalf("structural() %.2f..%.2f must be the validated base %.2f..%.2f", low, high, in.Formation.Low, in.Formation.High)
+	}
+	if in.Formation.Proximal != in.Formation.Low || in.Formation.Distal != in.Formation.High {
+		t.Fatalf("proximal %.2f distal %.2f", in.Formation.Proximal, in.Formation.Distal)
 	}
 }

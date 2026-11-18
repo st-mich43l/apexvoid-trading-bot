@@ -28,6 +28,9 @@ const refusedNoTargetRoom = "no_target_room" // the nearest obstacle is closer t
 // refusedZoneStrength counts a zone in play (its entry is valid) that is below minimum_zone_strength: a weak zone is context, never a trade.
 const refusedZoneStrength = "zone_strength_below_minimum"
 
+// refusedZoneAged counts a zone in play whose swing is older than the relevance horizon: formation strength is kept, tradeability has ended.
+const refusedZoneAged = "zone_aged"
+
 // The entry planner's refusals (swing model): no candidate price of the zone is feasible.
 const (
 	refusedStopBeyondCap   = "stop_beyond_cap"
@@ -406,7 +409,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = z.Low, z.High, true
 			in.Low, in.High = low, high
 		}
-		if !in.weak(s.cfg.Formation) {
+		if !in.weak(s.cfg.Formation) && !in.aged() {
 			held = append(held, band{Low: z.Low, High: z.High}) // only a zone that may publish is structure for the frame below
 		}
 		out = append(out, in)
@@ -462,6 +465,10 @@ func minInt(a, b int) int {
 	}
 	return b
 }
+
+// aged reports a swing-anchored zone whose swing is older than swing_relevance_bars: its formation strength is unchanged, but it is no longer offered for new entries and gives no
+// higher-timeframe confluence (an opportunity already published on it ends by its own expiry and by the lifecycle).
+func (i instance) aged() bool { return i.Formation != nil && i.Formation.Aged }
 
 // weak reports a swing-anchored zone below the strategy's minimum strength: kept as context, never published, never higher-timeframe confluence. The legacy model has
 // no strength and is never weak.
