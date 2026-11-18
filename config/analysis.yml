@@ -204,7 +204,10 @@ analysis:
       # mixed or too few: ambiguous) and breaks only on closed-bar acceptance beyond the side it defends; it is no longer read from the level's kind label.
       # v10 (docs/strategies/key_level.md): Key Level owns its reaction confirmation: the level must be known before the touch, a rejection_choch needs a CHoCH from the touch
       # to the confirmation, and a wick rejection or engulfing must happen at the band. The patterns, windows and thresholds are unchanged.
-      version: v10
+      # v11 (docs/strategies/key_level.md, KL11): the full reaction band is the opportunity's published structure and an M5 CLOSE beyond its far edge (more than
+      # structure_close_buffer_atr M5 ATRs) withdraws it (STRUCTURE_CLOSED_THROUGH), so a reaction whose level already failed is never filled later. The level's role
+      # (breakout_accept_bars) is unchanged. expiry_hours stays 24.0: the wait between creation and admission did not separate November outcomes (docs/strategies/key_level.md).
+      version: v11
       enabled: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of
@@ -217,6 +220,9 @@ analysis:
       # Whether the room is enough is the execution policy's call.
       fallback_target_r: 2.0
       expiry_hours: 24.0
+      # KL11: how far beyond the reaction band's far edge (a BUY's low, a SELL's high) an M5 close must be, in M5 ATRs, to withdraw the opportunity. 0.0 = any close
+      # beyond the band; a wick that closes back inside never withdraws. Read by the engine's structure-close rule, which order_block also uses with its own key.
+      structure_close_buffer_atr: 0.0
       # Ported from the legacy Python detector's key_level_role.py::
       # classify_key_level_role (breakout_accept_bars) — consecutive
       # closed bars that must accept beyond a level's band before its

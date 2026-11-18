@@ -55,7 +55,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v10"
+const Version = "v11"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -82,7 +82,10 @@ type Config struct {
 	InvalidationBufferATR float64
 	FallbackTargetR       float64
 	ExpiryHours           float64
-	PriceDigits           int
+	// StructureCloseBufferATR is the margin, in M5 ATRs, by which an M5 CLOSE must go beyond the reaction band's far edge to withdraw the opportunity
+	// (the engine's structure-close rule, KL11): 0 means any close beyond it. A wick that closes back inside never withdraws.
+	StructureCloseBufferATR float64
+	PriceDigits             int
 	// RequireExplicitRole skips levels whose support/resistance role is still
 	// ambiguous (legacy per-instrument Key Level quality rule).
 	RequireExplicitRole bool
@@ -147,6 +150,9 @@ func parseConfig(params map[string]any) (Config, error) {
 	if cfg.ExpiryHours, err = strategyutil.Float(params, "expiry_hours"); err != nil {
 		return Config{}, err
 	}
+	if cfg.StructureCloseBufferATR, err = strategyutil.Float(params, "structure_close_buffer_atr"); err != nil {
+		return Config{}, err
+	}
 	if cfg.BreakoutAcceptBars, err = strategyutil.Int(params, "breakout_accept_bars"); err != nil {
 		return Config{}, err
 	}
@@ -195,6 +201,8 @@ func parseConfig(params map[string]any) (Config, error) {
 		return Config{}, fmt.Errorf("fallback_target_r must be > 0")
 	case cfg.ExpiryHours <= 0:
 		return Config{}, fmt.Errorf("expiry_hours must be > 0")
+	case cfg.StructureCloseBufferATR < 0 || math.IsNaN(cfg.StructureCloseBufferATR) || math.IsInf(cfg.StructureCloseBufferATR, 0):
+		return Config{}, fmt.Errorf("structure_close_buffer_atr must be a finite number >= 0")
 	case cfg.BreakoutAcceptBars < 1:
 		return Config{}, fmt.Errorf("breakout_accept_bars must be >= 1")
 	case cfg.PriceDigits < 0:
@@ -437,6 +445,12 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	// The persistent identity of the thesis is the level, not this
 	// confirmation: a re-confirmation of the same level is the same thesis.
 	candidate.StructuralID = levelID
+	// KL11: the reaction band as read (before any stop-budget cut) is the structure the entry rests on. An M5 close beyond its far edge withdraws the
+	// opportunity (engine structure-close rule), so a reaction whose level has already failed is never filled later. The level's ROLE is unchanged (v9).
+	// Rounded OUTWARD to the instrument's price digits, as the engine rounds the entry band, so the structure always contains the published entry and a close inside the
+	// entry band can never read as a close through the structure.
+	structLow, structHigh := roundOut(fullLow, fullHigh, s.cfg.PriceDigits)
+	candidate.Structure = &opportunity.StructureZone{Timeframe: market.M5, Low: structLow, High: structHigh, FormedAt: conf.TouchTime}
 	if conf.Type != "" {
 		candidate.Reaction = &opportunity.ReactionConfirmation{
 			ZoneID: levelID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,
@@ -598,6 +612,12 @@ func maxInt(a, b int) int {
 }
 
 // deepEntryPips is how far the proximal edge of the entry band moved from the reaction band's own edge to meet the stop cap (0 when the whole band fits). Informational.
+// roundOut widens a band to the price grid (digits decimals): the low down, the high up, tolerant of float noise on a price already on the grid.
+func roundOut(low, high float64, digits int) (float64, float64) {
+	scale := math.Pow(10, float64(digits))
+	return math.Floor(low*scale+1e-6) / scale, math.Ceil(high*scale-1e-6) / scale
+}
+
 func deepEntryPips(pip float64, direction market.Direction, fullLow, fullHigh, low, high float64) float64 {
 	if !(pip > 0) {
 		return 0
