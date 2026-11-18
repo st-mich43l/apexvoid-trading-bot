@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
@@ -337,6 +339,84 @@ def _instrument_declaration(runtime: Any, symbol: str) -> tuple[str, dict[str, A
   return instrument_id, result
 
 
+# Leaves a strategy-scoped targeting block may set (the same names, with the same meaning, as the instrument's ``targeting``); anything else is an error.
+_SCOPED_TARGETING_KEYS = frozenset({
+  "mode", "reward_risk", "target_r_multiples", "close_ratios", "breakeven_after_r", "entry_clips",
+})
+
+
+def strategy_key(name: Any) -> str:
+  """The config key of a strategy: lower case, every run of non-alphanumerics one underscore ("Key Level" and "key_level" are both ``key_level``)."""
+  return re.sub(r"[^a-z0-9]+", "_", str(name or "").casefold()).strip("_")
+
+
+def _finite_number(value: Any, label: str, owner: str) -> float:
+  if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+    raise EffectiveInstrumentError(f"{owner}: {label} must be a finite number, got {value!r}")
+  return float(value)
+
+
+def _scoped_targeting_table(instrument_id: str, base: Mapping[str, Any], declared: Any) -> dict[str, dict[str, Any]]:
+  """Validate ``execution.targeting_by_strategy`` and resolve each block over the instrument's ``targeting``.
+
+  A block is a complete exit ladder for ONE strategy on this instrument: ``mode: fixed_rr`` (the only mode), ``target_r_multiples`` ascending and
+  positive, ``reward_risk`` equal to the last multiple, ``close_ratios`` of the same length, positive and summing to 1, ``breakeven_after_r`` null or a
+  positive number, optional ``entry_clips`` (otherwise the instrument's). Invalid blocks fail at configuration load, never at trade time. An absent
+  table is the empty one: every strategy keeps the instrument's ``targeting``.
+  """
+  plain = _plain(declared) if declared else {}
+  if not plain:
+    return {}
+  if not isinstance(plain, Mapping):
+    raise EffectiveInstrumentError(f"{instrument_id}: execution.targeting_by_strategy must be a mapping")
+  base_mode = base.get("mode")
+  if str(getattr(base_mode, "value", base_mode)) != InstrumentTargetMode.FIXED_RR.value:
+    raise EffectiveInstrumentError(f"{instrument_id}: targeting_by_strategy needs the instrument's targeting.mode to be fixed_rr")
+  table: dict[str, dict[str, Any]] = {}
+  for raw_key, block in plain.items():
+    key = strategy_key(raw_key)
+    owner = f"{instrument_id}: targeting_by_strategy.{raw_key}"
+    if not key or key in table:
+      raise EffectiveInstrumentError(f"{owner}: empty or duplicate strategy key")
+    if not isinstance(block, Mapping):
+      raise EffectiveInstrumentError(f"{owner} must be a mapping")
+    unknown = sorted(set(block) - _SCOPED_TARGETING_KEYS)
+    if unknown:
+      raise EffectiveInstrumentError(f"{owner}: unknown leaves {unknown}")
+    if str(block.get("mode", "fixed_rr")) != InstrumentTargetMode.FIXED_RR.value:
+      raise EffectiveInstrumentError(f"{owner}: mode must be fixed_rr")
+    multiples = block.get("target_r_multiples")
+    ratios = block.get("close_ratios")
+    if not isinstance(multiples, (list, tuple)) or not multiples:
+      raise EffectiveInstrumentError(f"{owner}: target_r_multiples must be a non-empty list")
+    if not isinstance(ratios, (list, tuple)) or len(ratios) != len(multiples):
+      raise EffectiveInstrumentError(f"{owner}: close_ratios must have one ratio per target_r_multiples entry")
+    multiples = tuple(_finite_number(v, "target_r_multiples entry", owner) for v in multiples)
+    ratios = tuple(_finite_number(v, "close_ratios entry", owner) for v in ratios)
+    if any(m <= 0 for m in multiples) or any(b <= a for a, b in zip(multiples, multiples[1:])):
+      raise EffectiveInstrumentError(f"{owner}: target_r_multiples must be positive and strictly ascending")
+    if any(r <= 0 for r in ratios) or abs(sum(ratios) - 1.0) > 1e-9:
+      raise EffectiveInstrumentError(f"{owner}: close_ratios must be positive and sum to 1 (got {sum(ratios)})")
+    reward_risk = _finite_number(block.get("reward_risk"), "reward_risk", owner)
+    if abs(reward_risk - multiples[-1]) > 1e-9:
+      raise EffectiveInstrumentError(f"{owner}: reward_risk {reward_risk} must equal the last target_r_multiples entry {multiples[-1]}")
+    breakeven = block.get("breakeven_after_r")
+    if breakeven is not None and _finite_number(breakeven, "breakeven_after_r", owner) <= 0:
+      raise EffectiveInstrumentError(f"{owner}: breakeven_after_r must be null or positive")
+    clips = block.get("entry_clips", base.get("entry_clips"))
+    if clips is not None and (isinstance(clips, bool) or not isinstance(clips, int) or clips < 1):
+      raise EffectiveInstrumentError(f"{owner}: entry_clips must be a positive integer")
+    resolved = dict(base)
+    resolved.update(
+      mode=InstrumentTargetMode.FIXED_RR, reward_risk=reward_risk, target_r_multiples=multiples, close_ratios=ratios,
+      breakeven_after_r=None if breakeven is None else float(breakeven),
+    )
+    if clips is not None:
+      resolved["entry_clips"] = clips
+    table[key] = resolved
+  return table
+
+
 class EffectiveInstrument:
   """Immutable-ish native view used by execution code."""
 
@@ -441,11 +521,21 @@ class EffectiveInstrument:
     self.market_data = ConfigNode({"lookbacks": lookbacks, "runtime": analysis})
     self.analysis = ConfigNode({"zones": zones, "runtime": analysis})
     self.execution = ConfigNode(execution)
+    # KL12: an exit ladder for one strategy on this instrument (validated now, resolved over the instrument's targeting).
+    self._targeting_by_strategy = {
+      key: ConfigNode(value)
+      for key, value in _scoped_targeting_table(instrument_id, targeting, _get(execution, "targeting_by_strategy", {})).items()
+    }
     self.actionability = ConfigNode(_get(auto_algo, "actionability", {}))
     self.risk = ConfigNode(_get(auto_algo, "risk", {}))
     self.lifecycle = ConfigNode(_get(auto_algo, "lifecycle", {}))
     self.strategies = ConfigNode(_get(auto_algo, "strategies", {}))
 
+
+  def targeting_for_strategy(self, strategy: Any) -> Any | None:
+    """The exit ladder this instrument configures for ``strategy`` (``execution.targeting_by_strategy``), or ``None`` when it has none: the caller then
+    uses the instrument's ``targeting``. The strategy is matched by key, so "Key Level" and "key_level" are the same."""
+    return self._targeting_by_strategy.get(strategy_key(strategy))
 
   @property
   def entry_zone_min_width_pips(self) -> float:

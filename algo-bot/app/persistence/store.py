@@ -1197,8 +1197,13 @@ def _derive_exit_path(
   *,
   booked_tp_count: int | None,
   break_even_applied: bool | None,
+  planned_reward_risk: float | None = None,
 ) -> str | None:
-  """Classify terminal close path for fixed_rr journal analytics."""
+  """Classify terminal close path for fixed_rr journal analytics.
+
+  ``planned_reward_risk`` is 1.0 exactly when the plan had ONE target (the executor reports 2.0 for two or more): its first target is its final one, so a
+  group that booked it and closed there is ``tp1_full`` (a complete win), not ``tp1_stop`` (TP1 booked, the rest stopped).
+  """
   explicit = event.get("exit_path") or event.get("ExitPath")
   if explicit is not None and str(explicit).strip():
     return str(explicit).strip()
@@ -1248,7 +1253,11 @@ def _derive_exit_path(
   if booked is not None and booked >= 2:
     return "tp2_full"
   if booked == 1:
-    return "tp1_be" if be else "tp1_stop"
+    if be:
+      return "tp1_be"
+    if planned_reward_risk is not None and planned_reward_risk <= 1.0 + 1e-9:
+      return "tp1_full"
+    return "tp1_stop"
   if booked == 0:
     return "full_stop"
   if (
@@ -2048,6 +2057,7 @@ async def _record_auto_trade_result(event: dict) -> None:
       event,
       booked_tp_count=booked_tp_count,
       break_even_applied=break_even_applied,
+      planned_reward_risk=planned_reward_risk,
     )
     realized_pips = _coerce_optional_float(event.get("volume_weighted_pips"))
     risk_pips = _coerce_optional_float(event.get("risk_pips"))

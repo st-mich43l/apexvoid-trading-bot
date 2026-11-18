@@ -138,6 +138,12 @@ def _instrument_fixed_targeting(
   mode = getattr(targeting.mode, "value", targeting.mode)
   if str(mode) != "fixed_rr":
     return None
+  # KL12: the instrument may give one strategy its own exit ladder (execution.targeting_by_strategy); every other strategy keeps ``targeting``.
+  scoped = getattr(context, "targeting_for_strategy", None)
+  if strategy and callable(scoped):
+    override = scoped(strategy)
+    if override is not None:
+      return override
   return targeting
 
 

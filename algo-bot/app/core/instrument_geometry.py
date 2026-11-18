@@ -72,7 +72,22 @@ def technique_fixed_rr_targeting(
   mode = getattr(targeting.mode, "value", targeting.mode)
   if str(mode) != InstrumentTargetMode.FIXED_RR.value:
     return None
-  return targeting
+  return strategy_targeting(symbol, strategy, cfg, default=targeting)
+
+
+def strategy_targeting(symbol: str, strategy: str | None, cfg=None, *, default=None):
+  """The exit ladder configured for ``strategy`` on ``symbol`` (``overrides.execution.targeting_by_strategy``, KL12), else ``default``.
+
+  Only a strategy the instrument names has one; every other strategy, and every other instrument, keeps the instrument's ``targeting`` byte for byte.
+  """
+  if not strategy:
+    return default
+  source = runtime_config if cfg is None else cfg
+  resolver = getattr(source, "targeting_for_strategy", None)
+  if not callable(resolver):
+    resolver = for_instrument(source, symbol).targeting_for_strategy
+  scoped = resolver(strategy)
+  return default if scoped is None else scoped
 
 
 def analysis_runtime(symbol: str):

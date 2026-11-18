@@ -179,12 +179,95 @@ Measured on the five production captures (M5, XAU from 6 Nov, FX from 9 Nov, to 
 
 The 5,444 -> 4,174 drop of Q2 removed an unconditional credit, not measurably worse opportunities: the removed set is not worse than the retained one against matched random entries, in either window, with intervals that include zero (FX flips sign), and HTF alignment, now the practical admission criterion, has never shown a positive relation to outcomes. Nothing restores the artificial confluence. Q3 only stops a session-level sweep on the reaction's own candle from earning the session point a second time (4,174 -> 4,165). Details: [quality](../analysis-engine.md#acceptance-and-quality).
 
+## KL12 (XAU exit/stop): close everything at 1R
+
+XAU Key Level now has its own exit ladder: **one target at 1R closing 100% of the position, no breakeven move**, through `overrides.execution.targeting_by_strategy.key_level` in `config/instruments.yml` (`mode: fixed_rr`, `reward_risk: 1.0`, `target_r_multiples: [1.0]`, `close_ratios: [1.0]`, `breakeven_after_r: null`). Every other XAU strategy keeps the instrument's `targeting` (the pack's 1R-4R 40/20/20/20 ladder with breakeven after 1R), and so does Key Level on every other instrument. Entries, stops, the risk leg and the analysis are unchanged; only the exit ladder differs. The block has the same leaves and validation as `targeting` and is checked when the instrument is built (ratios positive and summing to 1, `reward_risk` equal to the last multiple, ascending positive multiples, `breakeven_after_r` null or positive, no unknown leaf, a fixed_rr instrument); a strategy is matched by key, so "Key Level" and `key_level` are the same. A completed one-target group is journalled `exit_path = tp1_full` (it was `tp1_stop`, which reads as "TP1 booked, the rest stopped").
+
+**Why.** `algo-bot/scripts/kl_replay.py` (read-only: SELECT-only Postgres session, ZRANGE-only Redis) replays the closed trades on the bars Redis still holds. Decision rule fixed in advance: V0 (the live rules) must have the same sign as the actual result on at least 70% of the replayed trades and total within 0.25R per trade; a variant is eligible with n >= 15, at least +0.25R per trade over the actual result on the same trades, positive expectancy, and a better result in **both** halves of the period (by close time); the winner is the eligible variant with the largest improvement. Applied to the run since 2 Nov: fidelity 36/46 (78%) and |-3.67 - (-12.55)| = 8.88R <= 11.5R, so the replay is usable; **only V1 is eligible** (+0.360R per trade over the actual, expectancy +0.087R, halves +0.254 / +0.465); V2 (+0.262, expectancy -0.011), V3 (+0.132), V4 (+0.112) and V5 (+0.344 on 24 trades, expectancy -0.017) are not. V5 would enter the whole volume at one price, which the owner rule of 2026-11-06 forbids; it is not implemented and is not eligible.
+
+**How much to trust it.** The replay enters the whole position at the first fill (the live trade scaled in), V0 is more optimistic than reality (-3.67R against -12.55R actual), 22 of the 46 trades are replayed on M15 (coarse), and 46 trades is a small sample. V1's advantage is +0.528R per trade on the 24 M5 trades and +0.176R on the 22 M15 trades; its own expectancy is +0.087R, i.e. close to zero. Closing everything at 1R also gives up the 2R-4R upside of the trades that run (the eight trades that reached `tp1_be` or `tp2_full` since 9 Nov). Re-check after about 40 trades closed since the deploy with the OBS1 excursion columns (`mfe_r`, `mae_r`); if `exit_path` shows mostly `full_stop` again at near-zero MFE the trades are wrong from the start and the problem is detection, not exits.
+
+**Rollback.** Delete the `targeting_by_strategy` block under XAU `overrides.execution` in `config/instruments.yml` (Algo Bot only; no Analysis Engine change).
+
+### Replay, trades closed since 2 Nov (`--since 2026-11-02`)
+
+# Replay: XAU %key%level% closed since 2026-11-02
+
+Trades: 46; replayed: 46 (M5: 24, M15: 22); skipped: 0 (none)
+
+## 1. Wrong from the start, or stopped before 1R? (MFE before the stop, live trades that were full stops)
+
+| MFE before stop | n | actual net R |
+|---|---|---|
+| < 0.3R | 14 | -13.9 |
+| 0.3-0.6R | 4 | -4.0 |
+| 0.6-1R | 2 | -2.0 |
+| >= 1R | 8 | -7.93 |
+
+## 2. Fidelity: V0 (live rules, single entry) vs actual
+
+Actual net R -12.55 vs V0 -3.67 over 46 trades; same sign on 36/46. If these are far apart, read section 3 as direction only.
+
+## 3. The same trades under each alternative
+
+Each variant is compared with the ACTUAL result of exactly the trades it could replay (V4 needs an ATR, V5 the confirmation bar).
+
+| variant | rule | n | net R | expectancy | win | actual net R, same trades | difference |
+|---|---|---|---|---|---|---|---|
+| actual | what happened | 46 | -12.55 | -0.273 | 0.37 | | |
+| V0_live_ladder | 1/2/3/4R 40/20/20/20, BE after 1R (the live XAU rules; fidelity check vs actual) | 46 | -3.67 | -0.08 | 0.54 | -12.55 | 8.88 |
+| V1_1R_full | close everything at 1R | 46 | 4.0 | 0.087 | 0.54 | -12.55 | 16.55 |
+| V2_1R_half_BE_2R | 50% at 1R, stop to BE, 50% at 2R | 46 | -0.5 | -0.011 | 0.54 | -12.55 | 12.05 |
+| V3_ladder_no_BE | live ladder without the breakeven move | 46 | -6.47 | -0.141 | 0.24 | -12.55 | 6.08 |
+| V4_wider_stop | live ladder, stop 0.5 M5 ATR further out (targets scale with the new R); refused (0R) if the stop would exceed the cap | 46 | -7.4 | -0.161 | 0.13 | -12.55 | 5.15 |
+| V5_enter_reaction_close | live ladder, entered at the close of the confirmation bar instead of the ladder fill, same stop | 24 | -0.42 | -0.017 | 0.5 | -8.67 | 8.25 |
+
+Caveats: one position at the first fill (the live trade scaled in); bid bars with the SELL spread added; a bar touching stop and
+target counts as a stop; M15-replayed trades are coarse; small n, so a variant must beat the actual by a wide margin to mean anything.
+
+### Replay, trades closed since 9 Nov (`--since 2026-11-09`, the v10/v11 population)
+
+# Replay: XAU %key%level% closed since 2026-11-09
+
+Trades: 25; replayed: 25 (M5: 24, M15: 1); skipped: 0 (none)
+
+## 1. Wrong from the start, or stopped before 1R? (MFE before the stop, live trades that were full stops)
+
+| MFE before stop | n | actual net R |
+|---|---|---|
+| < 0.3R | 5 | -5.0 |
+| 0.3-0.6R | 4 | -4.0 |
+| 0.6-1R | 2 | -2.0 |
+| >= 1R | 5 | -4.94 |
+
+## 2. Fidelity: V0 (live rules, single entry) vs actual
+
+Actual net R -9.67 vs V0 -4.47 over 25 trades; same sign on 19/25. If these are far apart, read section 3 as direction only.
+
+## 3. The same trades under each alternative
+
+Each variant is compared with the ACTUAL result of exactly the trades it could replay (V4 needs an ATR, V5 the confirmation bar).
+
+| variant | rule | n | net R | expectancy | win | actual net R, same trades | difference |
+|---|---|---|---|---|---|---|---|
+| actual | what happened | 25 | -9.67 | -0.387 | 0.32 | | |
+| V0_live_ladder | 1/2/3/4R 40/20/20/20, BE after 1R (the live XAU rules; fidelity check vs actual) | 25 | -4.47 | -0.179 | 0.56 | -9.67 | 5.2 |
+| V1_1R_full | close everything at 1R | 25 | 3.0 | 0.12 | 0.56 | -9.67 | 12.67 |
+| V2_1R_half_BE_2R | 50% at 1R, stop to BE, 50% at 2R | 25 | -2.0 | -0.08 | 0.56 | -9.67 | 7.67 |
+| V3_ladder_no_BE | live ladder without the breakeven move | 25 | -9.67 | -0.387 | 0.12 | -9.67 | 0.0 |
+| V4_wider_stop | live ladder, stop 0.5 M5 ATR further out (targets scale with the new R); refused (0R) if the stop would exceed the cap | 25 | -4.0 | -0.16 | 0.12 | -9.67 | 5.67 |
+| V5_enter_reaction_close | live ladder, entered at the close of the confirmation bar instead of the ladder fill, same stop | 24 | -0.42 | -0.017 | 0.5 | -8.67 | 8.25 |
+
+Caveats: one position at the first fill (the live trade scaled in); bid bars with the SELL spread added; a bar touching stop and
+target counts as a stop; M15-replayed trades are coarse; small n, so a variant must beat the actual by a wide margin to mean anything.
+
 ## Per-instrument overrides
 
 `config/instruments.yml` can tighten Key Level for one pair (`applyKeyLevelOverrides`): `overrides.analysis.levels.minimum_key_touches` (also raises the touch minimum of the frame levels the other techniques read on that pair), `overrides.auto_algo.strategies.reaction.key_level.require_explicit_role` (skip levels whose role is ambiguous) and `...require_reaction_sweep` (publish a confirmed reaction only when it swept the level: traded strictly beyond the band's far edge).
 
 | Instrument | Override | Why |
 |---|---|---|
+| XAU | `execution.targeting_by_strategy.key_level` (close everything at 1R, no breakeven) | KL12, 18 Nov 2026: the only exit variant that qualified in the replay of the 46 November XAU Key Level trades (see "KL12 (XAU exit/stop)"); an exit ladder, not an analysis override. |
 | XAU | `require_reaction_sweep: true` | 28 Oct 2026 owner report: swept setups held their edge in every period, unswept ones lost it (measured on XAU only). |
 | GBPJPY | `minimum_key_touches: 3`, `require_explicit_role: true` | 25 Aug 2026: Key Level was 0/4 (-118 pips). Silent until v9 (no level had an explicit role); since v9 it publishes levels whose structure is pure swing lows (BUY) or pure swing highs (SELL), 63 candidates in a 7-day replay. |
 | EURUSD | `minimum_key_touches: 3`, `require_reaction_sweep: true` | 6 Nov 2026 owner decision: 51 live trades, 55% full stops, -6.64 R on the 23 with a net R. Not measured on FX: replay 461 -> 165 setups, stop rate 38% -> 42%, no measured gain. `require_explicit_role` is not used: every EURUSD setup carries `m5_key_level_role_ambiguous`, so it would disable the strategy on the pair. Review after about 100 trades. |
