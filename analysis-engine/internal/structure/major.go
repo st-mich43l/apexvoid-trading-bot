@@ -94,6 +94,9 @@ type MajorSwing struct {
 	Class         MajorClass
 	ProminenceATR float64
 	DepartureATR  float64
+	// ApproachATR is how far price travelled INTO the swing: from the lowest low (a high) or highest high (a low) of the ExternalBars bars before it, to its extreme, in ATR. It is the
+	// swing's standing before price left it, so it does not contain the departure (ProminenceATR, the weaker of the two sides, usually IS the departure when the approach was longer).
+	ApproachATR float64
 	// LeftDominanceBars is how many bars to the left no bar beat the swing (to the start of the data when none did: LeftBounded is then false, and the true
 	// dominance may be longer). RightDominanceBars is the same to the right, up to the last closed bar.
 	LeftDominanceBars  int
@@ -120,6 +123,7 @@ type pivotRead struct {
 	ok          bool // a volatility read exists at the pivot
 	prominence  float64
 	departure   float64
+	approach    float64
 	left        int
 	leftBounded bool
 	rightEnd    int // the last bar before a later bar exceeded the pivot (the last bar when none did)
@@ -165,6 +169,7 @@ func readPivot(candles []market.Candle, atr []float64, p Pivot, cfg MajorConfig)
 	}
 	r.prominence = math.Min(moveAway(candles, left+1, i-1, high, price), moveAway(candles, i+1, r.rightEnd, high, price))
 	r.departure = moveAway(candles, i+1, minInt(r.rightEnd, i+cfg.DepartureBars), high, price)
+	r.approach = moveAway(candles, maxInt(0, i-cfg.ExternalBars), i-1, high, price)
 	return r
 }
 
@@ -222,7 +227,7 @@ func ClassifyMajor(candles []market.Candle, atr []float64, cfg MajorConfig) []Ma
 		i := p.BarIndex
 		ms := MajorSwing{
 			Kind: p.Kind, Price: p.Price, BarIndex: i, Time: p.Time, ConfirmedAt: p.ConfirmedAt,
-			ProminenceATR: r.prominence / r.unit, DepartureATR: r.departure / r.unit,
+			ProminenceATR: r.prominence / r.unit, DepartureATR: r.departure / r.unit, ApproachATR: r.approach / r.unit,
 			LeftDominanceBars: r.left, LeftBounded: r.leftBounded, RightDominanceBars: r.rightEnd - i, Exceeded: r.exceeded,
 		}
 		ms.External = ms.LeftDominanceBars >= cfg.ExternalBars

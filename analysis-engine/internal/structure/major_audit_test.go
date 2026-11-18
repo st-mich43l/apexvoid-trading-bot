@@ -393,3 +393,50 @@ func TestTheShiftLogicHasAPriceMirror(t *testing.T) {
 		}
 	}
 }
+
+// ApproachATR is the swing's standing BEFORE price left it: it does not contain the departure, is the same at every later bar, is scale-invariant and has an exact price mirror.
+func TestApproachIsTheMoveIntoTheSwingAndNotTheDeparture(t *testing.T) {
+	build := func(drop float64) ([]market.Candle, []float64, int) {
+		closes, _, _, peak := legThenDrift(false)
+		closes = closes[:peak+1]
+		price := closes[len(closes)-1]
+		for i := 0; i < 8; i++ {
+			price -= drop
+			closes = append(closes, price)
+		}
+		bars, atr := path(closes, 0.1)
+		peakWick(bars, peak)
+		return bars, atr, peak
+	}
+	small, atrS, at := build(0.5)
+	big, atrB, _ := build(2.0)
+	cfg := majorTestConfig()
+	a, b := findSwing(t, ClassifyMajor(small, atrS, cfg), PivotHigh, at), findSwing(t, ClassifyMajor(big, atrB, cfg), PivotHigh, at)
+	if a.ApproachATR != b.ApproachATR || !(a.ApproachATR > 0) {
+		t.Fatalf("the approach must not depend on what price did afterwards: %.3f vs %.3f", a.ApproachATR, b.ApproachATR)
+	}
+	if !(b.DepartureATR > a.DepartureATR) {
+		t.Fatalf("setup: the two markets must differ in their departure: %.2f vs %.2f", a.DepartureATR, b.DepartureATR)
+	}
+	// stable from the first bar the swing is known
+	known := at + cfg.PivotRightBars + 1
+	early := findSwing(t, ClassifyMajor(big[:known], atrB[:known], cfg), PivotHigh, at)
+	if early.ApproachATR != b.ApproachATR {
+		t.Fatalf("the approach changed as bars arrived: %.3f then %.3f", early.ApproachATR, b.ApproachATR)
+	}
+	// scale and mirror
+	scaled := make([]market.Candle, len(big))
+	mirror := make([]market.Candle, len(big))
+	satr := make([]float64, len(big))
+	for i, c := range big {
+		scaled[i] = market.Candle{Time: c.Time, Open: c.Open * 40, High: c.High * 40, Low: c.Low * 40, Close: c.Close * 40}
+		mirror[i] = market.Candle{Time: c.Time, Open: 300 - c.Open, High: 300 - c.Low, Low: 300 - c.High, Close: 300 - c.Close}
+		satr[i] = atrB[i] * 40
+	}
+	if s := findSwing(t, ClassifyMajor(scaled, satr, cfg), PivotHigh, at); math.Abs(s.ApproachATR-b.ApproachATR) > 1e-9 {
+		t.Fatalf("scale: %.9f vs %.9f", s.ApproachATR, b.ApproachATR)
+	}
+	if m := findSwing(t, ClassifyMajor(mirror, atrB, cfg), PivotLow, at); math.Abs(m.ApproachATR-b.ApproachATR) > 1e-9 {
+		t.Fatalf("mirror: %.9f vs %.9f", m.ApproachATR, b.ApproachATR)
+	}
+}

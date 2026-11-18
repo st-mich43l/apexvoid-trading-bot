@@ -46,6 +46,9 @@ func reactionAnchoredInvalidation(bars []market.Candle, conf *confirmation, stru
 func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Candidate, bool) {
 	v := d.v
 	atr := v.atr
+	if !v.atrKnown {
+		atr = math.NaN() // missing evidence: quality gives no credit for a measure that needs it, and never reads the admission placeholder as an ATR
+	}
 	low, high := d.entryLow, d.entryHigh
 	structLow, structHigh := d.res.structuralLow, d.res.structuralHigh
 	reference, invalidation := d.reference, d.invalidation
@@ -125,12 +128,16 @@ func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.St
 
 // quality is the technical quality of a confirmed reaction off a supply zone: seven dimensions, each in [0, 1], averaged without weights (informational).
 func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
-	// v3 is the swing-anchored model (SD-4): the zone's own strength is measured from its swing, its departure and its structure shift. v2 is the legacy zone's.
-	model := ".quality.v2"
 	if d.inst.Formation != nil {
-		model = ".quality.v3"
+		return s.qualityV4(ctx, d, reference, invalidation, target, structural, atr)
 	}
-	m := quality.New(string(ID) + model)
+	return s.qualityV2(ctx, d, reference, invalidation, target, structural, atr)
+}
+
+// qualityV2 is the legacy zone's model (zone_model: legacy), frozen exactly as it was: the rollback restores the earlier scoring too. Its width is read against the execution ATR, which
+// is the defect supply|demand.quality.v4 corrects for swing zones.
+func (s *Strategy) qualityV2(ctx candidateContext, d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
+	m := quality.New(string(ID) + ".quality.v2")
 	v := d.v
 	departure, width, touches := math.NaN(), math.NaN(), math.NaN()
 	if atr > 0 {
@@ -155,9 +162,6 @@ func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalid
 			departure = best / atr
 		}
 	}
-	if f := d.inst.Formation; f != nil {
-		departure = f.DepartureATR // the departure of the swing on the structure frame, not an M5 read that is unknown once the origin leaves the M5 window
-	}
 	m.Score("zone_departure", quality.Ramp(departure, 1, 3))
 	m.Score("zone_precision", quality.Peak(width, 0.1, 0.4, 1.5, 3.5))
 	m.Score("zone_freshness", quality.Fall(touches, 1, 5))
@@ -172,32 +176,95 @@ func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalid
 		pip = d.v.cfg.PipSize
 	}
 	strategyutil.ScoreRoom(m, strategyutil.MeasureQualityRoom(ctx.market, false, reference, invalidation, target, structural, d.v.cfg.StopBudget, d.v.cfg.Barrier.RoomParams(pip, strategyutil.ScalpRoomATR(ctx.market, atr)), 0), pip)
-	if f := d.inst.Formation; f != nil {
-		// Four different facts about the same structure, each measured once: how far the swing stood out (prominence, both sides), how cleanly the departure travelled
-		// (efficiency, not its size: that is zone_departure), and whether the departure broke structure (BOS or CHoCH). The class and the strength are measurements of the
-		// same facts (never scores of their own), so nothing is counted twice.
-		major := v.cfg.Formation.Zone.Major
-		m.Score("swing_significance", quality.Ramp(f.Swing.ProminenceATR, major.IntermediateProminenceATR, 2*major.MajorProminenceATR))
-		m.Score("displacement_efficiency", quality.Ramp(f.Efficiency, 0.4, 0.8))
-		shift := 0.0
-		switch f.Swing.Shift {
-		case "CHoCH":
-			shift = 1
-		case "BOS":
-			shift = 0.5
-		}
-		m.Score("structure_shift", shift)
-		m.Measure("swing_prominence_atr", f.Swing.ProminenceATR)
-		m.Measure("swing_class", float64(f.Swing.Class))
-		m.Measure("zone_strength", float64(f.Strength))
-		if chosen, ok := d.plan.Chosen(); ok {
-			m.Measure("entry_depth_fraction", chosen.DepthFraction)
-		}
+	m.Measure("room_r", d.room.RoomR)
+	m.Measure("pd_position", d.inst.PDPosition)
+	m.Measure("deep_entry_pips", deepEntryPips(d))
+	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
+}
+
+// qualityV4 is the technical quality of a confirmed reaction off a swing-anchored supply zone: ten dimensions, each in [0, 1], averaged without weights (informational, never a gate and
+// never a probability of winning). Every dimension is measured from information available at its own time, in the units of its own timeframe:
+//
+// FORMATION (the structure frame's own ATR; evidence up to the formation bar, fixed from then on):
+//
+//	zone_departure          Ramp(net move of the departure that left the base / ATR at its last bar; 1, 3)
+//	zone_precision          Peak(structural width / ATR at the departure bar; 0.1, 0.4, 1.5, 3.5): the whole validated base, never the entry slice; the zone validity bounds are [0.2, 3.0]
+//	swing_significance      Ramp(approach: how far price travelled INTO the swing within the external horizon / ATR; intermediate prominence, twice the major one): the departure is not in it
+//	displacement_efficiency Ramp(net move / total travel of the departure bars; 0.4, 0.8): a different property from its size
+//	structure_shift         1 when the departure confirmed a BOS or a CHoCH by the formation bar, else 0 (neither kind is worth more as a supply/demand origin; the kind is published)
+//
+// DECISION TIME (the execution frame, the bar being decided):
+//
+//	zone_freshness          Fall(touches the zone has taken; 0, the touches the strategy allows + 1)
+//	rejection               the candles of a RECOGNISED reaction (a touch with no recognised reaction earns 0: it stays eligible, it just has no reaction evidence)
+//	entry_location          the chase of the M5 entry reference in M5 ATR (no credit without a valid M5 ATR)
+//	structure               the M5 market structure for the trade and the higher timeframe
+//	room                    the structural room over the effective risk, limited by the canonical opposing barrier
+//
+// Nothing is fabricated: a missing ATR gives no credit to the dimension that needs it and the evidence is published (structure_atr_available, execution_atr_available).
+func (s *Strategy) qualityV4(ctx candidateContext, d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
+	m := quality.New(string(ID) + ".quality.v4")
+	v := d.v
+	f := d.inst.Formation
+	major := v.cfg.Formation.Zone.Major
+
+	m.Score("zone_departure", quality.Ramp(f.DepartureATR, 1, 3))
+	m.Score("zone_precision", quality.Peak(f.WidthATR, 0.1, 0.4, 1.5, 3.5))
+	m.Score("swing_significance", quality.Ramp(f.Swing.ApproachATR, major.IntermediateProminenceATR, 2*major.MajorProminenceATR))
+	m.Score("displacement_efficiency", quality.Ramp(f.Efficiency, 0.4, 0.8))
+	shift := 0.0
+	if f.Swing.Shift != "" {
+		shift = 1
+	}
+	m.Score("structure_shift", shift)
+	m.Measure("zone_departure_atr", f.DepartureATR)
+	m.Measure("zone_width_atr", f.WidthATR)
+	m.Measure("swing_approach_atr", f.Swing.ApproachATR)
+	m.Measure("swing_prominence_atr", f.Swing.ProminenceATR)
+	m.Measure("structure_shift_kind", map[string]float64{"CHoCH": 1, "BOS": 2}[f.Swing.Shift])
+	m.Measure("swing_class", float64(f.Swing.Class))
+	m.Measure("zone_strength", float64(f.Strength))
+	m.Measure("structure_atr_available", boolFloat(f.WidthATR > 0 && !math.IsInf(f.WidthATR, 0)))
+
+	allowed := float64(s.cfg.MaximumZoneTouches + 1)
+	if s.cfg.MaximumZoneTouches <= 0 {
+		allowed = 5
+	}
+	m.Score("zone_freshness", quality.Fall(float64(d.inst.Touches), 0, allowed))
+	m.Measure("zone_touches", float64(d.inst.Touches))
+	reacted := d.conf != nil && d.conf.Type != ""
+	if reacted {
+		m.Score("rejection", quality.RejectionScore(v.frame.Bars, d.conf.TouchIndex, d.conf.ConfirmationIndex, false))
+	} else {
+		m.Score("rejection", 0)
+	}
+	m.Measure("reaction_confirmed", boolFloat(reacted))
+	strategyutil.ScoreEntryLocation(m, false, v.price, reference, atr)
+	m.Measure("execution_atr_available", boolFloat(atr > 0 && !math.IsInf(atr, 0)))
+	m.Score("structure", quality.StructureScore(false, v.frame.Structure, v.recentCHoCH(maxInt(1, v.cfg.ReactionLookbackBars)), v.htfAligned()))
+	pip := d.v.cfg.StopBudget.PipSize
+	if !(pip > 0) {
+		pip = d.v.cfg.PipSize
+	}
+	roomATR := strategyutil.ScalpRoomATR(ctx.market, atr)
+	if !(roomATR > 0) || math.IsInf(roomATR, 0) {
+		roomATR = 0
+	}
+	strategyutil.ScoreRoom(m, strategyutil.MeasureQualityRoom(ctx.market, false, reference, invalidation, target, structural, d.v.cfg.StopBudget, d.v.cfg.Barrier.RoomParams(pip, roomATR), 0), pip)
+	if chosen, ok := d.plan.Chosen(); ok {
+		m.Measure("entry_depth_fraction", chosen.DepthFraction)
 	}
 	m.Measure("room_r", d.room.RoomR)
 	m.Measure("pd_position", d.inst.PDPosition)
 	m.Measure("deep_entry_pips", deepEntryPips(d))
 	return opportunity.StrategyQuality{Overall: m.Overall(), Components: m.Components()}
+}
+
+func boolFloat(v bool) float64 {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 // deepEntryPips is how far the proximal edge of the entry band moved from the zone's own edge to meet the stop cap (0 when the whole zone fits). Informational.
