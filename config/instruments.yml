@@ -535,3 +535,14 @@ instruments:
         go_opportunity:
           observe_only_strategies: []
           observe_only_structure_timeframes: []
+        # KL12 (docs/strategies/key_level.md): XAU Key Level closes everything at 1R, with no breakeven move. Replay of the 46 November XAU Key Level trades:
+        # the live 1R-4R ladder (40/20/20/20, breakeven after 1R) -3.67R, close-all-at-1R +4.00R (+0.36R per trade better than the actual result, better in both
+        # halves of the period); the other exit variants did not qualify. Only the strategy named here is affected: every other XAU strategy keeps this
+        # instrument's `targeting` (the pack's 1R-4R ladder), and so does Key Level on every other instrument. Rollback: delete this block.
+        targeting_by_strategy:
+          key_level:
+            mode: fixed_rr
+            reward_risk: 1.0
+            target_r_multiples: [1.0]
+            close_ratios: [1.0]
+            breakeven_after_r: null
