@@ -1,6 +1,6 @@
 # Supply and demand: major-swing structure and AE-owned entry (SD-1 to SD-7)
 
-`supply` v12 and `demand` v10. The mirror of one another: everything below is written for supply (SELL, a zone above price) and holds for demand with every price
+`supply` v13 and `demand` v11. The mirror of one another: everything below is written for supply (SELL, a zone above price) and holds for demand with every price
 reflected (a swing LOW, an upward departure, the proximal edge is the zone's HIGH). The Analysis Engine owns every fact on this page; Algo Bot records a few of
 them and decides nothing from them.
 
@@ -34,13 +34,16 @@ its `ConfirmedAt` is the open time of the bar that completed it, so it is known 
   and the first later bar that beat it or the last bar);
 * **departure** (ATR): how far price moved away within `swing_departure_bars` bars;
 * **dominance**: bars on each side that nothing beat; **external** = at least `swing_external_bars` bars to its left (the boundary of the range, not an internal pullback);
-* **shift**: a CLOSE through the most recent opposite pivot before the swing and before the swing was exceeded: **CHoCH** when the swing extended the prevailing
-  move (a higher high / lower low than the previous swing of its kind, or the first), **BOS** when it was a lower high / higher low;
+* **shift**: a CLOSE through the **structure** the swing left: the most recent opposite pivot that is itself significant (prominence >= the intermediate threshold) and had not been
+  closed through before the swing formed. A one-bar dip near a top is not structure and a level already broken is not broken again. A broken level is evidence ONCE: it is credited to the
+  highest swing between the level and the break (the earliest when equal). **CHoCH** when the swing extended the move of the previous significant swing of its kind (or is the first),
+  **BOS** when it did not. The swing records the level it broke (`ShiftLevel`, `ShiftLevelTime`);
 * **relevance**: no close beyond it since it formed and not older than `swing_relevance_bars`.
 
 **MAJOR** = external, prominence >= `swing_major_prominence_atr`, departure >= `swing_major_departure_atr` and a shift. **INTERMEDIATE** = prominence >=
 `swing_intermediate_prominence_atr` and departure >= `swing_intermediate_departure_atr`. Everything else is **MINOR**. A swing's identity never changes as bars are
-added; its class is "as of the last bar given", and a decision published on it keeps the class it was published with.
+added; its class is "as of the last bar given", and a decision published on it keeps the class it was published with. **A zone's strength is read from the bars up to its formation bar only**
+(the swing known and the departure closed), so it is the same at every later bar: a later shift or a later close is the lifecycle's business, never an upgrade.
 
 ## SD-3: the zone from the swing (`structure.FormSwingZones`)
 
@@ -131,3 +134,55 @@ records `structure_swing_class`, `structure_zone_strength`, `entry_plan_kind`, `
 `analysis` block; no execution module reads them (a test fails if one does). The cTrader executor ignores unknown plan fields. Supply and demand keep their own packages,
 configuration, lifecycle, quality and candidates; the swing classification and zone formation live in `internal/structure` and the entry planner in `internal/strategyutil` as
 side-parameterised mechanics so the two strategies cannot drift apart (mirror tests prove they are exact price mirrors).
+
+## SD-2 audit (v13 / v11)
+
+Audit of `ClassifyMajor` as merged in #886, with tests that failed on it:
+
+| Finding | Evidence | Fix |
+|---|---|---|
+| The shift reference was the most recent RAW opposite pivot. A one-bar dip (0.9 ATR of prominence) near a top was "the structure", so closing below it was a CHoCH that, with an external high and a deep fall, made the swing MAJOR. | `TestAnInternalBreakDoesNotMakeASwingMajor` | The reference must be significant. |
+| A significant low already closed through before the swing formed stayed the reference whenever the newer lows were skipped, so a later close below it counted as a fresh break. | `TestALevelAlreadyBrokenBeforeTheSwingIsNotAFreshBreak` | The reference must be unbroken when the swing formed. |
+| One close through one low was the shift of every swing above it. | `TestOneBrokenLevelIsCreditedToOneSwing` | Credited once (highest swing, earliest when equal). |
+| CHoCH/BOS compared with the previous raw fractal. | same fixtures | Compared with the previous significant swing of the kind. |
+| A zone formed as moderate/INTERMEDIATE was upgraded to strong/MAJOR when a shift appeared bars later (strength was read as of "now"). | `TestZoneStrengthIsFixedAtFormation` | Strength is read as of the formation bar. |
+
+Correct and kept (tests added): a shift is never dated before its reference was confirmed (a close below a pivot low is impossible inside its right window); the reversal extreme of a
+liquidity sweep and of a failed breakout are external swings; equal highs/lows are not both external; a swing's class never uses a bar after the prefix it is read from (every prefix
+replayed; a read from a copy of the same bars is identical); truncating the window can only remove evidence and never raises a class; ATR initialisation (zero/NaN), a hole in the feed and
+flat prices are handled; restart-safe (pure function); exact price mirror for the corrected logic; M15 and H1 evidence reaches M5 only from the close of its confirmation bar
+(`TestStructureEvidenceIsTouchableFromTheCloseOfItsConfirmationBar`); `swing_relevance_bars + swing_external_bars` must fit the structure frames' windows (250 M15, 400 H1), or a class would
+change because bars were evicted, not because the market did.
+
+Real data (production closed bars, 9-12 days, M15 window 250 and H1 window 400, evaluated bar by bar; baseline = #886 as merged):
+
+| | M15 (5 symbols) | H1 (5 symbols) |
+|---|---|---|
+| confirmed raw pivots (unique) | 172 to 186 per symbol | 523 to 567 per symbol |
+| final read [MINOR / INTERMEDIATE / MAJOR] (XAU, EURUSD) | [72/104/10], [84/86/5] | [267/270/7], [258/257/8] |
+| MAJOR when first seen, merged -> updated (all five symbols) | 33 -> 28 | 80 -> 57 |
+| class changes while the swing is within 150 bars of the window end | 160 up, **0 down** | 507 up, **0 down** |
+| disagreements on the last read | 1 | 5 |
+
+Every class change inside the relevance horizon is an upgrade as the departure develops (evidence arriving causally); every downgrade seen in a long window happens to swings older than the
+horizon, where the window start evicts their left side or their reference. The updated classifier demotes a quarter of the swings the merged one called MAJOR when first seen: all of them
+used a raw pivot of under 1.5 ATR of prominence as their structure.
+
+Zone funnel (supply highs / demand lows over the same windows): of ~1 300 confirmed swing highs and ~1 350 lows, about 45 % are INTERMEDIATE or better; about 40 % of those have no
+displacement leg from them within 3 bars (no zone); zones formed 20 to 29 (M15) and 60 to 89 (H1) per symbol; at formation about 55 % are moderate, 40 % weak, 1 to 3 per series strong; a
+structure wider than `maximum_zone_atr` is 0 to 6 per series; 40 to 50 % of the tradable H1 demand zones and 10 to 25 % of the supply ones were later terminal.
+
+Published set, merged -> updated, same bars: **410 -> 410 opportunities on the same 67 zones** (EURUSD 67, GBPJPY 182, GBPUSD 49, USDJPY 70, XAU 42). Only labels move: MAJOR/strong 39 -> 20, MAJOR/moderate
+0 -> 6, INTERMEDIATE/moderate 360 -> 384. At the shipped `minimum_zone_strength: moderate` nothing that publishes changes; with `strong` it would. Other strategies' 3 073 events are byte-identical.
+
+Concrete examples (XAU H1; bar times are open times, a bar is known at its close):
+* **MAJOR, kept.** High 4082.73 at 1793217600, ATR 17.04. Left dominance 98 bars (external). Prominence 6.28 ATR, departure 3.56 ATR. Reference: the low 4025.10 at 1793210400
+  (prominence 3.63 ATR: significant, unbroken when the high formed). Bar 1793250000 closes at 4024.75, below it: **CHoCH** (higher high than the previous significant high). The swing is known when the
+  bar opened 1793228400 closes (1793232000), the shift when the bar opened 1793250000 closes (1793253600). (The feed is missing the 1793221200 bar; identity is by time.)
+* **MAJOR in #886, INTERMEDIATE now.** High 4070.91 at 1793145600, ATR 11.12, external (left 78), prominence 4.12, departure 3.85. #886's "CHoCH" was a close below the raw pivot low
+  4054.37 whose prominence was 0.87 ATR. No significant low was closed through: INTERMEDIATE, `no structure shift`.
+* **Same on EURUSD M15.** Low 1.10123 at 1794802500 (ATR 0.00039), prominence 3.31, external; #886's reference was the raw high 1.10203 (0.97 ATR).
+
+## Rollback of the audit
+
+Nothing new to switch: `zone_model: legacy` still restores the three-candle zone. The classifier fix itself is the previous behaviour's defect; to compare, check out #886.
