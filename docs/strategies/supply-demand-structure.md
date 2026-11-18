@@ -161,16 +161,17 @@ Real data (production closed bars, 9-12 days, M15 window 250 and H1 window 400, 
 | confirmed raw pivots (unique) | 172 to 186 per symbol | 523 to 567 per symbol |
 | final read [MINOR / INTERMEDIATE / MAJOR] (XAU, EURUSD) | [72/104/10], [84/86/5] | [267/270/7], [258/257/8] |
 | MAJOR when first seen, merged -> updated (all five symbols) | 33 -> 28 | 80 -> 57 |
-| class changes while the swing is within 150 bars of the window end | 160 up, **0 down** | 507 up, **0 down** |
+| class changes while the swing is within 150 bars of the window end | 139 up, **0 down** | 503 up, **0 down** |
 | disagreements on the last read | 1 | 5 |
 
 Every class change inside the relevance horizon is an upgrade as the departure develops (evidence arriving causally); every downgrade seen in a long window happens to swings older than the
 horizon, where the window start evicts their left side or their reference. The updated classifier demotes a quarter of the swings the merged one called MAJOR when first seen: all of them
 used a raw pivot of under 1.5 ATR of prominence as their structure.
 
-Zone funnel (supply highs / demand lows over the same windows): of ~1 300 confirmed swing highs and ~1 350 lows, about 45 % are INTERMEDIATE or better; about 40 % of those have no
-displacement leg from them within 3 bars (no zone); zones formed 20 to 29 (M15) and 60 to 89 (H1) per symbol; at formation about 55 % are moderate, 40 % weak, 1 to 3 per series strong; a
-structure wider than `maximum_zone_atr` is 0 to 6 per series; 40 to 50 % of the tradable H1 demand zones and 10 to 25 % of the supply ones were later terminal.
+Zone funnel (supply highs / demand lows over the same windows): of 1 776 confirmed swing highs and 1 835 lows, 53 % and 58 % are INTERMEDIATE or better; **about two thirds of those
+(68 % and 65 %) have no displacement leg beginning within 3 bars of them, so they form no zone**; zones formed 20 to 29 (M15) and 60 to 89 (H1) per symbol and side; at formation about 57 %
+of the supply zones are moderate, 42 % weak and 2 % strong (demand similar); a structure wider than `maximum_zone_atr` is 0 to 6 per series. Of the zones that were tradable at some point, later
+terminal (breach never reclaimed): supply H1 37 % to 73 %, demand H1 41 % to 81 %, M15 supply 6 % to 38 %, demand 60 % to 91 % in this window, which is why the lifecycle tests matter.
 
 Published set, merged -> updated, same bars: **410 -> 410 opportunities on the same 67 zones** (EURUSD 67, GBPJPY 182, GBPUSD 49, USDJPY 70, XAU 42). Only labels move: MAJOR/strong 39 -> 20, MAJOR/moderate
 0 -> 6, INTERMEDIATE/moderate 360 -> 384. At the shipped `minimum_zone_strength: moderate` nothing that publishes changes; with `strong` it would. Other strategies' 3 073 events are byte-identical.
