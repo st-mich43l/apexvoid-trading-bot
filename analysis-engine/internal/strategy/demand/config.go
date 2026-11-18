@@ -57,6 +57,14 @@ type Config struct {
 	// only the frozen-Python parity replays set it (engine.WithFrozenWindows).
 	BindWithinExecutionWindow bool
 
+	// Formation is the zone definition: the swing-anchored model (a classified major swing, its departure and the base it was made in) or the legacy three-candle
+	// base, the weakest zone that may publish, and the thresholds (analysis.yml strategies.demand: zone_model, minimum_zone_strength, swing_*, base_*).
+	Formation strategyutil.ZoneFormation
+
+	// EntryMinimumWidthPrice is the instrument's narrowest published entry zone for a non-scalp setup in price units (entry_zone_minimum_width_pips x the pip; 0 = none).
+	// The entry planner never offers a price whose band would be narrower.
+	EntryMinimumWidthPrice float64
+
 	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
 	StopBudget strategyutil.StopBudget
 	// Barrier is the opposing-barrier policy the quality room is limited with.
@@ -123,6 +131,9 @@ func parseConfig(params map[string]any) (Config, error) {
 	case c.ConfluenceFloor < 1 || c.FibonacciEpsilonATR < 0 || c.ExpiryHours <= 0:
 		return Config{}, fmt.Errorf("invalid qualification parameters")
 	}
+	if c.Formation, err = strategyutil.ParseZoneFormation(params, c.MaximumZoneATR); err != nil {
+		return Config{}, err
+	}
 	if raw, present := params["bind_within_execution_window"]; present {
 		if c.BindWithinExecutionWindow, ok = raw.(bool); !ok {
 			return Config{}, fmt.Errorf("parameter %q must be boolean", "bind_within_execution_window")
@@ -133,6 +144,16 @@ func parseConfig(params map[string]any) (Config, error) {
 	}
 	if c.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err
+	}
+	if _, present := params["entry_zone_minimum_width_pips"]; present {
+		pips, err := strategyutil.Float(params, "entry_zone_minimum_width_pips")
+		if err != nil {
+			return Config{}, err
+		}
+		if pips < 0 || c.StopBudget.PipSize <= 0 && pips > 0 {
+			return Config{}, fmt.Errorf("entry_zone_minimum_width_pips must be >= 0 and needs execution_pip_size")
+		}
+		c.EntryMinimumWidthPrice = pips * c.StopBudget.PipSize
 	}
 	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
 	return c, nil

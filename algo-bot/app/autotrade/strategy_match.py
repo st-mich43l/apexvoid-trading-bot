@@ -145,6 +145,13 @@ class StrategyMatch:
   mad_range_id: str | None = None
   mad_sequence_id: str | None = None
   mad_sequence_status: str | None = None
+  # Supply/demand structure and entry derivation (Go, SD-3/SD-5): recorded verbatim, never recomputed and never read by a decision.
+  structure_swing_class: str | None = None
+  structure_zone_strength: str | None = None
+  entry_plan_kind: str | None = None
+  entry_plan_price: float | None = None
+  entry_plan_room_r: float | None = None
+  entry_plan_effective_risk: float | None = None
   # Shadow confluence telemetry. ``confluence`` remains the selected gate.
   confluence_v1: int | None = None
   confluence_v2: int | None = None
@@ -527,6 +534,14 @@ class StrategyMatch:
         mad_sequence_id=None if payload.get("mad_sequence_id") is None else str(payload["mad_sequence_id"]),
         mad_sequence_status=(
           None if payload.get("mad_sequence_status") is None else str(payload["mad_sequence_status"])
+        ),
+        structure_swing_class=None if payload.get("structure_swing_class") is None else str(payload["structure_swing_class"]),
+        structure_zone_strength=None if payload.get("structure_zone_strength") is None else str(payload["structure_zone_strength"]),
+        entry_plan_kind=None if payload.get("entry_plan_kind") is None else str(payload["entry_plan_kind"]),
+        entry_plan_price=None if payload.get("entry_plan_price") is None else float(payload["entry_plan_price"]),
+        entry_plan_room_r=None if payload.get("entry_plan_room_r") is None else float(payload["entry_plan_room_r"]),
+        entry_plan_effective_risk=(
+          None if payload.get("entry_plan_effective_risk") is None else float(payload["entry_plan_effective_risk"])
         ),
         confluence_v1=(
           None if payload.get("confluence_v1") is None

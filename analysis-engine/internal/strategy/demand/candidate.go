@@ -4,6 +4,7 @@ import (
 	"fmt"
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"math"
+	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
@@ -70,6 +71,12 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 	if d.budgetCode != "" {
 		evidence = append(evidence, d.budgetCode)
 	}
+	if f := d.inst.Formation; f != nil {
+		evidence = append(evidence, "major_swing_"+strings.ToLower(f.Swing.Class.String()), "zone_strength_"+f.Strength.String())
+	}
+	if chosen, ok := d.plan.Chosen(); ok {
+		evidence = append(evidence, "entry_"+chosen.Kind)
+	}
 	scored := s.quality(ctx, d, reference, invalidation, target, targetLabel != fixedRewardRisk, atr)
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.symbol, Direction: market.Buy,
@@ -86,6 +93,8 @@ func (s *Strategy) candidate(ctx candidateContext, d *decision) (opportunity.Can
 		candidate.StructureTimeframe = d.inst.Timeframe
 	}
 	candidate.Structure = s.structureZone(d, structLow, structHigh)
+	candidate.Structure.Swing = zoneSwing(d)
+	candidate.EntryPlan = entryPlan(d)
 	if conf.Type != "" {
 		candidate.Reaction = &opportunity.ReactionConfirmation{
 			ZoneID: d.id, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime, ReactionType: "rejection", Pattern: conf.Type,
@@ -116,7 +125,12 @@ func (s *Strategy) structureZone(d *decision, low, high float64) *opportunity.St
 
 // quality is the technical quality of a confirmed reaction off a demand zone: seven dimensions, each in [0, 1], averaged without weights (informational).
 func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalidation, target float64, structural bool, atr float64) opportunity.StrategyQuality {
-	m := quality.New(string(ID) + ".quality.v2")
+	// v3 is the swing-anchored model (SD-4): the zone's own strength is measured from its swing, its departure and its structure shift. v2 is the legacy zone's.
+	model := ".quality.v2"
+	if d.inst.Formation != nil {
+		model = ".quality.v3"
+	}
+	m := quality.New(string(ID) + model)
 	v := d.v
 	departure, width, touches := math.NaN(), math.NaN(), math.NaN()
 	if atr > 0 {
@@ -141,6 +155,9 @@ func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalid
 			departure = best / atr
 		}
 	}
+	if f := d.inst.Formation; f != nil {
+		departure = f.DepartureATR // the departure of the swing on the structure frame, not an M5 read that is unknown once the origin leaves the M5 window
+	}
 	m.Score("zone_departure", quality.Ramp(departure, 1, 3))
 	m.Score("zone_precision", quality.Peak(width, 0.1, 0.4, 1.5, 3.5))
 	m.Score("zone_freshness", quality.Fall(touches, 1, 5))
@@ -155,6 +172,28 @@ func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalid
 		pip = d.v.cfg.PipSize
 	}
 	strategyutil.ScoreRoom(m, strategyutil.MeasureQualityRoom(ctx.market, true, reference, invalidation, target, structural, d.v.cfg.StopBudget, d.v.cfg.Barrier.RoomParams(pip, strategyutil.ScalpRoomATR(ctx.market, atr)), 0), pip)
+	if f := d.inst.Formation; f != nil {
+		// Four different facts about the same structure, each measured once: how far the swing stood out (prominence, both sides), how cleanly the departure travelled
+		// (efficiency, not its size: that is zone_departure), and whether the departure broke structure (BOS or CHoCH). The class and the strength are measurements of the
+		// same facts (never scores of their own), so nothing is counted twice.
+		major := v.cfg.Formation.Zone.Major
+		m.Score("swing_significance", quality.Ramp(f.Swing.ProminenceATR, major.IntermediateProminenceATR, 2*major.MajorProminenceATR))
+		m.Score("displacement_efficiency", quality.Ramp(f.Efficiency, 0.4, 0.8))
+		shift := 0.0
+		switch f.Swing.Shift {
+		case "CHoCH":
+			shift = 1
+		case "BOS":
+			shift = 0.5
+		}
+		m.Score("structure_shift", shift)
+		m.Measure("swing_prominence_atr", f.Swing.ProminenceATR)
+		m.Measure("swing_class", float64(f.Swing.Class))
+		m.Measure("zone_strength", float64(f.Strength))
+		if chosen, ok := d.plan.Chosen(); ok {
+			m.Measure("entry_depth_fraction", chosen.DepthFraction)
+		}
+	}
 	m.Measure("room_r", d.room.RoomR)
 	m.Measure("pd_position", d.inst.PDPosition)
 	m.Measure("deep_entry_pips", deepEntryPips(d))
@@ -171,4 +210,33 @@ func deepEntryPips(d *decision) float64 {
 		return 0
 	}
 	return math.Abs(d.entryHigh-d.res.zone.High()) / pip
+}
+
+// zoneSwing is the swing-anchored derivation of the zone as published (nil under the legacy definition).
+func zoneSwing(d *decision) *opportunity.ZoneSwing {
+	f := d.inst.Formation
+	if f == nil {
+		return nil
+	}
+	return &opportunity.ZoneSwing{
+		ZoneID: d.id, Class: f.Swing.Class.String(), Strength: f.Strength.String(), AnchorPrice: f.AnchorPrice, ProximalPrice: f.Proximal, DistalPrice: f.Distal,
+		SwingConfirmedAt: f.Swing.ConfirmedAt, BaseFormedAt: f.BaseFormedAt, DepartureConfirmedAt: f.DepartureConfirmedAt, BaseCandles: f.BaseEnd - f.BaseStart + 1,
+		ProminenceATR: f.Swing.ProminenceATR, DepartureATR: f.DepartureATR, Efficiency: f.Efficiency, External: f.Swing.External, Shift: f.Swing.Shift,
+	}
+}
+
+// entryPlan is the entry the engine chose from candidate prices inside the zone and how (nil under the proximal entry model).
+func entryPlan(d *decision) *opportunity.EntryPlan {
+	chosen, ok := d.plan.Chosen()
+	if !ok {
+		return nil
+	}
+	plan := &opportunity.EntryPlan{
+		Model: "zone_candidates_v1", Kind: chosen.Kind, Price: chosen.Price, DepthFraction: chosen.DepthFraction, StopPips: chosen.StopPips,
+		EffectiveRisk: chosen.EffectiveRisk, RoomR: chosen.RoomR, Target: chosen.Target, TargetLabel: chosen.TargetLabel,
+	}
+	for _, c := range d.plan.Candidates {
+		plan.Candidates = append(plan.Candidates, opportunity.EntryPlanCandidate{Kind: c.Kind, Price: c.Price, DepthFraction: c.DepthFraction, Feasible: c.Feasible, Rejected: c.Rejected})
+	}
+	return plan
 }

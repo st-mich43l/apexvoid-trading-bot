@@ -8,6 +8,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 )
 
 // The demand zone and its lifecycle, defined here and judged on the bars of the frame the zone was found on.
@@ -22,6 +23,15 @@ const (
 
 // Refusal reason of this strategy, counted by the engine as strategy_refused{strategy="demand", reason}.
 const refusedNoTargetRoom = "no_target_room" // the nearest obstacle is closer than minimum_target_r x the risk
+
+// refusedZoneStrength counts a zone in play (its entry is valid) that is below minimum_zone_strength: a weak zone is context, never a trade.
+const refusedZoneStrength = "zone_strength_below_minimum"
+
+// The entry planner's refusals (swing model): no candidate price of the zone is feasible.
+const (
+	refusedStopBeyondCap   = "stop_beyond_cap"
+	refusedNoFeasibleEntry = "no_feasible_entry"
+)
 
 // zoneBand is a price band with the facts the qualification reads.
 type zoneBand struct {
@@ -50,6 +60,8 @@ type zone struct {
 	Mitigated  bool
 	Score      float64
 	Discount   bool
+	// Formation is the swing-anchored derivation of the zone (nil under the legacy model).
+	Formation *structure.SwingZone
 }
 
 // instance is a zone that passed the lifecycle tests: its entry band (clipped to the proximal slice when wide), the whole zone, and where it lives.
@@ -71,6 +83,8 @@ type instance struct {
 	FrameOrigin    int                          // the zone's last base candle on that frame
 	FrameConfirmed int                          // the last candle of the departure on that frame
 	LegStart       int                          // the departure's first candle on that frame
+	// Formation is the swing-anchored derivation of the zone (nil under the legacy model): the swing, its class, the base and the strength.
+	Formation *structure.SwingZone
 }
 
 func (i instance) structural() (float64, float64) {
@@ -153,6 +167,14 @@ func (s *Strategy) displacement(bars []market.Candle, atr []float64) []leg {
 // detectZones builds the demand zones of a frame: for every strong upward departure, the range (wicks included) of the baseCandles candles before it. A zone
 // price already closed through (below its low) is dead for good and carries at least one touch.
 func (s *Strategy) detectZones(bars []market.Candle, atr []float64) []zone {
+	if s.cfg.Formation.Swing() {
+		return s.detectSwingZones(bars, atr)
+	}
+	return s.detectLegacyZones(bars, atr)
+}
+
+// detectLegacyZones is the zone definition before SD-3, kept as the rollback (zone_model: legacy).
+func (s *Strategy) detectLegacyZones(bars []market.Candle, atr []float64) []zone {
 	var zones []zone
 	for _, l := range s.displacement(bars, atr) {
 		if l.Direction != "up" || l.Start <= 0 {
@@ -167,6 +189,27 @@ func (s *Strategy) detectZones(bars []market.Candle, atr []float64) []zone {
 			low, high = math.Min(low, bars[i].Low), math.Max(high, bars[i].High)
 		}
 		z := zone{Low: low, High: high, Origin: l.Start - 1, LegStart: l.Start, BreakIndex: l.End}
+		if closedBelow(z, bars) {
+			z.Touches, z.Mitigated = 1, true
+		}
+		zones = append(zones, z)
+	}
+	return zones
+}
+
+// detectSwingZones anchors every zone on a classified swing and its departure (structure.FormSwingZones): the zone is the base the swing was made in, the departure is
+// this strategy's own displacement leg. A zone price already closed through its far edge is mitigated and carries at least one touch, as before.
+func (s *Strategy) detectSwingZones(bars []market.Candle, atr []float64) []zone {
+	var legs []structure.Leg
+	for _, l := range s.displacement(bars, atr) {
+		if l.Direction == "up" {
+			legs = append(legs, structure.Leg{Start: l.Start, End: l.End})
+		}
+	}
+	var zones []zone
+	for _, formed := range structure.FormSwingZones(false, bars, atr, legs, s.cfg.Formation.Zone) {
+		formation := formed
+		z := zone{Low: formed.Low, High: formed.High, Origin: formed.BaseEnd, LegStart: formed.LegStart, BreakIndex: formed.ConfirmedIndex, Formation: &formation}
 		if closedBelow(z, bars) {
 			z.Touches, z.Mitigated = 1, true
 		}
@@ -346,19 +389,25 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		if state.Pending {
 			continue
 		}
-		if atr > 0 && z.High-z.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
+		if z.Formation != nil {
+			if z.Formation.TooWide || z.Formation.TooNarrow {
+				continue // a region or an incidental candle region, judged on the whole structure
+			}
+		} else if atr > 0 && z.High-z.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
 			continue // a region, judged on the whole structure
 		}
 		in := instance{
 			Low: z.Low, High: z.High, Touches: z.Touches, Mitigated: z.Mitigated, Score: z.Score, Timeframe: tf, Frame: frame,
-			FrameOrigin: z.Origin, FrameConfirmed: maxInt(z.Origin, z.BreakIndex), LegStart: z.LegStart,
+			FrameOrigin: z.Origin, FrameConfirmed: maxInt(z.Origin, z.BreakIndex), LegStart: z.LegStart, Formation: z.Formation,
 			Discount: z.Discount, PDPosition: inputs.pd.position(z.High),
 		}
 		if low, high, clipped := clipEntry(z.Low, z.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = z.Low, z.High, true
 			in.Low, in.High = low, high
 		}
-		held = append(held, band{Low: z.Low, High: z.High})
+		if !in.weak(s.cfg.Formation) {
+			held = append(held, band{Low: z.Low, High: z.High}) // only a zone that may publish is structure for the frame below
+		}
 		out = append(out, in)
 	}
 	return out, held
@@ -411,4 +460,10 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// weak reports a swing-anchored zone below the strategy's minimum strength: kept as context, never published, never higher-timeframe confluence. The legacy model has
+// no strength and is never weak.
+func (i instance) weak(f strategyutil.ZoneFormation) bool {
+	return i.Formation != nil && i.Formation.Strength < f.MinimumStrength
 }

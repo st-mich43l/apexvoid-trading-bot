@@ -128,6 +128,12 @@ class TradePlanAnalysis:
   mad_range_id: str | None = None
   mad_sequence_id: str | None = None
   mad_sequence_status: str | None = None
+  structure_swing_class: str | None = None
+  structure_zone_strength: str | None = None
+  entry_plan_kind: str | None = None
+  entry_plan_price: float | None = None
+  entry_plan_room_r: float | None = None
+  entry_plan_effective_risk: float | None = None
   # Candle Confirmation V2 context telemetry (§28) — descriptive only,
   # never a gate. See app/analysis/candle_evidence.py CandleEvidence.
   candle_version: int | None = None
@@ -226,6 +232,12 @@ class TradePlanAnalysis:
       "mad_range_id": self.mad_range_id,
       "mad_sequence_id": self.mad_sequence_id,
       "mad_sequence_status": self.mad_sequence_status,
+      "structure_swing_class": self.structure_swing_class,
+      "structure_zone_strength": self.structure_zone_strength,
+      "entry_plan_kind": self.entry_plan_kind,
+      "entry_plan_price": self.entry_plan_price,
+      "entry_plan_room_r": self.entry_plan_room_r,
+      "entry_plan_effective_risk": self.entry_plan_effective_risk,
       "candle_version": self.candle_version,
       "candle_primary_pattern": self.candle_primary_pattern,
       "candle_patterns": self.candle_patterns,
@@ -400,6 +412,12 @@ class TradePlanAnalysis:
       mad_range_id=None if data.get("mad_range_id") is None else str(data["mad_range_id"]),
       mad_sequence_id=None if data.get("mad_sequence_id") is None else str(data["mad_sequence_id"]),
       mad_sequence_status=None if data.get("mad_sequence_status") is None else str(data["mad_sequence_status"]),
+      structure_swing_class=None if data.get("structure_swing_class") is None else str(data["structure_swing_class"]),
+      structure_zone_strength=None if data.get("structure_zone_strength") is None else str(data["structure_zone_strength"]),
+      entry_plan_kind=None if data.get("entry_plan_kind") is None else str(data["entry_plan_kind"]),
+      entry_plan_price=None if data.get("entry_plan_price") is None else float(data["entry_plan_price"]),
+      entry_plan_room_r=None if data.get("entry_plan_room_r") is None else float(data["entry_plan_room_r"]),
+      entry_plan_effective_risk=None if data.get("entry_plan_effective_risk") is None else float(data["entry_plan_effective_risk"]),
       candle_version=(
         None if data.get("candle_version") is None
         else int(data["candle_version"])

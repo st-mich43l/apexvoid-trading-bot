@@ -338,6 +338,52 @@ class TechnicalContext(FrozenConfigModel):
     return self
 
 
+class ZoneSwing(FrozenConfigModel):
+  """Why a supply or demand zone is a zone (Go-owned, SD-3): the classified swing, the base and the departure. Descriptive only."""
+
+  zone_id: str = Field(min_length=1)
+  major_swing_class: Literal["MAJOR", "INTERMEDIATE", "MINOR"]
+  zone_strength: Literal["strong", "moderate", "weak"]
+  swing_anchor_price: FiniteFloat
+  proximal_price: FiniteFloat
+  distal_price: FiniteFloat
+  swing_confirmed_at: int = Field(ge=1)
+  base_formed_at: int = Field(ge=1)
+  departure_confirmed_at: int = Field(ge=1)
+  base_candles: int = Field(ge=1)
+  prominence_atr: FiniteFloat
+  departure_atr: FiniteFloat
+  efficiency: FiniteFloat
+  external: bool
+  shift: Literal["BOS", "CHoCH"] | None = None
+
+
+class EntryPlanCandidate(FrozenConfigModel):
+  kind: str = Field(min_length=1)
+  price: FiniteFloat
+  depth_fraction: FiniteFloat
+  feasible: bool
+  rejected: Literal["outside_zone", "band_below_minimum_width", "stop_beyond_cap", "no_target_room", "degenerate_risk", "band_unreachable"] | None = None
+
+
+class EntryPlan(FrozenConfigModel):
+  """The entry the Analysis Engine recommends for a supply or demand zone and how it was derived (Go-owned, SD-5).
+
+  ``entry`` is the published band from ``price``. Algo Bot owns sizing, exposure and the ladder; it records this and never recomputes it.
+  """
+
+  model: Literal["zone_candidates_v1"]
+  kind: Literal["proximal", "body_proximal", "midpoint", "deep", "stop_cap_fit", "room_fit"]
+  price: FiniteFloat
+  depth_fraction: FiniteFloat
+  stop_pips: FiniteFloat = Field(ge=0)
+  effective_risk: FiniteFloat = Field(gt=0)
+  room_r: FiniteFloat = Field(ge=0)
+  target: FiniteFloat
+  target_label: str
+  candidates: list[EntryPlanCandidate]
+
+
 class StructureZone(FrozenConfigModel):
   """The structure behind a zone-family setup (supply, demand, order_block, fvg) on its own timeframe.
 
@@ -349,6 +395,8 @@ class StructureZone(FrozenConfigModel):
   low: FiniteFloat
   high: FiniteFloat
   formed_at: int = Field(ge=0)
+  # Present only for a supply or demand zone of the swing-anchored definition.
+  swing: ZoneSwing | None = None
 
   @model_validator(mode="after")
   def validate_order(self):
@@ -385,11 +433,19 @@ class AnalysisOpportunity(FrozenConfigModel):
   stop_envelope: StopEnvelope | None = None
   # Present only for a one-price opportunity (see ExecutionBlock); absent means the entry zone is traded as a zone, exactly as before.
   execution: ExecutionBlock | None = None
+  # Present only for a supply or demand setup whose entry the engine chose from candidate prices inside the zone; recorded, never recomputed.
+  entry_plan: EntryPlan | None = None
 
   @model_validator(mode="after")
   def validate_trade_geometry(self):
     if self.expires_at < self.created_at:
       raise ValueError("expires_at must be >= created_at")
+    if self.entry_plan is not None and not self.entry.low - 1e-9 <= self.entry_plan.price <= self.entry.high + 1e-9:
+      raise ValueError("entry_plan.price must lie inside the published entry band")
+    if self.structure is not None and self.structure.swing is not None:
+      w = self.structure.swing
+      if not self.structure.low - 1e-9 <= w.proximal_price <= self.structure.high + 1e-9 or not self.structure.low - 1e-9 <= w.distal_price <= self.structure.high + 1e-9:
+        raise ValueError("structure.swing proximal and distal prices must be edges of the structure")
     if self.execution is not None:
       x = self.execution
       if not self.entry.low <= x.price <= self.entry.high:

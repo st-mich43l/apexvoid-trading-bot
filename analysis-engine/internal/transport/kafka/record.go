@@ -37,6 +37,8 @@ type OpportunityPayload struct {
 	// Execution declares how the opportunity is traded. Omitted for the default (an entry zone); present, with model "single_price", for a one-price opportunity
 	// (TL-LIVE-2: Trendline). Consumers that do not know it must refuse such an event, never trade its corridor as a zone.
 	Execution *ExecutionPayload `json:"execution,omitempty"`
+	// EntryPlan is the entry the engine recommends for a supply or demand zone and its derivation. Omitted for every other opportunity.
+	EntryPlan *EntryPlanPayload `json:"entry_plan,omitempty"`
 }
 
 // ExecutionPayload mirrors opportunity.SinglePriceExecution.
@@ -56,6 +58,50 @@ type StructurePayload struct {
 	Low       float64 `json:"low"`
 	High      float64 `json:"high"`
 	FormedAt  int64   `json:"formed_at"`
+	// Swing is the swing-anchored derivation of a supply or demand zone (omitted for any other structure and for a zone of the legacy definition).
+	Swing *ZoneSwingPayload `json:"swing,omitempty"`
+}
+
+// ZoneSwingPayload mirrors opportunity.ZoneSwing.
+type ZoneSwingPayload struct {
+	ZoneID               string  `json:"zone_id"`
+	Class                string  `json:"major_swing_class"`
+	Strength             string  `json:"zone_strength"`
+	AnchorPrice          float64 `json:"swing_anchor_price"`
+	ProximalPrice        float64 `json:"proximal_price"`
+	DistalPrice          float64 `json:"distal_price"`
+	SwingConfirmedAt     int64   `json:"swing_confirmed_at"`
+	BaseFormedAt         int64   `json:"base_formed_at"`
+	DepartureConfirmedAt int64   `json:"departure_confirmed_at"`
+	BaseCandles          int     `json:"base_candles"`
+	ProminenceATR        float64 `json:"prominence_atr"`
+	DepartureATR         float64 `json:"departure_atr"`
+	Efficiency           float64 `json:"efficiency"`
+	External             bool    `json:"external"`
+	Shift                string  `json:"shift,omitempty"`
+}
+
+// EntryPlanPayload mirrors opportunity.EntryPlan: the entry the engine recommends for a supply or demand zone and how it was derived.
+type EntryPlanPayload struct {
+	Model         string                      `json:"model"`
+	Kind          string                      `json:"kind"`
+	Price         float64                     `json:"price"`
+	DepthFraction float64                     `json:"depth_fraction"`
+	StopPips      float64                     `json:"stop_pips"`
+	EffectiveRisk float64                     `json:"effective_risk"`
+	RoomR         float64                     `json:"room_r"`
+	Target        float64                     `json:"target"`
+	TargetLabel   string                      `json:"target_label"`
+	Candidates    []EntryPlanCandidatePayload `json:"candidates"`
+}
+
+// EntryPlanCandidatePayload mirrors opportunity.EntryPlanCandidate.
+type EntryPlanCandidatePayload struct {
+	Kind          string  `json:"kind"`
+	Price         float64 `json:"price"`
+	DepthFraction float64 `json:"depth_fraction"`
+	Feasible      bool    `json:"feasible"`
+	Rejected      string  `json:"rejected,omitempty"`
 }
 
 // StopEnvelopePayload mirrors opportunity.StopEnvelope — see that type's
