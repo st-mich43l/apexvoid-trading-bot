@@ -26,7 +26,9 @@ type view struct {
 	read   analysiscontext.LegacyRead
 	cfg    *Config
 	price  float64 // the latest closed bar's close
-	atr    float64 // the execution frame's detector ATR
+	atr    float64 // the execution frame's detector ATR (1 when the frame has none: a placeholder for admission arithmetic that quality must never read as a measurement)
+	// atrKnown is false when the execution frame has no detector ATR.
+	atrKnown bool
 }
 
 func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
@@ -39,10 +41,11 @@ func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
 	}
 	bars := frame.Legacy.Bars
 	atr := frame.Legacy.DetectorATR
-	if !(atr > 0) {
+	known := atr > 0
+	if !known {
 		atr = 1
 	}
-	return &view{market: ctx, frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr}, true
+	return &view{market: ctx, frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr, atrKnown: known}, true
 }
 
 func (v *view) htfAligned() bool { return v.read.AlignedWithHTF(market.Buy) }

@@ -70,12 +70,9 @@ The zone is the base the departure LEFT, built from the departure backwards, and
 
 ## SD-4: quality
 
-`supply.quality.v3` / `demand.quality.v3` (the legacy zone keeps v2). `Quality.Overall` is still the plain mean of the `score_*` dimensions. v3 changes `zone_departure`
-to the swing's departure on the structure frame (the v2 M5 read was unknown once the origin left the M5 window) and adds three dimensions that each measure a different
-fact: `swing_significance` (prominence), `displacement_efficiency` (how cleanly the departure travelled, not its size) and `structure_shift` (CHoCH 1, BOS 0.5, none 0).
-The class and the strength are published as measurements (`swing_class`, `zone_strength`, `swing_prominence_atr`, `entry_depth_fraction`), never as scores of their own, so
-nothing is counted twice. Premium/discount, freshness, precision, retest history, higher-timeframe alignment and room are the v2 dimensions, unchanged. Quality ranking stays
-off and no quality gate was added.
+`supply.quality.v4` / `demand.quality.v4` for swing zones (the legacy zone keeps v2, frozen; v3 was the first swing-zone model and is superseded by the SD-4 audit below).
+`Quality.Overall` is still the plain mean of the ten `score_*` dimensions, informational, no gate, ranking off. The dimensions and their exact definitions are in the audit table
+in "SD-4 audit: the technical quality model".
 
 ## SD-5: the entry (`strategyutil.PlanEntry`)
 
@@ -252,6 +249,108 @@ XAU examples (H1; open times; a bar is known at its close):
 * **Supply, MAJOR, strong, six candles.** High 4435.06 at 1789020000, the departure's first candle itself: the base is the six candles 1789002000..1789016400 (4400.25..4431.29) plus that candle's
   open-to-high part: structure 4400.25..4435.06 (2.39 ATR, inside the 3.0 limit: a version of this change without the width bound absorbed a seventh candle, 1788998400, and reached 3.11 ATR, a region).
 * **Rejected.** A displacement whose base holds no confirmed swing (1 426 departures in the window) makes no zone however large the move: its reason is `no_confirmed_swing_in_base`.
+
+## SD-4 audit: the technical quality model (`quality.v4`)
+
+Three mechanisms decide three different things and must not be confused. **Structural validity** (swing zone formation, `FormSwingZones`) decides that a zone exists.
+**Confluence admission** (`scoreZone()` / `confluence.Evaluate()`, stars) decides whether it may be offered (`min_confluence`). **Technical quality** (`quality.v4`) describes a
+published opportunity and gates nothing. This audit changes only the third; trade behavior is identical (see "Preservation").
+
+### The ten dimensions (v4)
+
+Structure-frame measures use the ATR of the zone's own structure frame (M15 or H1); execution measures use the M5 ATR. "Formation" is known when the departure closes and never
+changes; "decision" is read at the M5 decision bar from closed bars only.
+
+| # | dimension | formula (range [0,1]) | unit / timeframe | known at | variation (380 opps, 62 zones) |
+|---|---|---|---|---|---|
+| 1 | `zone_departure` | `Ramp(departure_atr, 1, 3)` | structure ATR | formation | 51 distinct, 0% zero, 14% saturated |
+| 2 | `zone_precision` | `Peak(width_atr; 0.1, 0.4, 1.5, 3.5)` | **structure ATR** (v3: M5 ATR) | formation | 37 distinct, 0% zero, 36% saturated |
+| 3 | `swing_significance` | `Ramp(approach_atr, 1.5, 6)` (intermediate .. 2x major prominence) | structure ATR | formation | 55 distinct, 3% saturated |
+| 4 | `displacement_efficiency` | `Ramp(efficiency, 0.4, 0.8)` | ratio | formation | 55 distinct |
+| 5 | `structure_shift` | 1 if the swing broke structure (CHoCH or BOS), else 0 | kind published | formation | 59% zero |
+| 6 | `zone_freshness` | `Fall(touches, 0, maximum_zone_touches+1)` | count | decision | 3 distinct (0, 1, 2 touches) |
+| 7 | `rejection` | `RejectionScore` only when a confirming pattern was recognised, else 0 | M5 bars | decision | 67% zero (touch-only) |
+| 8 | `entry_location` | chase of the planned entry reference in M5 ATR; no credit without a valid M5 ATR | M5 ATR | decision | 29% zero, 38% saturated |
+| 9 | `structure` | M5 structure for the trade, recent CHoCH, higher-timeframe alignment | M5 + HTF | decision | 7 distinct |
+| 10 | `room` | `ScoreRoom` of the structural room over the **effective** risk, limited by the canonical opposing barrier | pips / R | decision | 171 distinct, 7% zero |
+
+Measurements that are not scores (never counted twice): `swing_class`, `zone_strength`, `swing_prominence_atr`, `swing_approach_atr`, `zone_width_atr`, `zone_departure_atr`,
+`structure_shift_kind` (CHoCH 1, BOS 2), `zone_touches`, `reaction_confirmed`, `entry_depth_fraction`, `room_r`, `pd_position`, `deep_entry_pips`, and the availability flags
+`structure_atr_available` / `execution_atr_available`. `quality_model_version` is 4.
+
+### Defects found (each reproduced by a test that failed on v3) and the correction
+
+1. **`zone_precision` mixed timeframes.** The M15/H1 structural width was divided by the M5 execution ATR (observed ratio of the structure ATR to the M5 ATR: 1.5x for the XAU M15 zones above, 4.3x for the USDJPY H1 zone), so a normal zone read "too wide": zero on **52%** of
+   published opportunities, mean 0.24, and on H1 zones 0.03 on average (M15 0.36). The same zone under two different M5 ATRs scored 0.05 and 1.0. Now the structure frame's ATR (`zone_width_atr`);
+   H1 mean 0.03 -> 0.91, M15 0.36 -> 0.81. Zone geometry, stop and entry are untouched.
+2. **A missing M5 ATR was fabricated as 1.0** in the view (an admission placeholder that leaked into quality), and freshness/touches were skipped when ATR was unknown. Now the view says
+   `atrKnown`, a missing ATR gives no credit to the dimensions that need it (entry location, scalp room ATR) and takes nothing from the others; the reason is observable.
+3. **`structure_shift` ranked CHoCH 1 / BOS 0.5** with no evidence that a reversal is a better supply/demand origin than a continuation. A break of structure is a fact the swing either has or has not; the
+   kind is a measurement.
+4. **`swing_significance` counted the departure twice.** `ProminenceATR = min(left, right)` is almost always the departure, which `zone_departure` already scores. It is replaced by the swing's
+   **approach** (`MajorSwing.ApproachATR`: the distance price travelled into the swing over the `ExternalBars` window before it), a distinct fact that is known from the first bar after the swing.
+   Their correlation on unique zones: precision~significance +0.47 in v3 is gone; the largest remaining pairs are departure~shift +0.46, precision~freshness +0.40, significance~shift -0.48
+   (62 zones; low power, reported, not acted on).
+5. **`rejection` scored the touch bar's shape when no pattern was recognised**, which invents reaction evidence for a touch-only trade. A touch-only trade stays eligible (candle confirmation is
+   optional) and scores 0, with `reaction_confirmed = 0` (251 of 380 are touch-only).
+6. **`zone_freshness` `Fall(touches, 1, 5)` could not tell fresh from once-retested** (two distinct values, 67% saturated). Now `Fall(touches, 0, maximum_zone_touches + 1)`: 1.00 / 0.67 / 0.33.
+
+### Not changed (audited, found consistent)
+
+* `zone_departure` (formation read, the departure cannot extend later), `displacement_efficiency` (a distinct property: how directly, not how far), `structure`, `entry_location` (execution measure,
+  correctly on M5 ATR), `room`.
+* **Room.** `entry_plan.room_r` equals `quality.effective_room_r` on all 380 opportunities (max difference 0.0): both use the same entry, the unmoved invalidation, the barrier-limited admission target and
+  the effective risk. `quality.room_reward_risk` is the target's own reward over the **structural** (pre-floor) risk and differs on 149 of 380 (39%, up to 3.0R) exactly when the instrument stop floor widens the
+  stop (e.g. EURUSD: structural 8.1 pips, effective 12 pips: 1.48 vs 1.00). It is published for reference; `score_room` uses the effective room. All 380 targets are structural, so no projected-target credit exists;
+  a projected target earns no room credit (test).
+* **Confluence (stars).** Audited with real candles, **nothing changed** (changing it changes admission). Findings: session levels at the same price are summed by name (ASIA_H, PDH, LONDON_H, NY_H at one price each earn
+  2.0; 55 cases with two or more names at one price), a liquidity pool and a session level at the same price both score (296 cases), pool + session + key level all present on 107 of 277 scored zones, key level and round
+  number overlap, base points are fixed, and the normalisation maximum (24.5) can be exceeded by up to five session names. A temporary patch that de-duplicated session levels by price changed the published set 380 -> 368
+  (14 lost, 2 gained, 5 of 60 zones). That is a **separate behavioral change** and is not part of this PR; it is recorded here as the proposal and its measured impact.
+
+### Real XAU examples (production closed bars, explicit arithmetic)
+
+* **Demand M15 INTERMEDIATE** (`opp_07e6afa2`), zone 4084.63..4092.34, width 7.71 (77 pips). M5 ATR 4.793; M15 ATR 7.036. `zone_precision` v3 = Peak(7.71/4.793 = 1.61) = 0.971; v4 = Peak(7.71/7.036 = 1.10) = 1.000.
+  `swing_significance` v3 (min(left,right) prominence 2.17) = 0.150; v4 (approach 6.73 over Ramp 1.5..6) = 1.000 while the departure 1.84 is scored once by `zone_departure` (0.421). `zone_freshness` (1 touch) v3 1.000, v4 0.667.
+  `rejection` v3 0.292 (touch bar shape), v4 0 (`reaction_confirmed` 0). Room: plan 4.628R = effective 4.628R = reward/risk (stop 69.9 pips, no floor effect) -> `score_room` 1.000.
+  Overall v3 0.555 -> v4 0.580 = mean of ten scores.
+* **Supply M15 INTERMEDIATE** (`opp_06a86903`), zone 4046.56..4056.14, width 9.58. M5 ATR 2.868, M15 ATR 4.782. `zone_precision` v3 = Peak(9.58/2.868 = 3.34) = 0.139; v4 = Peak(2.00) = 0.748. Room 1.048R
+  (the minimum): `score_room` 0.024. Overall v3 0.402 -> v4 0.439.
+* **USDJPY H1** (no XAU H1 zone in this capture): width 0.252 (25 pips), M5 ATR 0.0623, H1 ATR 0.2655: `zone_precision` v3 = Peak(4.05) = 0.000; v4 = Peak(0.95) = 1.000.
+
+### Before / after (380 opportunities on 62 zones, five symbols, 9-12 days of closed bars)
+
+| dimension | v3 mean / zero / saturated | v4 mean / zero / saturated |
+|---|---|---|
+| zone_precision | 0.24 / 52% / 4% | 0.85 / 0% / 36% |
+| zone_freshness | 0.92 / 0% / 67% (2 values) | 0.64 / 0% / 24% (3 values) |
+| rejection | 0.34 / 27% / 2% | 0.19 / 67% / 2% |
+| swing_significance | 0.24 / 0% / 1% | 0.43 / 0% / 3% |
+| structure_shift | 0.29 / 59% / 17% | 0.41 / 59% / 41% |
+| other six dimensions | unchanged | unchanged |
+| **Overall** | 0.436 (sd .104, .20-.79) | 0.485 (sd .089, .26-.77) |
+
+M15 vs H1 overall: v3 0.474 / 0.369, v4 0.502 / 0.456 (the H1 penalty was the M5-ATR defect). MAJOR vs INTERMEDIATE: v3 0.586 / 0.420, v4 0.589 / 0.474. Fresh vs retested: v4 0.554 / 0.464.
+Contradictory measurements in v4: departure >= 0.8 with efficiency <= 0.2: 0; MAJOR with significance <= 0.2: 0; precision >= 0.9 with entry_location = 0: 66 (different facts: a good zone entered far from the reaction).
+
+### Invariance and tests
+
+* Price scale (x100), supply/demand price mirror (identical vector on both packages from one golden literal), M5 ATR change (identical zones), missing ATR, touch-only trade, projected vs structural target,
+  `Overall = mean(score_*)`, every score in [0,1], approach known from the first bar and independent of the departure (`structure/major_audit_test.go`), quality versioning.
+* **Preservation.** Replay of the five captures: the same 380 opportunity IDs, and no payload field except `quality` differs (entry, invalidation, targets, evidence, `entry_plan`, `structure`, stop envelope);
+  3 073 events of other strategies are byte-identical. Strategy versions are not bumped (IDs are unchanged); `quality_model_version` goes 3 -> 4 for swing zones.
+
+### Does quality predict outcomes? (hypothetical; not validated)
+
+Spec frozen before reading outcomes: one first-filled opportunity per unique zone (53 filled of 62; 44 M15, 9 H1), Spearman(quality, hypothetical R) and top-half minus bottom-half mean R, 95% bootstrap over zones.
+Simulator: limit fill at the band edge, stop beyond the invalidation widened to the floor, first target, stop-first when a bar touches both, no spread, no slippage. Mean R -0.03, win 45%.
+Overall v3 rho -0.03 [-0.32, +0.25]; v4 rho -0.02 [-0.29, +0.26]; top-minus-bottom half -0.21R [-0.78, +0.43]. No dimension's interval excludes zero (precision +0.20 [-0.09, +0.45] is the largest positive,
+rejection -0.19 [-0.40, +0.08] the largest negative). **Expectancy and the predictive value of quality are not validated**; a quality-only fix makes no profitability claim. **Ranking stays disabled.**
+
+### Release and rollback (SD-4)
+
+Analysis Engine only; no contract (the new quality measures are additive floats in `quality.components`), config or strategy-version change; opportunity IDs and every trading field are unchanged. Rollback: revert the change;
+`zone_model: legacy` keeps v2.
 
 ## Release and rollback
 
