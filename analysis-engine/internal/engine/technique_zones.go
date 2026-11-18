@@ -199,26 +199,32 @@ func crtMinimumH1RangeATR(settings Settings, fallback float64) float64 {
 	return fallback
 }
 
-// orderBlockBreakBuffer is strategies.order_block.confirmed_break_buffer_atr, 0 when absent (the rule is off).
-func orderBlockBreakBuffer(settings Settings) float64 {
+// strategyBreakBufferATR is a strategy's own structure-close buffer in ATRs and whether the rule is on for it: order_block's confirmed_break_buffer_atr (on only
+// when > 0) and key_level's structure_close_buffer_atr (on whenever the key is present, 0 meaning any close beyond the band). Each strategy's rule is
+// independent of the other's.
+func strategyBreakBufferATR(settings Settings, id opportunity.StrategyID) (float64, bool) {
 	for _, cfg := range settings.Strategies {
-		if cfg.ID == "order_block" {
+		if string(cfg.ID) != string(id) {
+			continue
+		}
+		switch id {
+		case "order_block":
 			if v, ok := cfg.Parameters["confirmed_break_buffer_atr"].(float64); ok && v > 0 {
-				return v
+				return v, true
+			}
+		case "key_level":
+			if v, ok := cfg.Parameters["structure_close_buffer_atr"].(float64); ok && v >= 0 {
+				return v, true
 			}
 		}
 	}
-	return 0
+	return 0, false
 }
 
 // structureBreakBuffer is the break buffer, in price units, of a live opportunity's structure on the timeframe whose bar just closed: the strategy's buffer
 // in ATRs times that frame's ATR at the closed bar (the detector-contract frame's, the same series the instance definition judges with; the canonical ATR
 // only where the frame has none). A strategy without the rule has no buffer, so none of its opportunities is retired this way.
 func (w *SymbolWorker) structureBreakBuffer(tf market.Timeframe, canonicalATR []float64) func(opportunity.StrategyID) (float64, bool) {
-	atrs := orderBlockBreakBuffer(w.settings)
-	if atrs <= 0 {
-		return nil
-	}
 	frameATR := 0.0
 	if frame := w.state.Context.Timeframes[tf]; frame != nil && frame.Legacy != nil && len(frame.Legacy.ATR) > 0 {
 		frameATR = frame.Legacy.ATR[len(frame.Legacy.ATR)-1]
@@ -230,7 +236,8 @@ func (w *SymbolWorker) structureBreakBuffer(tf market.Timeframe, canonicalATR []
 		return nil
 	}
 	return func(id opportunity.StrategyID) (float64, bool) {
-		if id != "order_block" {
+		atrs, on := strategyBreakBufferATR(w.settings, id)
+		if !on {
 			return 0, false
 		}
 		return atrs * frameATR, true
