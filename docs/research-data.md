@@ -92,6 +92,24 @@ you start (it reads one opportunity's bars at a time).
 
 Before enabling, seed what Redis holds now with `tools.research_data seed-from-redis` (about 33 h of M1 and 5 days of M5): history that is not archived before the window rolls is gone.
 
+## Realised excursion of every auto trade (OBS1)
+
+`auto_trade_results` carries the MFE and MAE of each `algo_auto` trade, so "wrong from the start" can be told apart from "right but stopped before 1R". These are **realised-trade** facts, measured on the trade's own bars; they are unrelated to the hypothetical `opportunity_outcome_labels` below and never mixed with them.
+
+| column | meaning |
+|---|---|
+| `mfe_pips`, `mae_pips` | favourable and adverse excursion from the group's **first fill**, both >= 0 |
+| `mfe_r`, `mae_r` | the same over `abs(first fill - original stop) / pip` (NULL when the first fill event carried no stop) |
+| `mfe_at` | open time (unix s) of the bar that set the favourable extreme |
+| `first_fill_at`, `excursion_bars` | the first fill's time and the number of closed M1 bars folded in |
+| `excursion_method` | `m1_bar_v1` |
+
+Method (`app/autotrade/excursion.py`): the group's first fill event (`opened` / `add` / `order_filled`) creates a Redis state `autotrade:excursion:<group_id>` (TTL 7 days; open groups indexed in `autotrade:open_excursions:<symbol>`); later fills never move the reference. Every closed **M1** bar of the symbol, read from the feed's **bid** OHLC with no spread adjustment, widens the extremes of each open state. **Resolution is one minute and the fill minute is excluded**: a bar counts only when it opens at or after the first fill, because the order of the high and the low inside the fill minute is unknown. MFE and MAE are therefore lower bounds of the true extremes, a stop and a target touched in the same minute cannot be ordered, and a trade that closes inside its fill minute has `excursion_bars = 0` and **NULL** MFE/MAE (nothing was observed; never a fabricated 0). The figures are written when a close event arrives and overwritten by each later close event of the same group (extremes only grow); the state is deleted when the group ends (`group_result`, or a close reporting no volume left). Scalp outcomes read the same tracker, so scalp `mfe_pips`/`mae_pips` finally move; a scalp with no tracked state keeps the old entry-only value (0), counted as `scalp_excursion_untracked`.
+
+**History before the deploy is NULL and is not backfilled**, as are manual (`algo_manual`) trades, which are not tracked. Counters in `auto_trade:metrics:<SYMBOL>`: `excursion_started`, `excursion_finalized`, `excursion_missing_at_close` (a close with no state and none stored yet; once per group), `excursion_update_failed` (a tracker failure, logged and never raised into the trading path).
+
+Join plan-time facts to these outcomes with `auto_trade_plan_snapshots.plan_id = auto_trade_results.group_id`.
+
 ## Forward outcome labels: methodology
 
 The labeller (`tools/outcome_labeller.py`, pure model in `app/research/outcome_model.py`) asks one question of the bars that **follow** an opportunity's earliest

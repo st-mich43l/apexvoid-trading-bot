@@ -493,6 +493,16 @@ async def init_db() -> None:
       "ADD COLUMN IF NOT EXISTS weighted_risk_pips DOUBLE PRECISION",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS net_r DOUBLE PRECISION",
       "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS result_method TEXT",
+      # Excursion of the trade on closed M1 bars (app.autotrade.excursion, method 'm1_bar_v1'): favourable / adverse from the group's FIRST fill, in
+      # pips and in R of the original stop. NULL on every row closed before they existed (never backfilled) and when no bar followed the fill.
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS mfe_pips DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS mae_pips DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS mfe_r DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS mae_r DOUBLE PRECISION",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS mfe_at BIGINT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS first_fill_at BIGINT",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS excursion_bars INTEGER",
+      "ALTER TABLE auto_trade_results ADD COLUMN IF NOT EXISTS excursion_method TEXT",
     ):
       await db.execute(stmt)
 
@@ -2044,6 +2054,7 @@ async def _record_auto_trade_result(event: dict) -> None:
     if risk_pips is not None and risk_pips <= 0:
       risk_pips = None
     weighted_risk_pips, net_r, result_method = result_accounting.from_close_event(event)
+    excursion = await _excursion_result_columns(db, group_id, fill)
     await db.execute(
       """
       INSERT INTO auto_trade_results (
@@ -2051,10 +2062,11 @@ async def _record_auto_trade_result(event: dict) -> None:
         setup_type, direction, session, killzone_name, stop_pips,
         booked_tp_count, utc_hour, symbol,
         planned_reward_risk, target_room_fallback_used, exit_path,
-        realized_pips, risk_pips, weighted_risk_pips, net_r, result_method
+        realized_pips, risk_pips, weighted_risk_pips, net_r, result_method,
+        mfe_pips, mae_pips, mfe_r, mae_r, mfe_at, first_fill_at, excursion_bars, excursion_method
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-        $17, $18, $19, $20, $21
+        $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29
       )
       ON CONFLICT (group_id) DO UPDATE SET
         trade_key = excluded.trade_key,
@@ -2090,7 +2102,17 @@ async def _record_auto_trade_result(event: dict) -> None:
         net_r = CASE WHEN excluded.net_r IS NOT NULL
           THEN excluded.net_r ELSE auto_trade_results.net_r END,
         result_method = CASE WHEN excluded.net_r IS NOT NULL
-          THEN excluded.result_method ELSE auto_trade_results.result_method END
+          THEN excluded.result_method ELSE auto_trade_results.result_method END,
+        -- Extremes only grow, so a later close event of the same group carries the fuller figure; a close that carries none (state already
+        -- deleted, a re-delivery) leaves what is stored.
+        mfe_pips = COALESCE(excluded.mfe_pips, auto_trade_results.mfe_pips),
+        mae_pips = COALESCE(excluded.mae_pips, auto_trade_results.mae_pips),
+        mfe_r = COALESCE(excluded.mfe_r, auto_trade_results.mfe_r),
+        mae_r = COALESCE(excluded.mae_r, auto_trade_results.mae_r),
+        mfe_at = COALESCE(excluded.mfe_at, auto_trade_results.mfe_at),
+        first_fill_at = COALESCE(excluded.first_fill_at, auto_trade_results.first_fill_at),
+        excursion_bars = COALESCE(excluded.excursion_bars, auto_trade_results.excursion_bars),
+        excursion_method = COALESCE(excluded.excursion_method, auto_trade_results.excursion_method)
       WHERE auto_trade_results.correction_source IS NULL
       """,
       group_id, fill["trade_key"], fill["trade_stream"],
@@ -2100,7 +2122,37 @@ async def _record_auto_trade_result(event: dict) -> None:
       fill["symbol"] or "XAU",
       planned_reward_risk, target_room_fallback_used, exit_path,
       realized_pips, risk_pips, weighted_risk_pips, net_r, result_method,
+      excursion["mfe_pips"], excursion["mae_pips"], excursion["mfe_r"], excursion["mae_r"], excursion["mfe_at"],
+      excursion["first_fill_at"], excursion["excursion_bars"], excursion["excursion_method"],
     )
+
+
+_NO_EXCURSION = {
+  "mfe_pips": None, "mae_pips": None, "mfe_r": None, "mae_r": None, "mfe_at": None,
+  "first_fill_at": None, "excursion_bars": None, "excursion_method": None,
+}
+
+
+async def _excursion_result_columns(db, group_id: str, fill) -> dict:
+  """The M1-bar excursion of an ``algo_auto`` group for its result row (app.autotrade.excursion); all NULL for any other stream, when no state exists
+  (counted as ``excursion_missing_at_close``) or when anything fails: the result write is never blocked by it."""
+  try:
+    if fill["trade_stream"] != "algo_auto":
+      return dict(_NO_EXCURSION)
+    from app.autotrade import excursion
+    from app.persistence import redis_state
+
+    symbol = str(fill["symbol"] or "XAU").upper()
+    recorded = await db.fetchval(
+      "SELECT excursion_method FROM auto_trade_results WHERE group_id = $1", group_id,
+    )
+    columns = await excursion.result_columns(
+      redis_state.get_client(), group_id, pip_size=pip_for(symbol), symbol=symbol, already_recorded=recorded is not None,
+    )
+    return columns if columns is not None else dict(_NO_EXCURSION)
+  except Exception:
+    log.exception("excursion columns unavailable group_id=%s", group_id)
+    return dict(_NO_EXCURSION)
 
 
 _PLAN_SNAPSHOT_JSON = frozenset({

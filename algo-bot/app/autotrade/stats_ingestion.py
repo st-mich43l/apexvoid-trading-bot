@@ -99,6 +99,36 @@ def _complete_outcome(event: dict) -> str | None:
   return None
 
 
+async def _track_excursion_start(client, event: dict) -> None:
+  """Open the MFE/MAE state on the first fill of an ``algo_auto`` group, scalp or not. Never raises."""
+  try:
+    from app.autotrade import excursion
+    from app.core.symbols import pip_for
+    from app.persistence.store import _resolve_auto_trade_stream
+
+    if str(event.get("type") or "") not in excursion.FILL_EVENTS:
+      return
+    if _resolve_auto_trade_stream(event) != "algo_auto":
+      return
+    await excursion.start(client, event, pip_size=pip_for(str(event.get("symbol") or "XAU")))
+  except Exception:
+    log.exception("excursion start hook failed type=%s", event.get("type") if isinstance(event, dict) else None)
+
+
+async def _track_excursion_end(client, event: dict) -> None:
+  """Delete the state of a group whose last position just closed (the result row already carries its excursion). Never raises."""
+  try:
+    from app.autotrade import excursion
+
+    if not excursion.is_final_close(event):
+      return
+    group_id = str(event.get("group_id") or "").strip()
+    if group_id:
+      await excursion.discard(client, group_id, str(event.get("symbol") or "XAU"))
+  except Exception:
+    log.exception("excursion end hook failed type=%s", event.get("type") if isinstance(event, dict) else None)
+
+
 async def _track_scalp_event(client, event: dict) -> None:
   """Accumulate exit-path traces and open excursions for scalp events."""
   from app.autotrade.reaction_funnel import BUCKET_SCALP, funnel_bucket, normalize_setup_type
@@ -394,11 +424,21 @@ async def _emit_funnel_complete(client, event: dict) -> None:
     if stop_pips is not None and stop_pips > 0:
       # Prefer the invariant stop already on the excursion; never recompute.
       pass
+    tracked = None
+    if group_id:
+      from app.autotrade import excursion as _tracker
+
+      state = await _tracker.load(client, group_id)
+      if state is not None:
+        tracked = _tracker.compute(state, excursion.pip_size)
+      else:
+        await incr(client, symbol, "scalp_excursion_untracked")
     live = finalize_live_outcome(
       excursion,
       exit_path=exit_path,
       realized_pips=pips,
       closed_at=now,
+      tracked_excursion=tracked,
     )
     await save_live_outcome(client, live)
     await clear_excursion(client, symbol, opportunity_id)
@@ -510,6 +550,7 @@ async def process_auto_trade_stats_entries(
       log.warning("Invalid auto-trade stats event %s: %s", entry_id, exc)
     else:
       await record_auto_trade_event(event)
+      await _track_excursion_start(client, event)
       event_type = str(event.get("type") or "")
       group_id = event.get("group_id") or event.get("candidate_id")
       if event_type in {
@@ -545,6 +586,8 @@ async def process_auto_trade_stats_entries(
           entry_id,
           event.get("type") if isinstance(event, dict) else None,
         )
+      # Last: the scalp outcome above still reads the excursion of the group that just ended.
+      await _track_excursion_end(client, event)
     cursor = _text(entry_id)
     await client.set(STATS_EVENT_CURSOR_KEY, cursor)
   return cursor
