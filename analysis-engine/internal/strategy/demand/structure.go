@@ -225,11 +225,20 @@ func medianATR(series []float64) float64 {
 	return (clean[n/2-1] + clean[n/2]) / 2
 }
 
-// notInvalidated: price never accepted below the zone's low. A close below it by more than the tolerance starts an episode, forgiven when a close returns
-// inside within sweepReclaimBars; more than maxBreakEpisodes forgiven episodes kill it.
-func notInvalidated(low float64, bars []market.Candle, origin int, atr, pip float64) bool {
+// breach is the verdict on a zone's far edge, judged only on bars that have closed. A close below the low by more than the tolerance starts a breach episode.
+// An episode is forgiven when a close returns to or above the low within sweepReclaimBars bars after the breaching bar; the zone is terminal when a whole
+// window closes with no reclaim, or when more than maxBreakEpisodes episodes were forgiven. While the window is still open nobody can know the outcome: the
+// zone is Pending (neither retired nor offered), and the verdict only ever moves forward (Pending becomes reclaimed or Terminal, and Terminal is never
+// undone by a later bar).
+type breach struct {
+	Terminal bool
+	Pending  bool
+}
+
+// breachOf is the far-edge verdict of a zone whose last base candle is origin. low is the structural far edge, never the clipped entry slice.
+func breachOf(low float64, bars []market.Candle, origin int, atr, pip float64) breach {
 	if len(bars) == 0 || origin < 0 {
-		return true
+		return breach{}
 	}
 	e := epsilon(pip, atr)
 	tolerance := math.Max(e, invalidationToleranceATR*math.Max(atr, 0))
@@ -249,34 +258,37 @@ func notInvalidated(low float64, bars []market.Candle, origin int, atr, pip floa
 			}
 		}
 		if reclaimedAt < 0 {
-			return false
+			if count >= index+1+sweepReclaimBars {
+				return breach{Terminal: true} // the whole window closed without a reclaim
+			}
+			return breach{Pending: true} // the window is still open
 		}
 		episodes++
 		if episodes > maxBreakEpisodes {
-			return false
+			return breach{Terminal: true}
 		}
 		index = reclaimedAt + 1
 	}
-	return true
+	return breach{}
 }
 
 // endReason names why a zone that is spent is finished: invalidated when price was accepted beyond it, otherwise mitigated (touched past its limit).
-func endReason(low float64, bars []market.Candle, origin int, atr, pip float64) opportunity.ReasonCode {
-	if !notInvalidated(low, bars, origin, atr, pip) {
+func endReason(b breach) opportunity.ReasonCode {
+	if b.Terminal {
 		return opportunity.ReasonZoneInvalidated
 	}
 	return opportunity.ReasonZoneMitigated
 }
 
 // spent: a zone that was touched and has either taken too many touches or been invalidated.
-func spent(mitigated bool, touches int, low float64, bars []market.Candle, origin int, atr, pip float64) bool {
+func spent(mitigated bool, touches int, b breach) bool {
 	if !mitigated {
 		return false
 	}
 	if touches <= 0 || touches > retestMaxTouches {
 		return true
 	}
-	return !notInvalidated(low, bars, origin, atr, pip)
+	return b.Terminal
 }
 
 // clipEntry cuts a zone wider than maxWidth to its proximal (upper) slice.
@@ -287,9 +299,13 @@ func clipEntry(low, high, maxWidth float64) (float64, float64, bool) {
 	return high - maxWidth, high, true
 }
 
-// structureInstances are the demand zones of one structure frame that are still zones: not spent, not invalidated, a real width. Where price is now is not
-// asked here (a structure is a fact). higher are this strategy's own zones on the frames above this one (a zone inside one scores the higher-timeframe
-// points); the second result is every zone this frame holds, for the frame below.
+// structureInstances are the demand zones of one structure frame that are still zones: not spent, not invalidated, not in a pending breach, a real width. Where
+// price is now is not asked here (a structure is a fact). higher are this strategy's own zones on the frames above this one (a zone inside one scores the
+// higher-timeframe points); the second result is the zones of this frame that are valid structure for the frame below: never a terminal, spent, pending or
+// over-wide one.
+//
+// Every test of a zone's life is made against the COMPLETE structural zone (z.Low..z.High), never the proximal slice the entry band is clipped to: the far edge
+// that invalidates a demand zone is the structural low, and the width limit is the structure's, so a wide zone cannot be offered through a narrow slice.
 func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, execBars []market.Candle, higher []band, verdict *strategyutil.ZoneVerdict) ([]instance, []band) {
 	bars := frame.Bars
 	if len(bars) < 10 {
@@ -300,10 +316,8 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	zones := s.detectZones(bars, frame.ATR)
 	markTouches(zones, bars)
 	inputs := s.inputsFor(frame, tf, execBars, higher)
-	held := make([]band, 0, len(zones))
 	for k := range zones {
 		zones[k].Score, zones[k].Discount = scoreZone(zones[k], inputs)
-		held = append(held, band{Low: zones[k].Low, High: zones[k].High})
 	}
 	sort.SliceStable(zones, func(i, j int) bool {
 		a, b := zones[i], zones[j]
@@ -316,15 +330,24 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		return a.Low < b.Low
 	})
 	pip := s.cfg.PipSize
+	held := make([]band, 0, len(zones))
 	var out []instance
 	for _, z := range zones {
 		id := ""
 		if z.Origin >= 0 && z.Origin < len(bars) {
 			id = zoneID(tf, bars[z.Origin].Time)
 		}
-		if spent(z.Mitigated, z.Touches, z.Low, bars, z.Origin, atr, pip) {
-			verdict.Terminal(id, endReason(z.Low, bars, z.Origin, atr, pip))
+		state := breachOf(z.Low, bars, z.Origin, atr, pip)
+		if spent(z.Mitigated, z.Touches, state) {
+			verdict.Terminal(id, endReason(state))
 			continue
+		}
+		verdict.Live(id) // still a demand zone, whether or not it is wide enough to enter right now or its breach is still being decided
+		if state.Pending {
+			continue
+		}
+		if atr > 0 && z.High-z.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
+			continue // a region, judged on the whole structure
 		}
 		in := instance{
 			Low: z.Low, High: z.High, Touches: z.Touches, Mitigated: z.Mitigated, Score: z.Score, Timeframe: tf, Frame: frame,
@@ -335,14 +358,7 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = z.Low, z.High, true
 			in.Low, in.High = low, high
 		}
-		if spent(in.Mitigated, in.Touches, in.Low, bars, z.Origin, atr, pip) || !notInvalidated(in.Low, bars, z.Origin, atr, pip) {
-			verdict.Terminal(id, endReason(in.Low, bars, z.Origin, atr, pip))
-			continue
-		}
-		verdict.Live(id) // still a demand zone, whether or not it is wide enough to enter right now
-		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
-			continue
-		}
+		held = append(held, band{Low: z.Low, High: z.High})
 		out = append(out, in)
 	}
 	return out, held
