@@ -239,3 +239,53 @@ func TestARunThatStartsInsideTheBaseGivesTheSameZone(t *testing.T) {
 		t.Fatalf("the same zone expected: %+v vs %+v", a, b)
 	}
 }
+
+// departureBars builds the supply fixture with a departure of d strong bars and then a slow drift lower (a quiet tail), so the close through the structural low can come
+// after the departure has ended.
+func departureBars(d int) (specs []spec, legStart, legEnd int) {
+	specs, _, legStart, legEnd = supplyAt(5)
+	specs = specs[:legStart]
+	price := specs[len(specs)-1].close
+	for i := 0; i < d; i++ {
+		specs = append(specs, spec{price, price + 0.05, price - 1.9, price - 1.8})
+		price -= 1.8
+	}
+	legEnd = len(specs) - 1
+	for i := 0; i < 14; i++ { // the tail: small bearish bars, each well under the departure threshold
+		specs = append(specs, spec{price, price + 0.05, price - 0.65, price - 0.6})
+		price -= 0.6
+	}
+	return specs, legStart, legEnd
+}
+
+// A zone's strength is the evidence available when it was FORMED (the swing known, the departure closed): it is fixed from then on. A close through the structure that comes
+// later is the lifecycle's and the quality's business, never an upgrade of the zone that was formed. Strength at every later prefix equals strength at formation.
+func TestZoneStrengthIsFixedAtFormation(t *testing.T) {
+	cfg := zoneTestConfig()
+	var checked int
+	for d := 2; d <= 4; d++ {
+		specs, legStart, legEnd := departureBars(d)
+		bars, atr := candlesOf(specs)
+		var atFormation *SwingZone
+		for n := legEnd + 1; n <= len(bars); n++ {
+			legs := []Leg{{legStart, minInt(legEnd, n-1)}}
+			zones := FormSwingZones(true, bars[:n], atr[:n], legs, cfg)
+			if len(zones) != 1 {
+				continue
+			}
+			z := zones[0]
+			if atFormation == nil {
+				c := z
+				atFormation = &c
+				continue
+			}
+			if z.Strength != atFormation.Strength || z.Swing.Class != atFormation.Swing.Class || z.Swing.Shift != atFormation.Swing.Shift {
+				t.Fatalf("departure %d, prefix %d: strength %s class %s shift %q, at formation %s %s %q", d, n, z.Strength, z.Swing.Class, z.Swing.Shift, atFormation.Strength, atFormation.Swing.Class, atFormation.Swing.Shift)
+			}
+			checked++
+		}
+	}
+	if checked == 0 {
+		t.Fatal("the fixture must form zones")
+	}
+}

@@ -274,3 +274,29 @@ func TestAFeasibleEntryIsInsideTheStructureAndKeepsTheStop(t *testing.T) {
 		t.Fatalf("candidates are listed shallowest first: %v", d.plan.Candidates)
 	}
 }
+
+// M15 and H1 evidence reaches M5 execution on bar CLOSES: the first M5 bar that may touch a zone opens at or after the close of the structure bar by which the swing and the
+// departure were both known, never on the open of that bar.
+func TestStructureEvidenceIsTouchableFromTheCloseOfItsConfirmationBar(t *testing.T) {
+	for _, tf := range []market.Timeframe{market.M15, market.H1} {
+		minutes, _ := tf.Minutes()
+		width := int64(minutes * 60)
+		var structureBars, execBars []market.Candle
+		for i := 0; i < 40; i++ {
+			structureBars = append(structureBars, market.Candle{Time: 1_800_000_000 + int64(i)*width})
+		}
+		for i := 0; i < 40*minutes/5; i++ {
+			execBars = append(execBars, market.Candle{Time: 1_800_000_000 + int64(i)*300})
+		}
+		in := instance{FrameOrigin: 20, FrameConfirmed: 25}
+		bound := bind(tf, structureBars, execBars, []instance{in}, false)
+		if len(bound) != 1 {
+			t.Fatalf("%s: %d instances", tf, len(bound))
+		}
+		closeOfConfirmation := structureBars[25].Time + width
+		first := execBars[bound[0].TouchableFrom].Time
+		if first < closeOfConfirmation || (bound[0].TouchableFrom > 0 && execBars[bound[0].TouchableFrom-1].Time >= closeOfConfirmation) {
+			t.Fatalf("%s: touchable from %d, the structure bar closes at %d", tf, first, closeOfConfirmation)
+		}
+	}
+}

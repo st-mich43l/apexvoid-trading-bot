@@ -118,6 +118,7 @@ func FormSwingZones(supply bool, bars []market.Candle, atr []float64, legs []Leg
 	}
 	var out []SwingZone
 	used := map[int]bool{}
+	atFormation := map[int][]MajorSwing{} // classification of the bars up to a formation index, shared by the zones formed on that bar
 	for _, swing := range ClassifyMajor(bars, atr, cfg.Major) {
 		if swing.Kind != kind {
 			continue
@@ -150,7 +151,20 @@ func FormSwingZones(supply bool, bars []market.Candle, atr []float64, legs []Leg
 		z.TooWide = z.WidthATR > cfg.MaximumZoneATR
 		z.TooNarrow = z.WidthATR < cfg.MinimumZoneATR
 		z.DepartureATR, z.Efficiency = legMeasure(bars, atr, Leg{Start: departure, End: leg.End}, supply)
-		z.Strength = strengthOf(swing, standing(bars, swing, z.ConfirmedIndex, supply, cfg.Major), z.DepartureATR, cfg)
+		// The strength is the evidence available when the zone was FORMED: the swing is known (its right window closed) and the departure has closed. It is read from the bars
+		// up to that bar only, so a later shift, a later extension of the departure or a later close is never an upgrade of a zone that was formed without it (those are the
+		// lifecycle's and the quality's business), and the strength is the same at every later bar.
+		if _, cached := atFormation[z.ConfirmedIndex]; !cached {
+			atFormation[z.ConfirmedIndex] = ClassifyMajor(bars[:z.ConfirmedIndex+1], atr[:minInt(len(atr), z.ConfirmedIndex+1)], cfg.Major)
+		}
+		formed := swing
+		for _, f := range atFormation[z.ConfirmedIndex] {
+			if f.Kind == swing.Kind && f.BarIndex == swing.BarIndex {
+				formed = f
+			}
+		}
+		z.Swing = formed
+		z.Strength = strengthOf(formed, standing(bars, formed, z.ConfirmedIndex, supply, cfg.Major), z.DepartureATR, cfg)
 		out = append(out, z)
 	}
 	return out

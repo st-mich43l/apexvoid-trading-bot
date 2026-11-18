@@ -3,6 +3,8 @@ package engine
 import (
 	"testing"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/config"
+
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/demand"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/supply"
@@ -69,5 +71,29 @@ func TestTheSwingModelHasAnExplicitRollback(t *testing.T) {
 	bad["zone_model"] = "cloud"
 	if _, err := sdFactories["supply"](strategy.Config{ID: "supply", Version: "x", Enabled: true, Parameters: bad}); err == nil {
 		t.Fatal("an unknown zone_model must fail startup, never fall back silently")
+	}
+}
+
+// The classifier reads only the frame's window: a swing must be relevant for no longer than the window can still show its left side and the leg it came from, or a class would
+// change because bars were evicted rather than because the market did.
+func TestSwingRelevanceFitsTheStructureFrameWindows(t *testing.T) {
+	doc, err := config.ResolveDocument(configDir + "/apexvoid.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []strategy.StrategyID{"supply", "demand"} {
+		settings := settingsFor(t, copyConfig(t, "false"))
+		p := strategyParams(t, settings, id)
+		relevance, external := p["swing_relevance_bars"].(int), p["swing_external_bars"].(int)
+		frames, _ := p["structure_timeframes"].([]any)
+		for _, f := range frames {
+			window, err := getInt(doc, "analysis.legacy_read.window_bars."+f.(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if relevance+external > window {
+				t.Fatalf("%s %s: swing_relevance_bars %d + swing_external_bars %d exceeds the %d-bar window", id, f, relevance, external, window)
+			}
+		}
 	}
 }
