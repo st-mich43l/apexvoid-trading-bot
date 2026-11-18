@@ -3075,6 +3075,19 @@ async def _restore_reappeared_go_arbitration(
   return restored
 
 
+async def _advance_excursions(client: Any, source: RedisOHLCSource, symbol: str) -> None:
+  """Fold the newly closed M1 bars into the excursion of each open trade (app.autotrade.excursion). Failures are logged and counted, never raised."""
+  try:
+    from app.autotrade import excursion
+
+    async def _bars():
+      return excursion.bars_from_frame(await source.window(symbol, EXECUTION_TIMEFRAME, excursion.CATCH_UP_BARS))
+
+    await excursion.advance(client, symbol, _bars)
+  except Exception:
+    log.exception("excursion advance hook failed symbol=%s", symbol)
+
+
 async def _handle_event(
   data: object,
   *,
@@ -3091,6 +3104,8 @@ async def _handle_event(
 
   client = client or redis_state.get_client()
   source = source or RedisOHLCSource(client)
+  # MFE/MAE of every open algo_auto trade: one SMEMBERS when nothing is open; it never raises into the trading path.
+  await _advance_excursions(client, source, symbol)
   spot = await _load_spot(client, symbol)
   live_matches = await _load_strategy_matches(client, symbol)
   # Go is the sole automatic technical-opportunity producer. This filter is

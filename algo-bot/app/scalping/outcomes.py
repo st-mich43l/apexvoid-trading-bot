@@ -409,6 +409,8 @@ def excursion_from_opportunity(
     match_id=_strip_v8(match_id),
     opened_at=int(opened_at),
     pip_size=float(pip_size),
+    # These two START at the entry and nothing advances them: the live extremes are tracked per group by app.autotrade.excursion (closed M1 bars from the
+    # first fill) and finalize_live_outcome reads them from there. Kept so stored states keep their shape.
     max_high=entry,
     min_low=entry,
     bars_held=0,
@@ -429,7 +431,14 @@ def finalize_live_outcome(
   realized_pips: float,
   closed_at: int,
   legs_filled: int | None = None,
+  tracked_excursion: dict | None = None,
 ) -> ScalpLiveOutcome:
+  """Close the live outcome of a scalp.
+
+  ``tracked_excursion`` is the group's M1-bar excursion from ``app.autotrade.excursion.compute`` (measured from the first FILL, advanced bar by bar). It
+  is the only source of a real MFE/MAE. The ``max_high``/``min_low`` carried on ``excursion`` start at the entry and nothing advances them, so without
+  a tracked excursion ``mfe_pips``/``mae_pips`` stay what they always were here (0): they are kept for compatibility and must not be read as measurements.
+  """
   ratios, multiples = legs_for_exit_path(
     exit_path,
     ladder_ratios=excursion.ladder_ratios,
@@ -448,6 +457,8 @@ def finalize_live_outcome(
     min_low=excursion.min_low,
     pip_size=excursion.pip_size,
   )
+  if tracked_excursion and tracked_excursion.get("mfe_pips") is not None and tracked_excursion.get("mae_pips") is not None:
+    mfe, mae = float(tracked_excursion["mfe_pips"]), float(tracked_excursion["mae_pips"])
   filled = int(legs_filled) if legs_filled is not None else int(excursion.legs_filled)
   if filled <= 0:
     if exit_path == EXIT_FULL_STOP:
