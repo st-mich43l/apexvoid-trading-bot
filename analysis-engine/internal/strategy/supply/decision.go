@@ -10,6 +10,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/techniquezone"
 )
@@ -20,11 +21,12 @@ const tolerance = 1e-9
 // view is the execution frame as one evaluation reads it: the closed M5 bars and the frame's read-only facts (its ATR, grabs, swings, pools, the higher
 // timeframe bias). It decides nothing.
 type view struct {
-	frame *analysiscontext.LegacyFrame
-	read  analysiscontext.LegacyRead
-	cfg   *Config
-	price float64 // the latest closed bar's close
-	atr   float64 // the execution frame's detector ATR
+	market *analysiscontext.MarketContext // the closed-bar context the canonical opposing barrier book is read from
+	frame  *analysiscontext.LegacyFrame
+	read   analysiscontext.LegacyRead
+	cfg    *Config
+	price  float64 // the latest closed bar's close
+	atr    float64 // the execution frame's detector ATR
 }
 
 func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
@@ -40,7 +42,7 @@ func newView(ctx *analysiscontext.MarketContext, cfg *Config) (*view, bool) {
 	if !(atr > 0) {
 		atr = 1
 	}
-	return &view{frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr}, true
+	return &view{market: ctx, frame: frame.Legacy, read: *ctx.Legacy, cfg: cfg, price: bars[len(bars)-1].Close, atr: atr}, true
 }
 
 func (v *view) htfAligned() bool { return v.read.AlignedWithHTF(market.Sell) }
@@ -187,6 +189,7 @@ type decision struct {
 	anchored     bool   // the reaction's own extreme set the stop
 	budgetCode   string // stop-budget evidence ("" without a budget)
 	room         roomResult
+	plan         strategyutil.EntryPlan // the entry candidates evaluated and the one chosen (swing model); empty under the legacy model
 }
 
 func (in instance) band() zoneBand {
@@ -222,6 +225,10 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 	if !v.entryValid(z) {
 		return nil
 	}
+	if in.weak(s.cfg.Formation) {
+		refuse(refusedZoneStrength)
+		return nil
+	}
 	conf := v.reactionFrom(structLow, structHigh, v.zoneGrab(z), in.TouchableFrom)
 	if conf == nil {
 		return nil
@@ -232,6 +239,9 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 	}
 	buffer := s.cfg.InvalidationBufferATR * v.atr
 	invalidation, anchored := reactionAnchoredInvalidation(v.frame.Bars, conf, res.structuralHigh, buffer)
+	if s.cfg.Formation.Swing() && s.cfg.Formation.EntryCandidates {
+		return s.planned(v, in, conf, res, invalidation, anchored, structLow, structHigh, refuse)
+	}
 	// The stop stays where structure puts it; a band whose proximal edge risks more than the cap is cut to the part within it (a deeper entry).
 	entryLow, entryHigh, budgetCode, ok := s.cfg.StopBudget.Fit(market.Sell, res.zone.Low(), res.zone.High(), invalidation)
 	if !ok {
@@ -280,3 +290,64 @@ func (s *Strategy) best(base *view, instances []instance, refuse func(in instanc
 }
 
 func lowerTimeframe(tf market.Timeframe) string { return strings.ToLower(string(tf)) }
+
+// planned decides the entry of a swing-anchored zone (SD-5): the planner evaluates the candidate prices inside the whole structural zone against the true invalidation
+// (never moved), the effective risk, the stop cap, the room to the nearest opposing structure and the minimum entry width, and the shallowest feasible one is the
+// entry. When none is feasible the setup is refused: the stop is not tightened, the zone is not stretched and the band is not widened.
+func (s *Strategy) planned(v *view, in instance, conf *confirmation, res *result, invalidation float64, anchored bool, structLow, structHigh float64, refuse func(reason string)) *decision {
+	budget := s.cfg.StopBudget
+	tick := budget.PipSize / 10
+	if !(tick > 0) {
+		tick = s.cfg.PipSize / 10
+	}
+	plan := strategyutil.PlanEntry(strategyutil.EntrySpec{
+		Sell: true, StructLow: structLow, StructHigh: structHigh, BodyEdge: in.Formation.BodyLow, Invalidation: invalidation,
+		MaxBandWidth: s.cfg.EntryMaxWidthPrice, MinBandWidth: s.cfg.EntryMinimumWidthPrice, MaxDepthFraction: s.cfg.Formation.EntryMaxDepthFraction, Budget: budget,
+		MinimumTargetR: s.cfg.MinimumTargetR, FallbackTargetR: s.cfg.FallbackTargetR, Tick: tick,
+		Obstacles: func(reference float64) []float64 { return v.obstacles(in, reference) }, LimitTarget: v.limitTarget(),
+	})
+	chosen, ok := plan.Chosen()
+	if !ok {
+		switch plan.Refusal {
+		case strategyutil.EntryRejectedNoRoom:
+			refuse(refusedNoTargetRoom)
+		case strategyutil.EntryRejectedStopCap:
+			budget.Apply(structLow, invalidation) // counted as a stop-budget refusal, as before
+			refuse(refusedStopBeyondCap)
+		default:
+			refuse(refusedNoFeasibleEntry)
+		}
+		return nil
+	}
+	code, _ := budget.Apply(chosen.Price, invalidation)
+	if chosen.Kind == strategyutil.EntryStopCapFit {
+		code = strategyutil.StopBudgetDeepEntryEvidence // the entry went deeper to meet the cap and the stop never moved
+	}
+	return &decision{
+		inst: in, v: v, conf: conf, res: res, id: v.instanceID(in),
+		reference: chosen.Price, entryLow: chosen.BandLow, entryHigh: chosen.BandHigh, invalidation: invalidation, anchored: anchored, budgetCode: code,
+		room: roomResult{Target: chosen.Target, Label: chosen.TargetLabel, RoomR: chosen.RoomR}, plan: plan,
+	}
+}
+
+// limitTarget limits a target by the canonical opposing barrier ahead of the entry (the book the Algo Bot's target-room check and the quality room read), so a target is
+// never published beyond a blocking opposing zone. With no market context or no barrier policy there is no book and the target stands.
+func (v *view) limitTarget() func(entry, target float64) (float64, bool) {
+	return func(entry, target float64) (float64, bool) {
+		if v.market == nil {
+			return target, true
+		}
+		pip := v.cfg.StopBudget.PipSize
+		if !(pip > 0) {
+			pip = v.cfg.PipSize
+		}
+		room := strategyutil.MeasureScalpRoom(v.market, market.Sell, entry, target, 0, v.cfg.Barrier.RoomParams(pip, strategyutil.ScalpRoomATR(v.market, v.atr)))
+		if !(room.Pips > 0) {
+			return target, false
+		}
+		if room.Limiter == strategyutil.ScalpRoomLimitedByBarrier {
+			return entry - room.Pips*pip, true
+		}
+		return target, true
+	}
+}

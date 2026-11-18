@@ -80,6 +80,12 @@ func NormalizeGeometry(candidate Candidate, geometry market.Geometry) (Candidate
 		execution.Price = math.Min(candidate.Entry.High, math.Max(candidate.Entry.Low, geometry.RoundToTick(execution.Price)))
 		candidate.Execution = &execution
 	}
+	if candidate.EntryPlan != nil {
+		// The recommended entry is a price of the band: it moves by at most half a tick and never leaves the band, which only ever widened above.
+		plan := *candidate.EntryPlan
+		plan.Price = math.Min(candidate.Entry.High, math.Max(candidate.Entry.Low, geometry.RoundToTick(plan.Price)))
+		candidate.EntryPlan = &plan
+	}
 	if err := candidate.Validate(); err != nil {
 		return Candidate{}, fmt.Errorf("opportunity: normalized candidate is invalid: %w", err)
 	}

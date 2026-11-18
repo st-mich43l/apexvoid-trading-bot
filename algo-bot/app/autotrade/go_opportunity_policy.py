@@ -474,6 +474,16 @@ def build_strategy_match(
     mad_range_id=None if mad is None or mad.range is None else mad.range.id,
     mad_sequence_id=None if mad is None or mad.sequence is None else mad.sequence.id,
     mad_sequence_status=None if mad is None or mad.sequence is None else mad.sequence.status,
+    structure_swing_class=(
+      None if payload.structure is None or payload.structure.swing is None else payload.structure.swing.major_swing_class
+    ),
+    structure_zone_strength=(
+      None if payload.structure is None or payload.structure.swing is None else payload.structure.swing.zone_strength
+    ),
+    entry_plan_kind=None if payload.entry_plan is None else payload.entry_plan.kind,
+    entry_plan_price=None if payload.entry_plan is None else float(payload.entry_plan.price),
+    entry_plan_room_r=None if payload.entry_plan is None else float(payload.entry_plan.room_r),
+    entry_plan_effective_risk=None if payload.entry_plan is None else float(payload.entry_plan.effective_risk),
     go_stop_envelope_floor_pips=stop_envelope_floor_pips,
     go_stop_envelope_cap_pips=stop_envelope_cap_pips,
     go_stop_envelope_desired_minimum_pips=stop_envelope_desired_minimum_pips,

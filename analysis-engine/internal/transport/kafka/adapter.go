@@ -61,6 +61,13 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 	var structurePayload *StructurePayload
 	if c.Structure != nil {
 		structurePayload = &StructurePayload{Timeframe: string(c.Structure.Timeframe), Low: c.Structure.Low, High: c.Structure.High, FormedAt: c.Structure.FormedAt}
+		if w := c.Structure.Swing; w != nil {
+			structurePayload.Swing = &ZoneSwingPayload{
+				ZoneID: w.ZoneID, Class: w.Class, Strength: w.Strength, AnchorPrice: w.AnchorPrice, ProximalPrice: w.ProximalPrice, DistalPrice: w.DistalPrice,
+				SwingConfirmedAt: w.SwingConfirmedAt, BaseFormedAt: w.BaseFormedAt, DepartureConfirmedAt: w.DepartureConfirmedAt, BaseCandles: w.BaseCandles,
+				ProminenceATR: w.ProminenceATR, DepartureATR: w.DepartureATR, Efficiency: w.Efficiency, External: w.External, Shift: w.Shift,
+			}
+		}
 	}
 	var execution *ExecutionPayload
 	if x := c.Execution; x != nil {
@@ -70,7 +77,7 @@ func opportunityPayloadFromCandidate(c opportunity.Candidate, algo AlgorithmVers
 		}
 	}
 	return OpportunityPayload{
-		Execution: execution, TechnicalContext: technical, StopEnvelope: stopEnvelope, Structure: structurePayload,
+		Execution: execution, EntryPlan: entryPlanPayload(c.EntryPlan), TechnicalContext: technical, StopEnvelope: stopEnvelope, Structure: structurePayload,
 		ID: c.ID, Strategy: string(c.Strategy), Symbol: string(c.Symbol), Timeframe: string(c.ObservedTimeframe), StructureTimeframe: string(c.StructureTimeframe), Direction: string(c.Direction),
 		Entry:        EntryZonePayload{Low: c.Entry.Low, High: c.Entry.High},
 		Invalidation: PriceLevelPayload{Price: float64(c.Invalidation.Price), Label: c.Invalidation.Label},
@@ -166,4 +173,18 @@ func candleEvidencePayload(e *candle.Evidence) *CandleEvidencePayload {
 		p.Indecision = &CandleIndecisionPayload{Doji: i.Doji, SpinningTop: i.SpinningTop, InsideBar: i.InsideBar, BodyFraction: i.BodyFraction, CompressionScore: i.CompressionScore}
 	}
 	return p
+}
+
+func entryPlanPayload(p *opportunity.EntryPlan) *EntryPlanPayload {
+	if p == nil {
+		return nil
+	}
+	out := &EntryPlanPayload{
+		Model: p.Model, Kind: p.Kind, Price: p.Price, DepthFraction: p.DepthFraction, StopPips: p.StopPips, EffectiveRisk: p.EffectiveRisk,
+		RoomR: p.RoomR, Target: p.Target, TargetLabel: p.TargetLabel, Candidates: make([]EntryPlanCandidatePayload, 0, len(p.Candidates)),
+	}
+	for _, k := range p.Candidates {
+		out.Candidates = append(out.Candidates, EntryPlanCandidatePayload{Kind: k.Kind, Price: k.Price, DepthFraction: k.DepthFraction, Feasible: k.Feasible, Rejected: k.Rejected})
+	}
+	return out
 }

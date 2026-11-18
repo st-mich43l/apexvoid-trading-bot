@@ -52,6 +52,63 @@ type StructureZone struct {
 	// FormedAt is the open time of the bar that completed the structure (the
 	// third candle of a fair value gap), Unix seconds.
 	FormedAt int64
+	// Swing is the swing-anchored derivation of a supply or demand zone (SD-3): the major swing it was made at, the base and the departure, and how strong the
+	// structure is. Nil for every other structure and for a zone of the legacy definition. Descriptive: nothing downstream gates on it.
+	Swing *ZoneSwing
+}
+
+// ZoneSwing is why a supply or demand zone is a zone: a classified swing, the base it was made in and the departure that proved it. Every time is the OPEN time of
+// a closed bar (Unix seconds); a swing is known when its right window has closed, the departure when its last bar has, and the zone is not touchable earlier.
+type ZoneSwing struct {
+	// ZoneID is the zone's identity (the same as Candidate.ZoneID).
+	ZoneID string
+	// Class is the swing's class (MAJOR, INTERMEDIATE, MINOR); Strength the zone's (strong, moderate, weak).
+	Class    string
+	Strength string
+	// AnchorPrice is the swing's extreme (the high of a supply base, the low of a demand base); ProximalPrice the edge price meets first and DistalPrice the far
+	// edge the structure is invalidated beyond. The structural range is Structure.Low..High.
+	AnchorPrice   float64
+	ProximalPrice float64
+	DistalPrice   float64
+	// SwingConfirmedAt is the earliest time the swing was knowable, BaseFormedAt the last base candle and DepartureConfirmedAt the departure leg's last bar.
+	SwingConfirmedAt     int64
+	BaseFormedAt         int64
+	DepartureConfirmedAt int64
+	BaseCandles          int
+	// The measurements that earned the class, in ATR of the structure timeframe.
+	ProminenceATR float64
+	DepartureATR  float64
+	Efficiency    float64
+	External      bool
+	// Shift is the structure break the departure made (BOS or CHoCH, "" without one).
+	Shift string
+}
+
+// EntryPlan is the entry the Analysis Engine recommends for a supply or demand zone and how it was derived (SD-5): the candidate prices inside the zone that were
+// evaluated, the one chosen (the shallowest feasible) and the facts it was judged on. Candidate.Entry is the published band from that price. Algo Bot owns sizing,
+// exposure and the ladder; this is the technical interpretation.
+type EntryPlan struct {
+	// Model names the derivation (zone_candidates_v1).
+	Model         string
+	Kind          string
+	Price         float64
+	DepthFraction float64
+	StopPips      float64
+	// EffectiveRisk is the risk after the instrument stop floor, in price units; RoomR the distance to Target over it.
+	EffectiveRisk float64
+	RoomR         float64
+	Target        float64
+	TargetLabel   string
+	Candidates    []EntryPlanCandidate
+}
+
+// EntryPlanCandidate is one evaluated price: whether it was feasible and, when not, the first constraint it failed.
+type EntryPlanCandidate struct {
+	Kind          string
+	Price         float64
+	DepthFraction float64
+	Feasible      bool
+	Rejected      string
 }
 
 // Evidence is one machine-readable fact backing a Candidate — per the
@@ -414,6 +471,8 @@ type Candidate struct {
 	// A nil value means the consumer must fail closed the same way a nil
 	// Technical does; it is never fabricated from a hardcoded default.
 	StopEnvelope *StopEnvelope
+	// EntryPlan is non-nil only for a supply or demand setup whose entry the engine chose from candidate prices inside the zone (SD-5).
+	EntryPlan *EntryPlan
 	// Execution is non-nil only for a ONE-PRICE opportunity (ExecutionSinglePrice); nil means the entry zone is traded as a zone. See SinglePriceExecution.
 	Execution *SinglePriceExecution
 }
@@ -580,6 +639,9 @@ func (c Candidate) Validate() error {
 			return err
 		}
 	}
+	if err := c.validateZoneDerivation(); err != nil {
+		return err
+	}
 	if c.StopEnvelope != nil {
 		e := c.StopEnvelope
 		if !finite(e.FloorPips) || !finite(e.CapPips) || !finite(e.DesiredMinimumPips) || e.FloorPips <= 0 || e.CapPips < e.FloorPips || e.DesiredMinimumPips < e.FloorPips || e.Source == "" {
@@ -656,6 +718,19 @@ func cloneCandidate(c Candidate) Candidate {
 		reaction := *c.Reaction
 		clone.Reaction = &reaction
 	}
+	if c.Structure != nil {
+		structure := *c.Structure
+		if c.Structure.Swing != nil {
+			swing := *c.Structure.Swing
+			structure.Swing = &swing
+		}
+		clone.Structure = &structure
+	}
+	if c.EntryPlan != nil {
+		plan := *c.EntryPlan
+		plan.Candidates = append([]EntryPlanCandidate(nil), c.EntryPlan.Candidates...)
+		clone.EntryPlan = &plan
+	}
 	if c.Technical != nil {
 		technical := *c.Technical
 		technical.HigherTimeframes = append([]HigherTimeframeBias(nil), c.Technical.HigherTimeframes...)
@@ -701,10 +776,6 @@ func cloneCandidate(c Candidate) Candidate {
 			clone.Quality.Components[name] = value
 		}
 	}
-	if c.Structure != nil {
-		structure := *c.Structure
-		clone.Structure = &structure
-	}
 	if c.StopEnvelope != nil {
 		envelope := *c.StopEnvelope
 		clone.StopEnvelope = &envelope
@@ -726,4 +797,40 @@ func cloneInt(value *int) *int {
 	}
 	copy := *value
 	return &copy
+}
+
+// validateZoneDerivation checks the optional swing and entry-plan blocks: a block that is present must be coherent with the geometry it describes, so a defect in a
+// strategy drops the candidate at the source instead of publishing an event every consumer must reject.
+func (c Candidate) validateZoneDerivation() error {
+	if c.Structure != nil && c.Structure.Swing != nil {
+		w := c.Structure.Swing
+		if w.Class == "" || w.Strength == "" || !finite(w.AnchorPrice) || !finite(w.ProximalPrice) || !finite(w.DistalPrice) || !finite(w.ProminenceATR) || !finite(w.DepartureATR) || !finite(w.Efficiency) || w.BaseCandles < 1 {
+			return fmt.Errorf("opportunity: zone swing needs a class, a strength, finite prices and measures and a base")
+		}
+		if w.SwingConfirmedAt <= 0 || w.BaseFormedAt <= 0 || w.DepartureConfirmedAt <= 0 {
+			return fmt.Errorf("opportunity: zone swing needs the confirmation time of its swing, base and departure")
+		}
+		if w.ProximalPrice < c.Structure.Low-1e-9 || w.ProximalPrice > c.Structure.High+1e-9 || w.DistalPrice < c.Structure.Low-1e-9 || w.DistalPrice > c.Structure.High+1e-9 {
+			return fmt.Errorf("opportunity: the proximal and distal prices of a zone are edges of its structure")
+		}
+	}
+	if p := c.EntryPlan; p != nil {
+		if p.Model == "" || p.Kind == "" || !finite(p.Price) || !finite(p.StopPips) || !finite(p.EffectiveRisk) || !finite(p.RoomR) || !finite(p.Target) || p.EffectiveRisk <= 0 {
+			return fmt.Errorf("opportunity: entry plan needs a model, a kind and finite price, risk and room")
+		}
+		// The recommended price is the near edge of the published band: a BUY band's high, a SELL band's low (to the tick the band was rounded to).
+		edge := c.Entry.Low
+		if c.Direction == market.Buy {
+			edge = c.Entry.High
+		}
+		if math.Abs(p.Price-edge) > 1e-6*math.Max(1, math.Abs(edge)) && !(p.Price >= c.Entry.Low-1e-9 && p.Price <= c.Entry.High+1e-9) {
+			return fmt.Errorf("opportunity: the entry plan's price must lie in the published entry band")
+		}
+		for _, k := range p.Candidates {
+			if k.Kind == "" || !finite(k.Price) || !finite(k.DepthFraction) {
+				return fmt.Errorf("opportunity: entry plan candidates need a kind and finite price and depth")
+			}
+		}
+	}
+	return nil
 }

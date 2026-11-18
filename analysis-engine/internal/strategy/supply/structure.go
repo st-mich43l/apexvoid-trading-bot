@@ -8,6 +8,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/structure"
 )
 
 // The supply zone and its lifecycle, defined here and judged on the bars of the frame the zone was found on. These constants were the shared technique
@@ -23,6 +24,15 @@ const (
 
 // Refusal reason of this strategy, counted by the engine as strategy_refused{strategy="supply", reason}.
 const refusedNoTargetRoom = "no_target_room" // the nearest obstacle is closer than minimum_target_r x the risk
+
+// refusedZoneStrength counts a zone in play (its entry is valid) that is below minimum_zone_strength: a weak zone is context, never a trade.
+const refusedZoneStrength = "zone_strength_below_minimum"
+
+// The entry planner's refusals (swing model): no candidate price of the zone is feasible.
+const (
+	refusedStopBeyondCap   = "stop_beyond_cap"
+	refusedNoFeasibleEntry = "no_feasible_entry"
+)
 
 // zoneBand is a price band with the facts the qualification reads.
 type zoneBand struct {
@@ -51,6 +61,8 @@ type zone struct {
 	Mitigated  bool
 	Score      float64
 	Premium    bool
+	// Formation is the swing-anchored derivation of the zone (nil under the legacy model).
+	Formation *structure.SwingZone
 }
 
 // instance is a zone that passed the lifecycle tests: its entry band (clipped to the proximal slice when wide), the whole zone, and where it lives.
@@ -72,6 +84,8 @@ type instance struct {
 	FrameOrigin    int                          // the zone's last base candle on that frame
 	FrameConfirmed int                          // the last candle of the departure on that frame
 	LegStart       int                          // the departure's first candle on that frame
+	// Formation is the swing-anchored derivation of the zone (nil under the legacy model): the swing, its class, the base and the strength.
+	Formation *structure.SwingZone
 }
 
 func (i instance) structural() (float64, float64) {
@@ -154,6 +168,14 @@ func (s *Strategy) displacement(bars []market.Candle, atr []float64) []leg {
 // detectZones builds the supply zones of a frame: for every strong downward departure, the range (wicks included) of the baseCandles candles before it. A
 // zone price already closed through (above its high) is dead for good and carries at least one touch.
 func (s *Strategy) detectZones(bars []market.Candle, atr []float64) []zone {
+	if s.cfg.Formation.Swing() {
+		return s.detectSwingZones(bars, atr)
+	}
+	return s.detectLegacyZones(bars, atr)
+}
+
+// detectLegacyZones is the zone definition before SD-3, kept as the rollback (zone_model: legacy).
+func (s *Strategy) detectLegacyZones(bars []market.Candle, atr []float64) []zone {
 	var zones []zone
 	for _, l := range s.displacement(bars, atr) {
 		if l.Direction != "down" || l.Start <= 0 {
@@ -168,6 +190,27 @@ func (s *Strategy) detectZones(bars []market.Candle, atr []float64) []zone {
 			low, high = math.Min(low, bars[i].Low), math.Max(high, bars[i].High)
 		}
 		z := zone{Low: low, High: high, Origin: l.Start - 1, LegStart: l.Start, BreakIndex: l.End}
+		if closedAbove(z, bars) {
+			z.Touches, z.Mitigated = 1, true
+		}
+		zones = append(zones, z)
+	}
+	return zones
+}
+
+// detectSwingZones anchors every zone on a classified swing and its departure (structure.FormSwingZones): the zone is the base the swing was made in, the departure is
+// this strategy's own displacement leg. A zone price already closed through its far edge is mitigated and carries at least one touch, as before.
+func (s *Strategy) detectSwingZones(bars []market.Candle, atr []float64) []zone {
+	var legs []structure.Leg
+	for _, l := range s.displacement(bars, atr) {
+		if l.Direction == "down" {
+			legs = append(legs, structure.Leg{Start: l.Start, End: l.End})
+		}
+	}
+	var zones []zone
+	for _, formed := range structure.FormSwingZones(true, bars, atr, legs, s.cfg.Formation.Zone) {
+		formation := formed
+		z := zone{Low: formed.Low, High: formed.High, Origin: formed.BaseEnd, LegStart: formed.LegStart, BreakIndex: formed.ConfirmedIndex, Formation: &formation}
 		if closedAbove(z, bars) {
 			z.Touches, z.Mitigated = 1, true
 		}
@@ -226,11 +269,20 @@ func medianATR(series []float64) float64 {
 	return (clean[n/2-1] + clean[n/2]) / 2
 }
 
-// notInvalidated: price never accepted above the zone's high. A close above it by more than the tolerance starts an episode, forgiven when a close returns
-// inside within sweepReclaimBars; more than maxBreakEpisodes forgiven episodes kill it.
-func notInvalidated(high float64, bars []market.Candle, origin int, atr, pip float64) bool {
+// breach is the verdict on a zone's far edge, judged only on bars that have closed. A close above the high by more than the tolerance starts a breach episode.
+// An episode is forgiven when a close returns to or below the high within sweepReclaimBars bars after the breaching bar; the zone is terminal when a whole
+// window closes with no reclaim, or when more than maxBreakEpisodes episodes were forgiven. While the window is still open nobody can know the outcome: the
+// zone is Pending (neither retired nor offered), and the verdict only ever moves forward (Pending becomes reclaimed or Terminal, and Terminal is never
+// undone by a later bar).
+type breach struct {
+	Terminal bool
+	Pending  bool
+}
+
+// breachOf is the far-edge verdict of a zone whose last base candle is origin. high is the structural far edge, never the clipped entry slice.
+func breachOf(high float64, bars []market.Candle, origin int, atr, pip float64) breach {
 	if len(bars) == 0 || origin < 0 {
-		return true
+		return breach{}
 	}
 	e := epsilon(pip, atr)
 	tolerance := math.Max(e, invalidationToleranceATR*math.Max(atr, 0))
@@ -250,34 +302,37 @@ func notInvalidated(high float64, bars []market.Candle, origin int, atr, pip flo
 			}
 		}
 		if reclaimedAt < 0 {
-			return false
+			if count >= index+1+sweepReclaimBars {
+				return breach{Terminal: true} // the whole window closed without a reclaim
+			}
+			return breach{Pending: true} // the window is still open
 		}
 		episodes++
 		if episodes > maxBreakEpisodes {
-			return false
+			return breach{Terminal: true}
 		}
 		index = reclaimedAt + 1
 	}
-	return true
+	return breach{}
 }
 
 // endReason names why a zone that is spent is finished: invalidated when price was accepted beyond it, otherwise mitigated (touched past its limit).
-func endReason(high float64, bars []market.Candle, origin int, atr, pip float64) opportunity.ReasonCode {
-	if !notInvalidated(high, bars, origin, atr, pip) {
+func endReason(b breach) opportunity.ReasonCode {
+	if b.Terminal {
 		return opportunity.ReasonZoneInvalidated
 	}
 	return opportunity.ReasonZoneMitigated
 }
 
 // spent: a zone that was touched and has either taken too many touches or been invalidated.
-func spent(mitigated bool, touches int, high float64, bars []market.Candle, origin int, atr, pip float64) bool {
+func spent(mitigated bool, touches int, b breach) bool {
 	if !mitigated {
 		return false
 	}
 	if touches <= 0 || touches > retestMaxTouches {
 		return true
 	}
-	return !notInvalidated(high, bars, origin, atr, pip)
+	return b.Terminal
 }
 
 // clipEntry cuts a zone wider than maxWidth to its proximal (lower) slice.
@@ -288,9 +343,13 @@ func clipEntry(low, high, maxWidth float64) (float64, float64, bool) {
 	return low, low + maxWidth, true
 }
 
-// structureInstances are the supply zones of one structure frame that are still zones: not spent, not invalidated, a real width. Where price is now is not
-// asked here (a structure is a fact). higher are this strategy's own zones on the frames above this one (a zone inside one scores the higher-timeframe
-// points); the second result is every zone this frame holds, for the frame below.
+// structureInstances are the supply zones of one structure frame that are still zones: not spent, not invalidated, not in a pending breach, a real width. Where
+// price is now is not asked here (a structure is a fact). higher are this strategy's own zones on the frames above this one (a zone inside one scores the
+// higher-timeframe points); the second result is the zones of this frame that are valid structure for the frame below: never a terminal, spent, pending or
+// over-wide one.
+//
+// Every test of a zone's life is made against the COMPLETE structural zone (z.Low..z.High), never the proximal slice the entry band is clipped to: the far edge
+// that invalidates a supply zone is the structural high, and the width limit is the structure's, so a wide zone cannot be offered through a narrow slice.
 func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf market.Timeframe, execBars []market.Candle, higher []band, verdict *strategyutil.ZoneVerdict) ([]instance, []band) {
 	bars := frame.Bars
 	if len(bars) < 10 {
@@ -301,10 +360,8 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 	zones := s.detectZones(bars, frame.ATR)
 	markTouches(zones, bars)
 	inputs := s.inputsFor(frame, tf, execBars, higher)
-	held := make([]band, 0, len(zones))
 	for k := range zones {
 		zones[k].Score, zones[k].Premium = scoreZone(zones[k], inputs)
-		held = append(held, band{Low: zones[k].Low, High: zones[k].High})
 	}
 	sort.SliceStable(zones, func(i, j int) bool {
 		a, b := zones[i], zones[j]
@@ -317,32 +374,40 @@ func (s *Strategy) structureInstances(frame *analysiscontext.LegacyFrame, tf mar
 		return a.Low < b.Low
 	})
 	pip := s.cfg.PipSize
+	held := make([]band, 0, len(zones))
 	var out []instance
 	for _, z := range zones {
 		id := ""
 		if z.Origin >= 0 && z.Origin < len(bars) {
 			id = zoneID(tf, bars[z.Origin].Time)
 		}
-		if spent(z.Mitigated, z.Touches, z.High, bars, z.Origin, atr, pip) {
-			verdict.Terminal(id, endReason(z.High, bars, z.Origin, atr, pip))
+		state := breachOf(z.High, bars, z.Origin, atr, pip)
+		if spent(z.Mitigated, z.Touches, state) {
+			verdict.Terminal(id, endReason(state))
 			continue
+		}
+		verdict.Live(id) // still a supply zone, whether or not it is wide enough to enter right now or its breach is still being decided
+		if state.Pending {
+			continue
+		}
+		if z.Formation != nil {
+			if z.Formation.TooWide || z.Formation.TooNarrow {
+				continue // a region or an incidental candle region, judged on the whole structure
+			}
+		} else if atr > 0 && z.High-z.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
+			continue // a region, judged on the whole structure
 		}
 		in := instance{
 			Low: z.Low, High: z.High, Touches: z.Touches, Mitigated: z.Mitigated, Score: z.Score, Timeframe: tf, Frame: frame,
-			FrameOrigin: z.Origin, FrameConfirmed: maxInt(z.Origin, z.BreakIndex), LegStart: z.LegStart,
+			FrameOrigin: z.Origin, FrameConfirmed: maxInt(z.Origin, z.BreakIndex), LegStart: z.LegStart, Formation: z.Formation,
 			Premium: z.Premium, PDPosition: inputs.pd.position(z.Low),
 		}
 		if low, high, clipped := clipEntry(z.Low, z.High, s.cfg.EntryMaxWidthPrice); clipped && s.cfg.EntryMaxWidthPrice > 0 {
 			in.StructuralLow, in.StructuralHigh, in.EntryClipped = z.Low, z.High, true
 			in.Low, in.High = low, high
 		}
-		if spent(in.Mitigated, in.Touches, in.High, bars, z.Origin, atr, pip) || !notInvalidated(in.High, bars, z.Origin, atr, pip) {
-			verdict.Terminal(id, endReason(in.High, bars, z.Origin, atr, pip))
-			continue
-		}
-		verdict.Live(id) // still a supply zone, whether or not it is wide enough to enter right now
-		if atr > 0 && in.High-in.Low > math.Max(0, s.cfg.MaximumZoneATR)*atr {
-			continue
+		if !in.weak(s.cfg.Formation) {
+			held = append(held, band{Low: z.Low, High: z.High}) // only a zone that may publish is structure for the frame below
 		}
 		out = append(out, in)
 	}
@@ -396,4 +461,10 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// weak reports a swing-anchored zone below the strategy's minimum strength: kept as context, never published, never higher-timeframe confluence. The legacy model has
+// no strength and is never weak.
+func (i instance) weak(f strategyutil.ZoneFormation) bool {
+	return i.Formation != nil && i.Formation.Strength < f.MinimumStrength
 }

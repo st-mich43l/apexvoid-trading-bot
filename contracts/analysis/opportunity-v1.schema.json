@@ -24,7 +24,62 @@
         "timeframe": { "type": "string", "enum": ["M1", "M3", "M5", "M15", "M30", "H1", "H4", "D1"] },
         "low": { "type": "number" },
         "high": { "type": "number" },
-        "formed_at": { "type": "integer", "description": "Unix seconds: open time of the bar that completed the structure (the third candle of a fair value gap)." }
+        "formed_at": { "type": "integer", "description": "Unix seconds: open time of the bar that completed the structure (the third candle of a fair value gap)." },
+        "swing": {
+          "type": "object",
+          "description": "Additive V1 field (SD-3): why a supply or demand zone is a zone: the classified swing it was made at, the base and the departure. Omitted for every other structure and for a zone of the legacy definition. Descriptive only: nothing downstream gates on it. Every time is the open time of a closed bar; a swing is known when its right window has closed and the departure when its last bar has.",
+          "additionalProperties": false,
+          "required": ["zone_id", "major_swing_class", "zone_strength", "swing_anchor_price", "proximal_price", "distal_price", "swing_confirmed_at", "base_formed_at", "departure_confirmed_at", "base_candles", "prominence_atr", "departure_atr", "efficiency", "external"],
+          "properties": {
+            "zone_id": { "type": "string", "minLength": 1 },
+            "major_swing_class": { "type": "string", "enum": ["MAJOR", "INTERMEDIATE", "MINOR"] },
+            "zone_strength": { "type": "string", "enum": ["strong", "moderate", "weak"] },
+            "swing_anchor_price": { "type": "number" },
+            "proximal_price": { "type": "number", "description": "The edge of the structure price meets first (the low of a supply zone, the high of a demand zone)." },
+            "distal_price": { "type": "number", "description": "The far edge the structure is invalidated beyond." },
+            "swing_confirmed_at": { "type": "integer", "minimum": 1 },
+            "base_formed_at": { "type": "integer", "minimum": 1 },
+            "departure_confirmed_at": { "type": "integer", "minimum": 1 },
+            "base_candles": { "type": "integer", "minimum": 1 },
+            "prominence_atr": { "type": "number" },
+            "departure_atr": { "type": "number" },
+            "efficiency": { "type": "number" },
+            "external": { "type": "boolean" },
+            "shift": { "type": "string", "enum": ["BOS", "CHoCH"] }
+          }
+        }
+      }
+    },
+    "entry_plan": {
+      "type": "object",
+      "description": "Additive V1 field (SD-5): the entry the Analysis Engine recommends for a supply or demand zone and how it was derived: the candidate prices evaluated inside the zone, the one chosen (the shallowest feasible, never the one with the smallest stop) and the facts it was judged on. `entry` is the published band from that price. Omitted for every other opportunity and under the proximal entry model. Algo Bot owns sizing, exposure and the ladder; this is the technical interpretation only.",
+      "additionalProperties": false,
+      "required": ["model", "kind", "price", "depth_fraction", "stop_pips", "effective_risk", "room_r", "target", "target_label", "candidates"],
+      "properties": {
+        "model": { "type": "string", "enum": ["zone_candidates_v1"] },
+        "kind": { "type": "string", "enum": ["proximal", "body_proximal", "midpoint", "deep", "stop_cap_fit", "room_fit"] },
+        "price": { "type": "number" },
+        "depth_fraction": { "type": "number", "description": "0 at the proximal edge of the structure, 1 at the distal edge." },
+        "stop_pips": { "type": "number", "minimum": 0 },
+        "effective_risk": { "type": "number", "exclusiveMinimum": 0, "description": "Price units, after the instrument stop floor." },
+        "room_r": { "type": "number", "minimum": 0 },
+        "target": { "type": "number" },
+        "target_label": { "type": "string" },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "price", "depth_fraction", "feasible"],
+            "properties": {
+              "kind": { "type": "string" },
+              "price": { "type": "number" },
+              "depth_fraction": { "type": "number" },
+              "feasible": { "type": "boolean" },
+              "rejected": { "type": "string", "enum": ["outside_zone", "band_below_minimum_width", "stop_beyond_cap", "no_target_room", "degenerate_risk", "band_unreachable"] }
+            }
+          }
+        }
       }
     },
     "execution": {

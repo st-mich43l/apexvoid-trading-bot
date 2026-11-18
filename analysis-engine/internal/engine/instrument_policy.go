@@ -241,6 +241,9 @@ func applyLegacyStopBudget(settings *Settings) {
 		if settings.InstrumentDeepEntryMinimumWidthPips > 0 {
 			params["deep_entry_minimum_width_pips"] = settings.InstrumentDeepEntryMinimumWidthPips
 		}
+		if settings.InstrumentEntryZoneMinimumWidthPips > 0 {
+			params["entry_zone_minimum_width_pips"] = settings.InstrumentEntryZoneMinimumWidthPips // the planner never offers an entry whose band would be narrower
+		}
 		settings.Strategies[i].Parameters = params
 	}
 }
@@ -256,7 +259,7 @@ func WithoutLegacyStopBudget(settings *Settings) {
 		params := make(map[string]any, len(settings.Strategies[i].Parameters))
 		for k, v := range settings.Strategies[i].Parameters {
 			switch k {
-			case "execution_stop_max_pips", "execution_stop_min_pips", "execution_pip_size", "deep_entry_minimum_width_pips":
+			case "execution_stop_max_pips", "execution_stop_min_pips", "execution_pip_size", "deep_entry_minimum_width_pips", "entry_zone_minimum_width_pips":
 			default:
 				params[k] = v
 			}
