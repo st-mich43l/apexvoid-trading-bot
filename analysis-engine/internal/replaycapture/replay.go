@@ -12,6 +12,7 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/marketdata"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/opportunity"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategy/keylevel"
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/transport/kafka"
 )
 
@@ -59,6 +60,9 @@ type Options struct {
 	// no structure older than the M5 execution window. Every WithoutStopBudget replay implies it. FrozenSessionWindows and FrozenBinding each switch one
 	// half on, for the measurement of what each does.
 	FrozenWindows, FrozenSessionWindows, FrozenBinding bool
+	// Telemetry, when set, is the recorder the replayed engine counts into (strategy refusals by reason, structure retirements, ...); read it with Snapshot after Replay.
+	// Nil keeps a private recorder, as before.
+	Telemetry *telemetry.Recorder
 	// OnWithdrawn receives every live zone opportunity the engine withdrew because its structure was closed through (engine.Settings.OnWithdrawn).
 	OnWithdrawn func(candidate opportunity.Candidate, at int64)
 	// LegacyWindowBars overrides the detector frames' window per timeframe for this replay only (the configuration is not touched). The ageing study of
@@ -172,7 +176,7 @@ func Replay(doc *config.Document, capture *Capture, primary market.Timeframe, op
 			ConfigFingerprint: hex.EncodeToString(sum[:]),
 		},
 	}
-	e := engine.NewEngine(nil)
+	e := engine.NewEngine(opts.Telemetry)
 	if err := e.Register(capture.Symbol, settings); err != nil {
 		return nil, fmt.Errorf("registering %s: %w", capture.Symbol, err)
 	}

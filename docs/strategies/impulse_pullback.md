@@ -81,3 +81,7 @@ Reading it:
 - Small samples (5 to 8 setups over about 90 hours of M1). They say the strategy rarely publishes and that what it publishes
   fails quickly in this window; they cannot say it has no edge. The configuration (`analysis.yml` `impulse_pullback`) is unchanged;
   the owner decides from this table.
+
+## RUN-1 finding: Impulse Pullback now reports why it is silent (19 Nov 2026)
+
+379 setups were published in the first two weeks of October and 6 in November. The strategy had no refusal reporting, so the silence could not be explained. It now counts every refused setup by gate (`strategy_refused{strategy="impulse_pullback", reason}`: `dealing_position_wrong_side`, `no_impulse_pullback`, `impulse_displacement_or_body_weak`, `pullback_not_corrective`, `no_structural_reference`, `reference_zone_too_wide`, `no_m1_confirmation`, `reference_role_mismatch`, `stop_outside_scalp_book`, `invalidation_geometry`, `no_target_room`, `candidate_build_failed`, and the frame/context gates). On 33 hours of XAU M1 bars the dominant refusals were `dealing_position_wrong_side` (1,739 evaluations) and `no_impulse_pullback` (817); loosening the displacement threshold (4.0 -> 3.0 / 2.0) and the position limits (0.5/0.5 -> 0.7/0.3) did not change the count of candidates (0). Nothing is changed in the detection; the counters show where it stops in production.
