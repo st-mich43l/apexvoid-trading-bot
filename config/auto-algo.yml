@@ -103,10 +103,12 @@ auto_algo:
       # in app.scalping.context._scalping_symbols.
       mode: live
       location:
-        # Impulse Pullback Scalp: a BUY pullback in the lower 60% of the dealing
-        # range, a SELL in the upper 60%.
-        pullback_buy_maximum_position: 0.60
-        pullback_sell_minimum_position: 0.40
+        # Impulse Pullback Scalp: a BUY pullback in the lower 70% of the dealing
+        # range, a SELL in the upper 70% (RUN-2: was 60%). The Analysis Engine reads
+        # this leaf; the Algo Bot's execution-time check is entry_location.trend_pullback
+        # below (0.70 / 0.30), so the two limits are now equal.
+        pullback_buy_maximum_position: 0.70
+        pullback_sell_minimum_position: 0.30
       activation:
         maximum_chase_pips: 40
         maximum_chase_stop_fraction: 0.30
