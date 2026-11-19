@@ -2013,6 +2013,12 @@ def _trade_area_target_lines(
   ]
 
 
+# The strategies whose root card shows the "Structure:" (and "Order zone:") lines: the zone family, whose structure is a zone the order is traded in. Every strategy now
+# publishes a structure block (Key Level since KL11, Trendline, Confluence Zone, Flip Zone, ...), but on those the block is a reaction band or a line, not a zone to
+# read, and the card shows no structure line for them (as before the block existed).
+STRUCTURE_LINE_STRATEGIES = frozenset({"Supply Demand", "Order Block", "FVG"})
+
+
 def structure_lines(
   match: StrategyMatch,
   *,
@@ -2021,10 +2027,12 @@ def structure_lines(
 ) -> list[str]:
   """The "Structure:" line (and, when the order is placed elsewhere, the "Order zone:" line) under the setup name.
 
-  Display only. It reads the structure block Go published for a zone-family setup (FVG, Supply, Demand, Order Block); an event without the block renders
-  nothing, as it did before. ``Structure`` is the whole structure on its own timeframe, which may be a different (older, higher) one than the M5 the
+  Display only. It reads the structure block Go published for a zone-family setup (FVG, Supply, Demand, Order Block); any other strategy, and an event without the
+  block, renders nothing. ``Structure`` is the whole structure on its own timeframe, which may be a different (older, higher) one than the M5 the
   trade is placed on; ``Order zone`` is shown only when the zone the order trades is not the structure's own bounds.
   """
+  if str(match.strategy or "") not in STRUCTURE_LINE_STRATEGIES:
+    return []
   timeframe = str(match.structure_timeframe or "").upper()
   low, high = match.structure_low, match.structure_high
   if not timeframe or low is None or high is None:
