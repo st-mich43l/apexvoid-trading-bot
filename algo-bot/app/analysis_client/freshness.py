@@ -36,6 +36,24 @@ class FreshnessLimits:
   max_delivery_lag_seconds: int
 
 
+_TIMEFRAME_SECONDS = {"M1": 60, "M5": 300, "M15": 900, "M30": 1800, "H1": 3600, "H4": 14400}
+_REFERENCE_BAR_SECONDS = 300  # the limit (analysis.technical_authority.max_event_age_seconds) was sized for M5 events
+
+
+def limits_for_timeframe(limits: FreshnessLimits, timeframe: str | None) -> FreshnessLimits:
+  """The age limit that applies to an event observed on ``timeframe``.
+
+  The engine stamps an observation with the OPEN time of the bar it was confirmed on and publishes it when that bar CLOSES, so an event is at least one
+  bar-length old on arrival: 300 s for M5, 900 s for M15. The configured limit (900 s) leaves an M5 event 600 s of grace after its bar closed; for an M15
+  event the same limit left none (production, 11-18 Nov 2026: every M15 Trendline event arrived 901-909 s old and was refused ``event_too_old``, 22 of 23).
+  A longer bar therefore gets its extra length, so every timeframe keeps the same grace after its bar closes. M5, M1 and an unknown timeframe are unchanged.
+  """
+  extra = _TIMEFRAME_SECONDS.get(str(timeframe or "").upper(), _REFERENCE_BAR_SECONDS) - _REFERENCE_BAR_SECONDS
+  if extra <= 0:
+    return limits
+  return FreshnessLimits(limits.max_event_age_seconds + extra, limits.max_delivery_lag_seconds)
+
+
 @dataclass(frozen=True)
 class FreshnessVerdict:
   ok: bool

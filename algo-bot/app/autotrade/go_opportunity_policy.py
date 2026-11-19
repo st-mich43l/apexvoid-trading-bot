@@ -43,7 +43,7 @@ from app.analysis_client.provenance import (
   GO_ORIGIN_TAG,
   CATALOG_STRATEGY_IDS,
 )
-from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness
+from app.analysis_client.freshness import FreshnessLimits, evaluate_freshness, limits_for_timeframe
 from app.analysis_client.models import GO_EXPIRY_REASONS, ArbitrationEnvelope, InvalidationEnvelope, OpportunityEnvelope
 from app.analysis_client.repository import LifecycleResult, PostgresAnalysisOpportunityRepository
 from app.autotrade import scalp_outcome, units
@@ -616,7 +616,7 @@ class GoOpportunityPolicy:
     )
     verdict = evaluate_freshness(
       observed_at=payload.created_at, expires_at=payload.expires_at, produced_at=event.produced_at,
-      published_at=published_at, consumed_at=now, limits=self._freshness_limits(),
+      published_at=published_at, consumed_at=now, limits=limits_for_timeframe(self._freshness_limits(), payload.timeframe),
     )
     recovered_live = False
     if payload.recovered_at is not None:
