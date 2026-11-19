@@ -745,9 +745,12 @@ analysis:
       active_range_bars: 24
       expiry_minutes: 15
       pullback_extreme_confirm_bars: 2
-      impulse_displacement_atr_multiple: 4.0
-      impulse_body_dominance: 0.5
-      pullback_corrective_ratio: 0.7
+      # RUN-2 (docs/strategies/impulse_pullback.md): displacement 4.0 -> 3.0 ATR, body dominance 0.5 -> 0.3, pullback corrective ratio 0.7 -> 0.85 (with the dealing-range
+      # limits 0.60/0.40 -> 0.70/0.30 in auto-algo.yml). Each of the four was the next refusing gate on the production XAU M1 bars (33 h): 0 -> 1 candidate; at the old
+      # values 6 were published in November.
+      impulse_displacement_atr_multiple: 3.0
+      impulse_body_dominance: 0.3
+      pullback_corrective_ratio: 0.85
       level_proximity_atr_multiple: 1.0
       zone_maximum_atr_multiple: 1.5
       breakout_accept_bars: 2
