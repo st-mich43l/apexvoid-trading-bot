@@ -479,3 +479,7 @@ risks below. It is not a statement about profitability.
 - **Wilder ATR over a fixed window** differs slightly from the engine's canonical simple
   ATR; it is used only inside CRT, and documented and tested.
 - The simulator's fill rules are conservative proxies, not the executor's behavior.
+
+## RUN-1: CRT publishes again (19 Nov 2026)
+
+CRT published 261 setups in the week of 28 Sep (the frozen-Python-parity v2) and one since 5 Nov: v3's contract refused almost every H1 anchor. The engine now reports CRT's refusals (`strategy_refused{strategy="crt", reason}`; `Analyze` always knew them). On a week of production bars (XAU, EURUSD, GBPUSD) the dominant refusals were `h1_range_below_minimum` (306), `reclaim_window_expired` (23), `reclaim_lost` (15) and `confluence_below_floor`. Two config leaves changed, nothing in the detection: `minimum_h1_range_atr` 1.5 -> 1.0, and a CRT-specific `confluence_floor: 1` (a strategy that declares its own floor keeps it; every other strategy keeps the shared `detector.confluence_floor` 2, byte-identical). Replay of the five symbols: 0 -> 18 CRT candidates a week; all validate against `opportunity-v1`, adapt in Algo Bot and pass the execution policy. This is a measurement of publication, not of outcome: no profitability is claimed. Rollback: restore the two leaves.

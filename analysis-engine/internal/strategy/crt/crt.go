@@ -13,6 +13,7 @@ package crt
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -37,6 +38,43 @@ type Strategy struct {
 	cfg         Config
 	detector    strategyutil.LegacyDetectorSettings
 	fingerprint string
+
+	// Every refused sweep episode is counted once, by its reason, for the engine's strategy_refused counter (strategy.RefusalReporter). Analyze always knew the
+	// reasons; without this the engine never saw them and a quiet CRT looked the same as a market with no sweeps.
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
+	counted  map[string]struct{}
+}
+
+const maxCountedRefusals = 4096
+
+// refusedNoAnchorFrames is counted when the context has no closed H1 or M5 candles to read an anchor from.
+const refusedNoAnchorFrames = "no_h1_or_m5_frames"
+
+func (s *Strategy) countRefusal(reason string, id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counted == nil || len(s.counted) > maxCountedRefusals {
+		s.counted = map[string]struct{}{}
+	}
+	key := reason + "|" + id
+	if _, seen := s.counted[key]; seen {
+		return
+	}
+	s.counted[key] = struct{}{}
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	s.refusals[strategy.Refusal{Reason: reason, Timeframe: market.M5}]++
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
 }
 
 // ParseConfig reads the CRT parameters; exported so replay and certification
@@ -66,7 +104,20 @@ func (s *Strategy) ID() strategy.StrategyID { return ID }
 func (s *Strategy) RequiredTimeframes() []market.Timeframe { return []market.Timeframe{market.M5} }
 
 func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Candidate {
-	_, candidates := s.Analyze(ctx)
+	analysis, candidates := s.Analyze(ctx)
+	if ctx == nil {
+		return candidates
+	}
+	if m5, h1 := ctx.Timeframes[market.M5], ctx.Timeframes[market.H1]; m5 == nil || h1 == nil || len(m5.Candles) == 0 {
+		var now int64
+		if m5 != nil && len(m5.Candles) > 0 {
+			now = m5.Candles[len(m5.Candles)-1].Time
+		}
+		s.countRefusal(refusedNoAnchorFrames, fmt.Sprint(now))
+	}
+	for _, rejection := range analysis.Rejections {
+		s.countRefusal(string(rejection.Reason), fmt.Sprintf("%s|%d|%d", rejection.Direction, rejection.AnchorTime, rejection.SweepTime))
+	}
 	return candidates
 }
 

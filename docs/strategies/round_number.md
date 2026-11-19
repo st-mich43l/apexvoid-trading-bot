@@ -165,3 +165,7 @@ every setup B. Both are weights, not errors; an unproven weight is not changed w
 No correctness defect that changes a published trade was found, the sample cannot separate an independent edge (H1), a context value (H2) and no value (H3), and a thesis
 change needs approval. The two hypotheses worth the data: (1) setup B at round numbers against matched levels, (2) round alignment as evidence for other strategies. Both need the
 Q1.1 outcome labeller or a longer capture; neither needs a new strategy. Rolling back, if ever decided, is the existing `enabled: false` pair listed above.
+
+## RUN-1: Round Number publishes again (19 Nov 2026)
+
+`entry_band_pips` 15 -> 30. ZL-1 refuses any non-scalp XAU entry zone under 30 pips (`entry_zone_below_minimum_width`); RN-1 made Round Number a technique-lane strategy, so its 15-pip band was refused every time (33 a week on the production bars; 6 published in total, none since 11 Nov). The band is now the XAU minimum. Replay: 0 -> 18 candidates a week, all valid and adapted in Algo Bot (2 of 18 are later refused by the execution policy for ladder geometry). No outcome claim. Rollback: restore 15.0.

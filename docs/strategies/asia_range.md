@@ -99,3 +99,7 @@ $30 to $60 Asian session is not a consolidation. `strategy_refused{strategy="asi
 
 New strategy id, so new opportunity ids; no existing id changes. Rollback: `analysis.strategies.asia_range.enabled: false` (the entry must stay) and
 `auto_algo.strategies.technique.asia_range.enabled: false`, then restart analysis-engine and algo-bot.
+
+## RUN-1 finding: Asia Range stays empty even when loosened (19 Nov 2026)
+
+On a week of XAU bars the engine counted 9 Asia structures, all refused (`no_retest`, `reclaim_window_expired`, `mss_window_expired`, `range_too_wide`, `confluence_below_floor`). Loosening the reclaim, MSS and retest windows, the range minimum and the confluence floor together still produced 0 candidates (the refusals move to `reclaim_lost`, `edge_locked`, `break_failed`, `invalid_stop_geometry`), so no config change is shipped: the strategy needs a design decision, not a threshold. Its refusals are reported (`strategy_refused{strategy="asia_range"}`).

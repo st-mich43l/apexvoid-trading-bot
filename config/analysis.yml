@@ -552,7 +552,11 @@ analysis:
       enabled: true
       # Anchor. Baseline kept from v2. ATR is Wilder ATR(atr_length) computed over a
       # fixed trailing window so the result cannot depend on how much history loaded.
-      minimum_h1_range_atr: 1.5
+      # RUN-1: H1 anchor range minimum 1.0 ATR (was 1.5; 306 of 3 symbols' weekly anchors were refused h1_range_below_minimum).
+      minimum_h1_range_atr: 1.0
+      # RUN-1 (docs/strategies/crt.md): the star floor CRT is held to. 2 is the shared detector floor; a CRT earns at most the HTF, wick and structure-shift stars, and with the
+      # 1.5 ATR H1 range minimum only 1 CRT was published since 5 Nov (261 in the week of 28 Sep). Replay on 3 symbols: 0 -> 7 candidates a week with a 1.0 ATR range and floor 1.
+      confluence_floor: 1
       atr_length: 14
       atr_window_bars: 140
       # The sweep must start inside this many H1 periods after the anchor closes (1 =
@@ -834,7 +838,9 @@ analysis:
       minimum_mss_displacement_atr: 0.5
       minimum_mss_close_strength: 0.6
       confirmation_max_age_bars: 2
-      entry_band_pips: 15.0
+      # RUN-1 (docs/strategies/round_number.md): 30 pips, the XAU minimum entry zone (stop_envelope.min_entry_zone_width_pips). At 15 every Round Number was refused
+      # entry_zone_below_minimum_width after ZL-1 (33 a week on the production bars; 6 published in total, none since 11 Nov). Replay: 0 -> 18 candidates a week.
+      entry_band_pips: 30.0
       # Setup B: a forceful close through the handle, accepted by closes beyond it, the first retest rejected.
       break_buffer_pips: 10.0
       minimum_break_body_ratio: 0.6
@@ -894,9 +900,11 @@ analysis:
       symbols: [XAU]
       atr_length: 14
       atr_window_bars: 140
-      shock_range_atr: 3.0
+      # RUN-1 (docs/strategies/shock_retest.md): a shock is a 2.0 ATR bar inside a 3.0 ATR leg (was 3.0 / 4.0). At 3.0 / 4.0 the strategy never saw a shock in 3 months (0 published,
+      # 0 refusals). Replay on a week of XAU bars: 0 -> 2 candidates.
+      shock_range_atr: 2.0
       minimum_shock_body_ratio: 0.6
-      shock_leg_atr: 4.0
+      shock_leg_atr: 3.0
       settle_bars: 1
       retest_max_bars: 24
       minimum_wick_ratio: 0.4

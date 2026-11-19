@@ -494,6 +494,12 @@ func applyLegacyDetector(settings *Settings) {
 			params[k] = v
 		}
 		for k, v := range settings.LegacyDetector {
+			// RUN-1: a strategy that declares its own confluence_floor keeps it; every other strategy takes the shared detector floor, as before.
+			if k == "confluence_floor" {
+				if _, own := settings.Strategies[i].Parameters[k]; own {
+					continue
+				}
+			}
 			params[k] = v
 		}
 		params["pip_size"] = settings.LegacyRead.PipSize

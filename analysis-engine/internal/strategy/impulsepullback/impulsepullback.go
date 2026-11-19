@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 
 	analysiscontext "github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/fib"
@@ -54,6 +55,59 @@ type Config struct {
 type Strategy struct {
 	cfg         Config
 	fingerprint string
+
+	// Every refused setup is counted once, by the gate that refused it, for the engine's strategy_refused counter (strategy.RefusalReporter). Without it this lane's
+	// silence (no opportunity for days) cannot be told apart from a market with no setups.
+	mu       sync.Mutex
+	refusals map[strategy.Refusal]int64
+	counted  map[string]struct{}
+}
+
+const maxCountedRefusals = 4096
+
+// Refusal reasons: one per gate of Evaluate, in the order a setup meets them.
+const (
+	refusedNoFrames           = "no_m1_or_m5_frames"
+	refusedNoContext          = "no_scalp_context"
+	refusedDealingPosition    = "dealing_position_wrong_side"
+	refusedNoImpulse          = "no_impulse_pullback"
+	refusedImpulseRejected    = "impulse_rejected"
+	refusedDisplacementWeak   = "impulse_displacement_or_body_weak"
+	refusedPullbackNotCorrect = "pullback_not_corrective"
+	refusedNoReference        = "no_structural_reference"
+	refusedReferenceTooWide   = "reference_zone_too_wide"
+	refusedNoM1Confirmation   = "no_m1_confirmation"
+	refusedRoleMismatch       = "reference_role_mismatch"
+	refusedStopOutsideBook    = "stop_outside_scalp_book"
+	refusedBadGeometry        = "invalidation_geometry"
+	refusedNoTargetRoom       = "no_target_room"
+	refusedBuildFailed        = "candidate_build_failed"
+)
+
+func (s *Strategy) countRefusal(reason string, barTime int64, direction market.Direction) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counted == nil || len(s.counted) > maxCountedRefusals {
+		s.counted = map[string]struct{}{}
+	}
+	id := fmt.Sprintf("%s|%s|%d", reason, direction, barTime)
+	if _, seen := s.counted[id]; seen {
+		return
+	}
+	s.counted[id] = struct{}{}
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	s.refusals[strategy.Refusal{Reason: reason, Timeframe: market.M1}]++
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
 }
 
 func New(c strategy.Config) (strategy.Strategy, error) {
@@ -192,6 +246,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	}
 	m5tf, m1tf := ctx.Timeframes[market.M5], ctx.Timeframes[market.M1]
 	if m5tf == nil || m1tf == nil || len(m5tf.Candles) == 0 || len(m1tf.Candles) == 0 {
+		s.countRefusal(refusedNoFrames, 0, "")
 		return nil
 	}
 	cfg := s.cfg
@@ -204,6 +259,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		m1 = m1[len(m1)-cfg.ConfirmationWindowBars:]
 	}
 	if len(m5) == 0 || len(m1) == 0 {
+		s.countRefusal(refusedNoFrames, now, "")
 		return nil
 	}
 	c, ok := strategyutil.BuildScalpContext(strategyutil.ScalpContextConfig{
@@ -211,6 +267,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		ActiveRangeBars: cfg.ActiveRangeBars, ConfirmationWindowBars: cfg.ConfirmationWindowBars,
 	}, m5, m1All, now)
 	if !ok {
+		s.countRefusal(refusedNoContext, now, "")
 		return nil
 	}
 	source := m5
@@ -230,23 +287,36 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 	var out []opportunity.Candidate
 	for _, direction := range []market.Direction{market.Buy, market.Sell} {
 		if hasPosition && (direction == market.Buy && position > cfg.BuyMaximumPosition || direction == market.Sell && position < cfg.SellMinimumPosition) {
+			s.countRefusal(refusedDealingPosition, now, direction)
 			continue
 		}
 		ev, found := detectImpulsePullback(m5, direction, cfg.PullbackExtremeConfirmBars)
-		if !found || ev.Rejected {
+		if !found {
+			s.countRefusal(refusedNoImpulse, now, direction)
+			continue
+		}
+		if ev.Rejected {
+			s.countRefusal(refusedImpulseRejected, ev.BarTime, direction)
 			continue
 		}
 		m1ATR := math.Max(c.M1ATR, cfg.PipSize*3)
 		structureATR := math.Max(c.ATR, cfg.PipSize*3)
 		displacement := ev.ImpulseLen / structureATR
 		if displacement < cfg.ImpulseDisplacementATR || ev.BodyDominance < cfg.ImpulseBodyDominance {
+			s.countRefusal(refusedDisplacementWeak, ev.BarTime, direction)
 			continue
 		}
 		if ev.MeanImpulseBody <= 0 || ev.MeanPullbackBody >= ev.MeanImpulseBody*cfg.PullbackCorrectiveRatio {
+			s.countRefusal(refusedPullbackNotCorrect, ev.BarTime, direction)
 			continue
 		}
 		ref, rejected, hasRef := s.impulseReference(zones, levels, direction, ev.PullbackExtreme, m1ATR)
-		if !hasRef || rejected {
+		if !hasRef {
+			s.countRefusal(refusedNoReference, ev.BarTime, direction)
+			continue
+		}
+		if rejected {
+			s.countRefusal(refusedReferenceTooWide, ev.BarTime, direction)
 			continue
 		}
 		confirm, confirmed := strategyutil.ConfirmM1Execution(m1, direction, ref.Level, buffer, cfg.ConfirmationLookbackBars)
@@ -254,9 +324,11 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			confirm, _ = strategyutil.TouchM1Execution(m1, direction, ref.Level, buffer, cfg.ConfirmationLookbackBars)
 		}
 		if confirm.Time == 0 {
+			s.countRefusal(refusedNoM1Confirmation, ev.BarTime, direction)
 			continue
 		}
 		if s.levelRole(ref, direction, closes) != expectedRole(direction) {
+			s.countRefusal(refusedRoleMismatch, ev.BarTime, direction)
 			continue
 		}
 		zoneLow, zoneHigh := ref.Bottom, ref.Top
@@ -285,6 +357,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 		room := corridorRoomPips(direction, worst, c.ActiveLow, c.ActiveHigh, cfg.PipSize)
 		stop, ok := strategyutil.ScalpStopPips(structural, cfg.StopMinimumPips, cfg.StopMaximumPips)
 		if !ok {
+			s.countRefusal(refusedStopOutsideBook, ev.BarTime, direction)
 			continue
 		}
 		invalidation := worst - stop*cfg.PipSize
@@ -292,10 +365,12 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			invalidation = worst + stop*cfg.PipSize
 		}
 		if direction == market.Buy && !(invalidation < zoneLow && zoneLow < zoneHigh) || direction == market.Sell && !(invalidation > zoneHigh && zoneHigh > zoneLow) {
+			s.countRefusal(refusedBadGeometry, ev.BarTime, direction)
 			continue
 		}
 		targetPrice, targetPips, ok := strategyutil.ScalpTarget(direction, worst, room, stop, cfg.MinimumNetTargetPips, cfg.PipSize, cfg.RewardRiskLadder)
 		if !ok || targetPips > room*corridorUsableRoom {
+			s.countRefusal(refusedNoTargetRoom, ev.BarTime, direction)
 			continue
 		}
 		model := scoreQuality(qualityInputs{
@@ -317,6 +392,7 @@ func (s *Strategy) Evaluate(ctx *analysiscontext.MarketContext) []opportunity.Ca
 			FormedAt: ev.BarTime, ConfirmedAt: confirm.Time, ExpiryHours: cfg.ExpiryMinutes / 60, Fingerprint: s.fingerprint,
 		})
 		if err != nil {
+			s.countRefusal(refusedBuildFailed, ev.BarTime, direction)
 			continue
 		}
 		out = append(out, candidate)

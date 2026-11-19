@@ -67,3 +67,7 @@ Target labels: `shock_extreme`, `shock_extension_1272`. Invalidation label: `ret
 
 New strategy id, so new opportunity ids; no existing id changes. Rollback: `analysis.strategies.shock_retest.enabled: false` (the entry must stay) and
 `auto_algo.strategies.technique.shock_retest.enabled: false`, then restart analysis-engine and algo-bot.
+
+## RUN-1: Shock Retest publishes (19 Nov 2026)
+
+`shock_range_atr` 3.0 -> 2.0 and `shock_leg_atr` 4.0 -> 3.0. With 3.0 / 4.0 the strategy never saw a shock in three months (0 published, 0 refusals counted: the detector found nothing to refuse). On a week of XAU bars the new values give 2 candidates (the retest, rejection and stop rules are unchanged). No outcome claim. Rollback: restore the two leaves.
