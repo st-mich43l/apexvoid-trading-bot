@@ -1,4 +1,8 @@
-"""KL12: XAU Key Level closes everything at 1R, through a strategy-scoped exit ladder (``overrides.execution.targeting_by_strategy``).
+"""Strategy-scoped exit ladders (``overrides.execution.targeting_by_strategy``), introduced by KL12.
+
+KL12 configured XAU Key Level to close everything at 1R; the owner reverted that on 19 Nov 2026 (XAU Key Level keeps the instrument's 1R-4R ladder like every
+other XAU strategy). The shipped configuration therefore has NO such block, and these tests prove (1) the shipped behaviour is the default ladder everywhere and
+(2) the mechanism, kept for future use, works and is validated when a block is configured.
 
 Run from ``algo-bot``:  ``python -m unittest tests.test_kl12_strategy_targeting``  (stdlib only; needs the app's runtime dependencies).
 The Key Level envelope is a real replayed XAU opportunity from the Go engine (the same fixture ``test_scalp_stop_cap`` uses).
@@ -34,6 +38,18 @@ FX_LADDER = ((1.0, 2.0), (0.5, 0.5), 1.0, 2.0)
 ONE_R = ((1.0,), (1.0,), None, 1.0)
 
 
+ONE_R_BLOCK = {"mode": "fixed_rr", "reward_risk": 1.0, "target_r_multiples": [1.0], "close_ratios": [1.0], "breakeven_after_r": None}
+
+
+def xau_with_override(block=ONE_R_BLOCK) -> EffectiveInstrument:
+  """The XAU instrument as it would resolve with ``targeting_by_strategy.key_level`` configured (the shipped config has none)."""
+  name, declaration = instruments._instrument_declaration(runtime_config, "XAU")
+  declaration = copy.deepcopy(declaration)
+  declaration.setdefault("overrides", {}).setdefault("execution", {})["targeting_by_strategy"] = {"key_level": copy.deepcopy(block)}
+  with mock.patch.object(instruments, "_instrument_declaration", return_value=(name, declaration)):
+    return EffectiveInstrument(runtime_config, "XAU")
+
+
 def ladder(targeting) -> tuple:
   return (tuple(targeting.target_r_multiples), tuple(targeting.close_ratios), targeting.breakeven_after_r, targeting.reward_risk)
 
@@ -57,19 +73,14 @@ def build_plan(match, spot):
 
 
 class ResolutionTests(unittest.TestCase):
-  def test_xau_key_level_resolves_the_one_r_ladder_under_either_name(self):
-    for name in ("Key Level", "key_level", "KEY LEVEL"):
-      with self.subTest(name=name):
-        self.assertEqual(ladder(instrument_geometry.technique_fixed_rr_targeting("XAU", name, runtime_config)), ONE_R)
-
-  def test_every_other_xau_strategy_keeps_the_instrument_ladder_exactly(self):
-    for name in ("Supply Demand", "Confluence Zone", "Break & Retest", "Order Block", "FVG", "iFVG", "Flip Zone", "Round Number", "Trendline"):
+  def test_the_shipped_config_has_no_override_so_xau_key_level_keeps_the_default_ladder(self):
+    self.assertIsNone(instruments.for_instrument(runtime_config, "XAU").targeting_for_strategy("Key Level"))
+    for name in ("Key Level", "key_level", "Supply Demand", "Confluence Zone", "Break & Retest", "Order Block", "FVG", "iFVG", "Flip Zone", "Round Number", "Trendline"):
       with self.subTest(name=name):
         self.assertEqual(ladder(instrument_geometry.technique_fixed_rr_targeting("XAU", name, runtime_config)), LIVE_LADDER)
-    # no strategy named: the instrument's own targeting, untouched
     self.assertEqual(ladder(instrument_geometry.technique_fixed_rr_targeting("XAU", None, runtime_config)), LIVE_LADDER)
 
-  def test_key_level_on_fx_is_unchanged(self):
+  def test_every_fx_pair_keeps_its_ladder(self):
     for symbol in ("EURUSD", "GBPUSD", "USDJPY", "GBPJPY"):
       for name in ("Key Level", "key_level", "Supply Demand"):
         with self.subTest(symbol=symbol, name=name):
@@ -81,9 +92,19 @@ class ResolutionTests(unittest.TestCase):
       with self.subTest(name=name):
         self.assertIsNone(instrument_geometry.technique_fixed_rr_targeting("XAU", name, runtime_config))
 
-  def test_the_override_keeps_every_other_targeting_leaf_of_the_instrument(self):
-    base = instruments.for_instrument(runtime_config, "XAU").targeting
-    scoped = instrument_geometry.technique_fixed_rr_targeting("XAU", "Key Level", runtime_config)
+  # The mechanism, when a block IS configured.
+  def test_a_configured_block_resolves_for_its_strategy_only(self):
+    xau = xau_with_override()
+    for name in ("Key Level", "key_level", "KEY LEVEL"):
+      with self.subTest(name=name):
+        self.assertEqual(ladder(instrument_geometry.technique_fixed_rr_targeting("XAU", name, xau)), ONE_R)
+    for name in ("Supply Demand", "Confluence Zone", "Break & Retest"):
+      with self.subTest(name=name):
+        self.assertEqual(ladder(instrument_geometry.technique_fixed_rr_targeting("XAU", name, xau)), LIVE_LADDER)
+    for name in sorted(M1_SCALP_STRATEGIES):
+      self.assertIsNone(instrument_geometry.technique_fixed_rr_targeting("XAU", name, xau))
+    scoped = instrument_geometry.technique_fixed_rr_targeting("XAU", "Key Level", xau)
+    base = xau.targeting
     self.assertEqual(scoped.mode, InstrumentTargetMode.FIXED_RR)
     self.assertEqual(getattr(scoped, "entry_clips", None), getattr(base, "entry_clips", None))
 
@@ -128,37 +149,40 @@ class ValidationTests(unittest.TestCase):
         "mode": "fixed_rr", "reward_risk": 1.0, "target_r_multiples": [1.0], "close_ratios": [1.0], "breakeven_after_r": None}})
 
   def test_an_invalid_block_fails_the_instrument_build(self):
-    declaration = instruments._instrument_declaration(runtime_config, "XAU")
-    bad = copy.deepcopy(declaration[1])
-    bad["overrides"]["execution"]["targeting_by_strategy"]["key_level"]["close_ratios"] = [0.9]
-    with mock.patch.object(instruments, "_instrument_declaration", return_value=(declaration[0], bad)):
-      with self.assertRaises(EffectiveInstrumentError):
-        EffectiveInstrument(runtime_config, "XAU")
+    with self.assertRaises(EffectiveInstrumentError):
+      xau_with_override({**ONE_R_BLOCK, "close_ratios": [0.9]})
 
 
 class PlanTests(unittest.TestCase):
-  def test_the_xau_key_level_plan_has_one_target_at_1r_and_no_breakeven(self):
+  def test_the_shipped_xau_key_level_plan_keeps_the_four_target_ladder(self):
     match, spot = kl_match()
     self.assertEqual(match.strategy, "Key Level")
     policy = evaluate_execution_policy(match, spot_price=spot, regime="trend", pip_size=0.1, cfg=XAU, executable_quote=spot)
     self.assertTrue(policy.allowed, policy.reason_code)
+    self.assertEqual(policy.measured["planned_target_r_multiples"], ["1.0", "2.0", "3.0", "4.0"])
+    plan = build_plan(match, spot)
+    self.assertEqual([(t.target_id, t.close_ratio) for t in plan.targets], [("TP1", Decimal("0.4")), ("TP2", Decimal("0.2")), ("TP3", Decimal("0.2")), ("TP4", Decimal("0.2"))])
+    self.assertEqual(plan.management.be_after_target_id, "TP1")
+
+  def test_a_configured_one_r_block_gives_one_target_and_changes_nothing_else(self):
+    match, spot = kl_match()
+    xau = xau_with_override()
+    policy = evaluate_execution_policy(match, spot_price=spot, regime="trend", pip_size=0.1, cfg=xau, executable_quote=spot)
+    self.assertTrue(policy.allowed, policy.reason_code)
     self.assertEqual(policy.measured["planned_target_r_multiples"], ["1.0"])
     self.assertEqual(policy.measured["planned_target_close_ratios"], ["1.0"])
     self.assertIsNone(policy.measured["breakeven_after_r"])
-    plan = build_plan(match, spot)
+    plan = build_trade_plan_from_strategy_match(
+      match, plan_id="plan", setup_id="setup", thesis_id="thesis", pip_size=PIP, spot_price=spot, regime="trend", cfg=xau, executable_quote=spot,
+      max_volume=100_000_000,
+    )
     self.assertEqual([(t.target_id, t.close_ratio) for t in plan.targets], [("TP1", Decimal("1.0"))])
     self.assertIsNone(plan.management.be_after_target_id)
-    # TP1 is exactly one R from the plan's worst entry to its stop
     legs = [Decimal(str(leg.price)) for leg in plan.entry.legs]
     stop = Decimal(str(plan.stop.price))
     worst = max(legs) if plan.stop.price < min(legs) else min(legs)
-    self.assertEqual(abs(plan.targets[0].price - worst), abs(worst - stop))
-    # the entry, the stop and the risk leg are the ones the live plan has: only the exit ladder differs
-    with mock.patch.object(EffectiveInstrument, "targeting_for_strategy", return_value=None):
-      baseline_match, baseline_spot = kl_match()
-      baseline = build_plan(baseline_match, baseline_spot)
-    self.assertEqual([(t.target_id, t.close_ratio) for t in baseline.targets], [("TP1", Decimal("0.4")), ("TP2", Decimal("0.2")), ("TP3", Decimal("0.2")), ("TP4", Decimal("0.2"))])
-    self.assertEqual(baseline.management.be_after_target_id, "TP1")
+    self.assertEqual(abs(plan.targets[0].price - worst), abs(worst - stop))  # TP1 is exactly one R from the worst entry to the stop
+    baseline = build_plan(match, spot)  # the shipped config: same entry and stop, only the exit ladder differs
     self.assertEqual(baseline.entry, plan.entry)
     self.assertEqual(baseline.stop, plan.stop)
 
