@@ -59,6 +59,10 @@ from app.autotrade.active_exposure import (
   evaluate_opposite_exposure,
   load_active_exposures,
 )
+from app.autotrade.currency_exposure import (
+  admit_currency_group,
+  release_currency_slot,
+)
 from app.autotrade.group_exposure import (
   EXPOSURE_UNKNOWN,
   IncomingGroup,
@@ -2472,6 +2476,92 @@ async def _publish_trade_plan_v8(
       return None
     group_slot_held = True
 
+  # FX1: instrument-owned cap on correlated exposure ACROSS FX pairs (config/instruments.yml exposure.currency): a group is admitted only if it puts no more than N
+  # groups on the same side of any currency (BUY EURUSD = long EUR, short USD). Absent (and always for XAU): nothing changes. The slot is reserved atomically on both
+  # currency sides; a refusal gives back the per-symbol slot taken above.
+  currency_slot_held = False
+  try:
+    currency_policy = instrument_geometry.currency_exposure_policy(symbol)
+  except EffectiveInstrumentError as exc:
+    if group_slot_held:
+      await release_group_slot(client, symbol=symbol, direction=str(match_for_plan.direction), setup_id=setup_id)
+    await _release_claims()
+    await _record_v8_build_rejected(
+      client, symbol, match, "currency_exposure_policy_invalid", str(exc), {"symbol": symbol},
+    )
+    return None
+  if currency_policy is not None:
+    try:
+      currency_decision = await admit_currency_group(
+        client,
+        policy=currency_policy,
+        incoming=IncomingGroup(
+          setup_id=setup_id,
+          plan_id=plan.plan_id,
+          symbol=symbol,
+          direction=str(match_for_plan.direction).upper(),
+          strategy=str(match_for_plan.strategy),
+          thesis_id=match.thesis_id,
+          structural_id=None if plan.source_structure is None else plan.source_structure.structure_id,
+          risk_amount=None,
+        ),
+      )
+    except Exception:
+      log.exception("v8 currency exposure unavailable symbol=%s setup_id=%s", symbol, setup_id)
+      if group_slot_held:
+        await release_group_slot(client, symbol=symbol, direction=str(match_for_plan.direction), setup_id=setup_id)
+      await _release_claims()
+      await record_route_outcome(
+        client,
+        match,
+        stage="candidate_claim",
+        status="waiting",
+        reason_code=RESERVATION_UNAVAILABLE,
+        message="currency exposure could not be established; intent retained",
+        retained=True,
+        publish_status=False,
+      )
+      return None
+    if not currency_decision.allowed:
+      if group_slot_held:
+        await release_group_slot(client, symbol=symbol, direction=str(match_for_plan.direction), setup_id=setup_id)
+      await _release_claims()
+      log.info(
+        "v8 currency exposure refused symbol=%s match_id=%s reason=%s %s",
+        symbol, match.match_id[:12], currency_decision.reason_code, currency_decision.message,
+      )
+      if currency_decision.reason_code == EXPOSURE_UNKNOWN:
+        await record_route_outcome(
+          client,
+          match,
+          stage="candidate_claim",
+          status="waiting",
+          reason_code=EXPOSURE_UNKNOWN,
+          message=currency_decision.message,
+          measured=dict(currency_decision.measured),
+          retained=True,
+          publish_status=False,
+        )
+        return None
+      try:
+        await increment_metric(
+          client,
+          "currency_exposure_refused",
+          symbol=symbol,
+          dimensions={
+            "currency": str(currency_decision.measured.get("currency") or ""),
+            "direction": str(currency_decision.measured.get("currency_side") or ""),
+          },
+        )
+      except Exception:
+        log.exception("currency_exposure_refused metric not recorded symbol=%s", symbol)
+      await _record_v8_build_rejected(
+        client, symbol, match, str(currency_decision.reason_code),
+        currency_decision.message, dict(currency_decision.measured),
+      )
+      return None
+    currency_slot_held = True
+
   plan_on_stream = False
 
   async def _release_group_slot() -> None:
@@ -2479,6 +2569,10 @@ async def _publish_trade_plan_v8(
     # executor shows it: it is released only for a plan that never got there.
     if group_slot_held and not plan_on_stream:
       await release_group_slot(
+        client, symbol=symbol, direction=str(match_for_plan.direction), setup_id=setup_id,
+      )
+    if currency_slot_held and not plan_on_stream:
+      await release_currency_slot(
         client, symbol=symbol, direction=str(match_for_plan.direction), setup_id=setup_id,
       )
 

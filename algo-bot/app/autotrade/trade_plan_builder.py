@@ -153,6 +153,10 @@ def pack_risk_sizing(
   sizing = getattr(cfg, "sizing", None)
   if str(getattr(sizing, "mode", "") or "") != "risk":
     return None
+  # A pack may declare its risk rule without applying it yet (``sizing.apply: false``): the instrument keeps the owner equity table. XAU does, until the
+  # owner confirms the 6 Nov rule for it (FX1 keeps XAU byte-identical).
+  if getattr(sizing, "apply", True) is False:
+    return None
   tiers = getattr(sizing, "risk_percent_by_equity", None)
   total = _tiered_risk_percent(tiers, account_equity) if tiers else getattr(sizing, "risk_percent", None)
   if total is None or float(total) <= 0:

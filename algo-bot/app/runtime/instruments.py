@@ -256,6 +256,50 @@ def _same_direction_policy(
   )
 
 
+@dataclass(frozen=True, slots=True)
+class CurrencyExposurePolicy:
+  """Instrument-owned cap on correlated exposure ACROSS FX pairs (FX1).
+
+  A group expresses a direction in both currencies of its pair (BUY EURUSD = long EUR, short USD; SELL USDJPY = short USD, long JPY). A new group is refused
+  when it would put more than ``max_groups_per_currency_direction`` live or in-flight groups on the same side of any currency. Absent from an instrument's
+  ``exposure`` block the behaviour is unchanged (only the per-symbol limits apply). Unknown exposure fails closed.
+  """
+
+  max_groups_per_currency_direction: int
+  reservation_ttl_seconds: int = 600
+
+
+def _floor_widening_ratio(instrument_id: str, envelope: Mapping[str, Any]) -> float | None:
+  """Optional ``stop_envelope.max_floor_widening_ratio`` (FX1 part C): a number above 1, or absent."""
+  value = envelope.get("max_floor_widening_ratio")
+  if value is None:
+    return None
+  if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 1.0:
+    raise EffectiveInstrumentError(f"{instrument_id}: stop_envelope.max_floor_widening_ratio must be a number greater than 1")
+  return float(value)
+
+
+def _currency_exposure_policy(instrument_id: str, exposure: Any) -> CurrencyExposurePolicy | None:
+  """Parse ``exposure.currency``; absent = no cross-pair cap (``None``)."""
+  node = _plain(exposure) if exposure is not None else None
+  policy = node.get("currency") if isinstance(node, Mapping) else None
+  if policy is None:
+    return None
+  label = f"{instrument_id} exposure.currency"
+  if not isinstance(policy, Mapping):
+    raise EffectiveInstrumentError(f"{label} must be a mapping")
+  unknown = set(policy) - {"max_groups_per_currency_direction", "reservation_ttl_seconds"}
+  if unknown:
+    raise EffectiveInstrumentError(f"{label} has unknown keys {sorted(unknown)}")
+  cap = policy.get("max_groups_per_currency_direction")
+  if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
+    raise EffectiveInstrumentError(f"{label}.max_groups_per_currency_direction must be an integer >= 1")
+  ttl = policy.get("reservation_ttl_seconds", 600)
+  if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl < 180:
+    raise EffectiveInstrumentError(f"{label}.reservation_ttl_seconds must be an integer >= 180")
+  return CurrencyExposurePolicy(max_groups_per_currency_direction=cap, reservation_ttl_seconds=ttl)
+
+
 def _plain(value: Any) -> Any:
   if isinstance(value, ConfigNode):
     return {key: _plain(item) for key, item in value.items()}
@@ -464,6 +508,9 @@ class EffectiveInstrument:
       targeting["mode"] = InstrumentTargetMode(str(targeting["mode"]))
     self.targeting = ConfigNode(targeting)
     self.auto_entry = ConfigNode(raw.get("auto_entry", {}))
+    # FX1: the pack's sizing block (``sizing: {mode: risk, risk_percent: N}``, or ``risk_percent_by_equity``). It was in instruments.yml since 2026-11-06 but never
+    # reached the plan builder, which reads ``cfg.sizing``: every plan fell back to the owner equity table (x1.5 for FX), about 3% of equity instead of 2%.
+    self.sizing = ConfigNode(_plain(raw.get("sizing")) or {})
     manual = dict(raw.get("manual", {}) or {})
     # Keep manual ladder metadata in the native instrument declaration while
     # sharing the explicitly declared targeting ladder when a manual section
@@ -495,7 +542,10 @@ class EffectiveInstrument:
         _merge(target, {path.split(".", 1)[1]: value} if "." in path else value)
     envelope = raw.get("stop_envelope") or {}
     if envelope:
+      # FX1 part C (optional): refuse a plan whose executable stop is more than this many times the technical stop (the floor widened it too far).
+      widening = _floor_widening_ratio(symbol, envelope)
       for path, value in {
+        "execution.reaction.stop_floor_widening_max_ratio": widening,
         "execution.reaction.stop_min_pips": envelope.get("min_pips"),
         "execution.reaction.stop_max_pips": envelope.get("max_pips"),
         "execution.stops.reaction.room_floor_pips": envelope.get("min_pips"),
@@ -555,6 +605,11 @@ class EffectiveInstrument:
     )
 
   @property
+  def currency_exposure_policy(self) -> CurrencyExposurePolicy | None:
+    """Cross-pair currency exposure cap (FX1), or ``None`` (no cap)."""
+    return _currency_exposure_policy(self.instrument_id, self._exposure)
+
+  @property
   def same_direction_policy(self) -> SameDirectionPolicy | None:
     """Same-direction exposure bound, or ``None`` when the instrument declares none."""
     return _same_direction_policy(self.instrument_id, self._exposure)
@@ -589,6 +644,7 @@ def instrument_for_broker_symbol(runtime: Any, symbol: str) -> EffectiveInstrume
 
 
 __all__ = [
+  "CurrencyExposurePolicy",
   "EffectiveInstrument",
   "EffectiveInstrumentError",
   "InstrumentRollout",

@@ -184,6 +184,20 @@ unreadable runtime state or a recovering group refuses with `exposure_unknown` a
 the intent is retried. Manual `/algo` groups count as exposure but are never refused.
 Rollback: remove the `same_direction` block from the instrument packs.
 
+**Currency cap (FX1, Part B).** A forex group is a position in two currencies: a BUY GBPJPY is long GBP and short JPY,
+a SELL EURUSD is short EUR and long USD. The FX packs carry an optional
+`exposure.currency.max_groups_per_currency_direction` (shipped at 2, optional `reservation_ttl_seconds`, at least 180,
+default 600). A plan is refused with `currency_exposure_limit` when admitting it would put more than the cap of live
+groups on the same side of either of its currencies, counted across all FX pairs. Pending, submitted, partially filled
+and open groups count, and a group still counts after TP1 or break-even. Opposite sides of one currency never block each
+other (one group long USD and one short USD is fine). Unknown is never zero: an unreadable or missing snapshot of any FX
+pair, or a group whose direction is unknown, refuses (the intent is retried), and a group of unknown direction counts on
+both sides. The reservation is one Lua script over the two `autotrade:currency_exposure:{CCY}:{LONG|SHORT}` hashes, so
+concurrent admissions on pairs that share a currency admit exactly the cap. XAU has no `currency` block and is never
+touched. The refusal increments `currency_exposure_refused{currency,direction}` through `increment_metric`.
+Evidence: replay of the 196 FX groups since 4 Nov in admission order at cap 2 refused 16 with net R -5.75 (cap 1 would
+refuse 127 at -21.61R; informational). Rollback: remove the `currency` block from the FX packs. Deploy: Algo Bot only.
+
 ## Expiry and cancellation
 
 A plan past its entry validity expires in the executor; one whose opportunity is
@@ -281,6 +295,12 @@ otherwise the leg is written off as already gone.
   up). EURUSD and GBPUSD use $10 per lot per pip, USDJPY and GBPJPY their `contract.pip_value_per_lot`. Before this, FX used the equity table x 1.5 (0.18 lot at
   $1,000-$2,000), which risked 1.6-3.7% depending on the stop. XAU keeps the equity table; scalps keep their own sizing. The plan's `risk.risk_percent` and
   `sizing.mode` carry the rule, so a card shows what the executor will use.
+- **Stop floor widening (FX1 part C, JPY pack only).** Each FX pair has a stop floor (`stop_envelope.min_pips`: EURUSD 12, USDJPY 18, GBPJPY 22) that widens a tighter structural
+  stop. The optional `stop_envelope.max_floor_widening_ratio` refuses a plan whose executable stop is more than that many times the technical stop
+  (`stop_floor_widening_exceeded`, with `stop_widening_ratio`, `planned_base_stop_pips` and `planned_final_stop_pips` in the measurements). It is set to **2.0 on USDJPY and GBPJPY only**: the
+  pre-registered replay of the 115 JPY-pack trades since 4 Nov found widened >= 2x at -0.28R (n 44) against +0.31R below 1.25x (n 36). The USD majors failed the rule (their narrow trades lost
+  -0.49R, n 24) and carry no key; XAU never has one. A stop at or above the floor is never widened and is never refused. Rollback: delete the line. The replay that picked it, and what else it
+  tested and did not ship, is in the PR; `algo-bot/scripts/kl_replay.py --decide` reproduces it.
 - **Trendline** (M5 and M15, all instruments) is the one strategy traded at **one price** (TL-LIVE-2, `docs/strategies/trendline.md`): the plan is a single resting `single_limit` at the projected line (its `execution.price`), valid until the projection goes stale (`entry.expires_at`), never chased (`entry.proximity`), with no ladder, no risk leg, no zone and no card rounding. The XAU 30-pip zone minimum and the ladder rules do not apply to it, and it is not a scalp: the instrument stop envelope, targets, exposure and overlap rules are the intraday ones.
 - **Scalps** (`impulse_pullback`, `range_scalp`, `impulse_retrace`) keep their own M1 stop book and ladder; XAU-only.
   **The scalp stop is capped at 40 pips** (SCALP-R40; `auto_algo.strategies.scalping.stop`: minimum 30, maximum 40). 40 is a hard eligibility limit on the planned stop,
@@ -296,6 +316,15 @@ otherwise the leg is written off as already gone.
   whose live quote is worse than that, so the cap is re-checked against the quote at submission. Volume, the 0.5% scalp risk setting, targets (1R/2R), break-even,
   the manual and auto ladders and Tricky Leg are unchanged; a lower cap can only lower the largest stop a scalp can carry. A stop order can still fill beyond its price in a market
   gap: this is a cap on the planned stop, not a guaranteed maximum realized loss.
+
+  **FX1 (20 Nov 2026): the two rules above were not in force.** `EffectiveInstrument` had no `sizing` attribute, so the planner (`pack_risk_sizing`) never saw any pack's `sizing`
+  block and every plan carried `sizing.mode: equity_table`: the executor then used the table lots x `risk_multiplier` 1.5 (0.18 lots at $1,000-$2,000, 0.15 at $600-$1,000), which
+  is a share of equity that RISES as the account falls (production FX medians since 4 Nov: $20-26 per trade, 2.8-3.7% of a $708 account, against the 2% rule). The instrument now
+  exposes `sizing`, so FX plans carry `sizing.mode: risk` and `risk.risk_percent: 2.0` and the executor sizes `equity x 2% / (stop pips x pip value per lot)` floored to the broker
+  step: realised risk is 2% and never above it (at most one lot step below). **XAU declares its rule with `sizing.apply: false`**: it keeps the owner equity table (byte-identical)
+  until the owner confirms the 6 Nov rule for it; set `apply: true` (or delete the line) to enable it. The pip value of a JPY-quoted pair (USDJPY, GBPJPY) is derived by the executor
+  from the live USDJPY quote (pip size x contract size / USDJPY; the quote must be under 5 minutes old and between 50 and 400), with `contract.pip_value_per_lot` as the fallback only
+  (GBPJPY's 7.0 was set at USDJPY 143 and was 11% too high; it is now 6.28).
 
 ## Operator controls
 

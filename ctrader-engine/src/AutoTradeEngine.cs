@@ -118,10 +118,28 @@ public sealed class AutoTradeEngine(
     {
       return (
         runtime.Execution.PipSize,
-        runtime.Execution.EffectivePipValuePerLot
+        LiveJpyPipValue(canonical, runtime.Execution.PipSize, runtime.Execution.ContractSize)
+          ?? runtime.Execution.EffectivePipValuePerLot
       );
     }
     return (options.PipSize, options.PipValuePerLot);
+  }
+
+  /// <summary>
+  /// FX1: a JPY-quoted pair's pip value per lot from the live USDJPY quote (see <see cref="PipValue"/>); null (the configured value applies) for any other
+  /// pair, when no fresh USDJPY quote has been seen, or when the quote is not a usable rate.
+  /// </summary>
+  private decimal? LiveJpyPipValue(string canonical, decimal pipSize, decimal contractSize)
+  {
+    if (!PipValue.IsJpyQuoted(canonical) || !_lastSpotBySymbol.TryGetValue("USDJPY", out var usdJpy))
+    {
+      return null;
+    }
+    if (usdJpy.Timestamp > 0 && _clock().ToUnixTimeSeconds() - usdJpy.Timestamp > PipValue.MaxQuoteAgeSeconds)
+    {
+      return null;
+    }
+    return PipValue.JpyQuotedUsdPerLot(pipSize, contractSize, usdJpy.Bid, usdJpy.Ask);
   }
 
   private IEnumerable<(SymbolInfo Symbol, SpotPrice? Quote)> TradePlanPollTargets(

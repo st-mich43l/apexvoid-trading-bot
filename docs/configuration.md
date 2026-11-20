@@ -78,6 +78,20 @@ forbidden with `allowed: false`; a config that breaks this fails to load in Algo
 A missing or invalid policy fails closed in both Algo Bot and cTrader Engine.
 Manual `/algo` plans are exempt (owner instruction).
 
+## Forex currency exposure and sizing (FX1)
+
+All keys below are optional; a pack without them behaves as before.
+
+| Key | Meaning |
+|---|---|
+| `exposure.currency.max_groups_per_currency_direction` | integer >= 1. The most live groups that may lean the same way on one currency across all FX pairs (`currency_exposure_limit`). Shipped at 2 in both FX packs; absent for XAU. |
+| `exposure.currency.reservation_ttl_seconds` | integer >= 180, default 600. Lifetime of the in-flight reservation that closes the race between admission and the executor snapshot. |
+| `stop_envelope.max_floor_widening_ratio` | number > 1, optional (FX1 part C). Refuses a plan whose executable stop exceeds this multiple of the technical stop (`stop_floor_widening_exceeded`). 2.0 on USDJPY and GBPJPY, absent elsewhere ([execution](execution.md#entry-stop-and-targets)). |
+| `sizing.apply` | boolean, default true. `false` keeps the pack's declared `sizing` rule but stops the planner from applying it (the XAU pack: it keeps the equity table). |
+| `contract.pip_value_per_lot` (JPY-quoted pairs) | fallback only: the executor derives the live value from the USDJPY quote (max age 300 s) and uses this number only when no usable quote exists. |
+
+Any other key under `exposure.currency` fails the load in Algo Bot ([execution](execution.md#exposure)).
+
 ## Execution containment
 
 An instrument can observe a strategy without trading it:
