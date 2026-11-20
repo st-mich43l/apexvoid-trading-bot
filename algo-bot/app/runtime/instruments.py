@@ -464,6 +464,9 @@ class EffectiveInstrument:
       targeting["mode"] = InstrumentTargetMode(str(targeting["mode"]))
     self.targeting = ConfigNode(targeting)
     self.auto_entry = ConfigNode(raw.get("auto_entry", {}))
+    # FX1: the pack's sizing block (``sizing: {mode: risk, risk_percent: N}``, or ``risk_percent_by_equity``). It was in instruments.yml since 2026-11-06 but never
+    # reached the plan builder, which reads ``cfg.sizing``: every plan fell back to the owner equity table (x1.5 for FX), about 3% of equity instead of 2%.
+    self.sizing = ConfigNode(_plain(raw.get("sizing")) or {})
     manual = dict(raw.get("manual", {}) or {})
     # Keep manual ladder metadata in the native instrument declaration while
     # sharing the explicitly declared targeting ladder when a manual section

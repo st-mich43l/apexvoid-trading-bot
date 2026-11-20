@@ -297,6 +297,15 @@ otherwise the leg is written off as already gone.
   the manual and auto ladders and Tricky Leg are unchanged; a lower cap can only lower the largest stop a scalp can carry. A stop order can still fill beyond its price in a market
   gap: this is a cap on the planned stop, not a guaranteed maximum realized loss.
 
+  **FX1 (20 Nov 2026): the two rules above were not in force.** `EffectiveInstrument` had no `sizing` attribute, so the planner (`pack_risk_sizing`) never saw any pack's `sizing`
+  block and every plan carried `sizing.mode: equity_table`: the executor then used the table lots x `risk_multiplier` 1.5 (0.18 lots at $1,000-$2,000, 0.15 at $600-$1,000), which
+  is a share of equity that RISES as the account falls (production FX medians since 4 Nov: $20-26 per trade, 2.8-3.7% of a $708 account, against the 2% rule). The instrument now
+  exposes `sizing`, so FX plans carry `sizing.mode: risk` and `risk.risk_percent: 2.0` and the executor sizes `equity x 2% / (stop pips x pip value per lot)` floored to the broker
+  step: realised risk is 2% and never above it (at most one lot step below). **XAU declares its rule with `sizing.apply: false`**: it keeps the owner equity table (byte-identical)
+  until the owner confirms the 6 Nov rule for it; set `apply: true` (or delete the line) to enable it. The pip value of a JPY-quoted pair (USDJPY, GBPJPY) is derived by the executor
+  from the live USDJPY quote (pip size x contract size / USDJPY; the quote must be under 5 minutes old and between 50 and 400), with `contract.pip_value_per_lot` as the fallback only
+  (GBPJPY's 7.0 was set at USDJPY 143 and was 11% too high; it is now 6.28).
+
 ## Operator controls
 
 `/trade_close`, `/trade_close_auto`, `/trade_sl`, `/auto_close_all` and

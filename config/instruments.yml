@@ -32,7 +32,7 @@ instrument_packs:
       mode: single_best
     # Owner decision 2026-11-06: FX risks 2% of equity per trade. Lots = equity x risk_percent / (stop pips x pip value per lot), floored to the broker step,
     # instead of the flat equity table x 1.5 (0.18 lot at $1,000-$2,000, which was 1.7-3.7% depending on the stop). The stop is measured from the worst entry
-    # price to the plan's stop. XAU keeps the equity table (no `sizing` leaf).
+    # price to the plan's stop. (FX1: the planner now reads this block; before that every FX plan used the equity table x 1.5.) XAU declares its own, not applied.
     sizing:
       mode: risk
       risk_percent: 2.0
@@ -197,6 +197,9 @@ instrument_packs:
     # the broker step; a volume too small to split across both legs collapses to one entry (VolumePlanner.SplitEntryVolume).
     sizing:
       mode: risk
+      # FX1: declared but NOT applied: XAU keeps the owner equity table (byte-identical) until the owner confirms the 6 Nov rule for it. Until FX1 the planner never
+      # read any pack's sizing, so this rule has never been in force either; set apply: true (or delete this line) to enable it.
+      apply: false
       risk_percent_by_equity:
         - {equity: 500, risk_percent: 5.0}
         - {equity: 5000, risk_percent: 5.0}
@@ -404,7 +407,9 @@ instruments:
     broker_symbol: GBPJPY
     canonical_symbol: GBPJPY
     contract:
-      pip_value_per_lot: 7.0
+      # Fallback only (FX1): the executor derives a JPY-quoted pair's pip value from the live USDJPY quote (1000 / rate). 7.0 was 1000 / 143 and is 11% too high at 159
+      # (risk-sized lots divide by it, so it sized trades too small); 6.28 is 1000 / 159.2.
+      pip_value_per_lot: 6.28
     # Tokyo/London cross: Japanese open through London morning (0-11 UTC),
     # no NY dump window. Prefer 2R; constrained clean room may close at 1R.
     # 2026 dig: ATR(14) ~180 pips/day vs EURUSD's ~70, and BoE+BoJ events
@@ -469,8 +474,8 @@ instruments:
     canonical_symbol: USDJPY
     contract:
       # 1000 JPY / ~159.47 USDJPY (spot 2026-08-17) -- same
-      # 1000/rate convention as GBPJPY's pip_value_per_lot. Drifts with the
-      # rate; revisit if USDJPY moves far from this level.
+      # 1000/rate convention as GBPJPY's pip_value_per_lot. FX1: a fallback only;
+      # the executor derives it from the live USDJPY quote.
       pip_value_per_lot: 6.27
     overrides:
       execution:
