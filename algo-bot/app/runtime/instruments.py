@@ -269,6 +269,16 @@ class CurrencyExposurePolicy:
   reservation_ttl_seconds: int = 600
 
 
+def _floor_widening_ratio(instrument_id: str, envelope: Mapping[str, Any]) -> float | None:
+  """Optional ``stop_envelope.max_floor_widening_ratio`` (FX1 part C): a number above 1, or absent."""
+  value = envelope.get("max_floor_widening_ratio")
+  if value is None:
+    return None
+  if isinstance(value, bool) or not isinstance(value, (int, float)) or not value > 1.0:
+    raise EffectiveInstrumentError(f"{instrument_id}: stop_envelope.max_floor_widening_ratio must be a number greater than 1")
+  return float(value)
+
+
 def _currency_exposure_policy(instrument_id: str, exposure: Any) -> CurrencyExposurePolicy | None:
   """Parse ``exposure.currency``; absent = no cross-pair cap (``None``)."""
   node = _plain(exposure) if exposure is not None else None
@@ -532,7 +542,10 @@ class EffectiveInstrument:
         _merge(target, {path.split(".", 1)[1]: value} if "." in path else value)
     envelope = raw.get("stop_envelope") or {}
     if envelope:
+      # FX1 part C (optional): refuse a plan whose executable stop is more than this many times the technical stop (the floor widened it too far).
+      widening = _floor_widening_ratio(symbol, envelope)
       for path, value in {
+        "execution.reaction.stop_floor_widening_max_ratio": widening,
         "execution.reaction.stop_min_pips": envelope.get("min_pips"),
         "execution.reaction.stop_max_pips": envelope.get("max_pips"),
         "execution.stops.reaction.room_floor_pips": envelope.get("min_pips"),

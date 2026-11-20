@@ -460,6 +460,9 @@ instruments:
       # (the stop stays where structure puts it); a cut band narrower than this is refused.
       deep_entry_minimum_width_pips: 0.5
       sl_distance: 0.35
+      # FX1 part C (docs/execution.md "Stop floor widening"): refuse a plan whose executable stop is more than 2x the technical stop (the floor widened it). JPY pack
+      # replay since 4 Nov: widened >= 2x -0.28R (n 44) against +0.31R below 1.25x (n 36). USD majors failed the rule and have no such key. Delete this line to disable.
+      max_floor_widening_ratio: 2.0
     activation:
       max_spread_pips: 3
     price_scale:
@@ -502,6 +505,9 @@ instruments:
       # (the stop stays where structure puts it); a cut band narrower than this is refused.
       deep_entry_minimum_width_pips: 0.5
       sl_distance: 0.28
+      # FX1 part C (docs/execution.md "Stop floor widening"): refuse a plan whose executable stop is more than 2x the technical stop (the floor widened it). JPY pack
+      # replay since 4 Nov: widened >= 2x -0.28R (n 44) against +0.31R below 1.25x (n 36). USD majors failed the rule and have no such key. Delete this line to disable.
+      max_floor_widening_ratio: 2.0
     activation:
       max_spread_pips: 1
     price_scale:

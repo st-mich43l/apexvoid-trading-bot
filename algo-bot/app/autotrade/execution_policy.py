@@ -1036,6 +1036,20 @@ def evaluate_execution_policy(
         "reaction_stop_max_pips": reaction_cap,
       }
       stop_plan = None
+  if stop_plan is not None:
+    # FX1 part C (optional, JPY pack): the instrument floor may widen a tight structural stop, but not beyond ``max_floor_widening_ratio`` times the
+    # technical stop. Replay of the 115 JPY-pack trades since 4 Nov: widened >= 2x -0.28R (n 44) against +0.31R below 1.25x (n 36).
+    widening_cap = getattr(getattr(execution, "reaction", None), "stop_floor_widening_max_ratio", None)
+    base_pips = float(stop_plan.base_stop_pips)
+    if widening_cap is not None and base_pips > 0 and float(stop_plan.final_stop_pips) / base_pips > float(widening_cap) + 1e-9:
+      stop_plan_error = "stop_floor_widening_exceeded"
+      stop_plan_error_measured = {
+        "stop_widening_ratio": round(float(stop_plan.final_stop_pips) / base_pips, 4),
+        "stop_floor_widening_max_ratio": float(widening_cap),
+        "planned_base_stop_pips": base_pips,
+        "planned_final_stop_pips": float(stop_plan.final_stop_pips),
+      }
+      stop_plan = None
   if stop_plan is not None and scalp_hard_cap is not None:
     # Whatever path planned the stop, a scalp's final stop is measured from every planned executable leg (the worst
     # entry included) to the absolute SL that will be sent, and is refused past the cap: never compressed to fit.
@@ -1193,6 +1207,7 @@ def evaluate_execution_policy(
       "stop_below_go_invalidation_envelope",
       "stop_exceeds_go_invalidation_envelope",
       "scalp_stop_exceeds_hard_cap",
+      "stop_floor_widening_exceeded",
       "go_invalidation_not_beyond_buy_entries",
       "go_invalidation_not_beyond_sell_entries",
       "stop_inside_opposing_zone",

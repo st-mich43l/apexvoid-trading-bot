@@ -295,6 +295,12 @@ otherwise the leg is written off as already gone.
   up). EURUSD and GBPUSD use $10 per lot per pip, USDJPY and GBPJPY their `contract.pip_value_per_lot`. Before this, FX used the equity table x 1.5 (0.18 lot at
   $1,000-$2,000), which risked 1.6-3.7% depending on the stop. XAU keeps the equity table; scalps keep their own sizing. The plan's `risk.risk_percent` and
   `sizing.mode` carry the rule, so a card shows what the executor will use.
+- **Stop floor widening (FX1 part C, JPY pack only).** Each FX pair has a stop floor (`stop_envelope.min_pips`: EURUSD 12, USDJPY 18, GBPJPY 22) that widens a tighter structural
+  stop. The optional `stop_envelope.max_floor_widening_ratio` refuses a plan whose executable stop is more than that many times the technical stop
+  (`stop_floor_widening_exceeded`, with `stop_widening_ratio`, `planned_base_stop_pips` and `planned_final_stop_pips` in the measurements). It is set to **2.0 on USDJPY and GBPJPY only**: the
+  pre-registered replay of the 115 JPY-pack trades since 4 Nov found widened >= 2x at -0.28R (n 44) against +0.31R below 1.25x (n 36). The USD majors failed the rule (their narrow trades lost
+  -0.49R, n 24) and carry no key; XAU never has one. A stop at or above the floor is never widened and is never refused. Rollback: delete the line. The replay that picked it, and what else it
+  tested and did not ship, is in the PR; `algo-bot/scripts/kl_replay.py --decide` reproduces it.
 - **Trendline** (M5 and M15, all instruments) is the one strategy traded at **one price** (TL-LIVE-2, `docs/strategies/trendline.md`): the plan is a single resting `single_limit` at the projected line (its `execution.price`), valid until the projection goes stale (`entry.expires_at`), never chased (`entry.proximity`), with no ladder, no risk leg, no zone and no card rounding. The XAU 30-pip zone minimum and the ladder rules do not apply to it, and it is not a scalp: the instrument stop envelope, targets, exposure and overlap rules are the intraday ones.
 - **Scalps** (`impulse_pullback`, `range_scalp`, `impulse_retrace`) keep their own M1 stop book and ladder; XAU-only.
   **The scalp stop is capped at 40 pips** (SCALP-R40; `auto_algo.strategies.scalping.stop`: minimum 30, maximum 40). 40 is a hard eligibility limit on the planned stop,
