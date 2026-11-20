@@ -184,6 +184,20 @@ unreadable runtime state or a recovering group refuses with `exposure_unknown` a
 the intent is retried. Manual `/algo` groups count as exposure but are never refused.
 Rollback: remove the `same_direction` block from the instrument packs.
 
+**Currency cap (FX1, Part B).** A forex group is a position in two currencies: a BUY GBPJPY is long GBP and short JPY,
+a SELL EURUSD is short EUR and long USD. The FX packs carry an optional
+`exposure.currency.max_groups_per_currency_direction` (shipped at 2, optional `reservation_ttl_seconds`, at least 180,
+default 600). A plan is refused with `currency_exposure_limit` when admitting it would put more than the cap of live
+groups on the same side of either of its currencies, counted across all FX pairs. Pending, submitted, partially filled
+and open groups count, and a group still counts after TP1 or break-even. Opposite sides of one currency never block each
+other (one group long USD and one short USD is fine). Unknown is never zero: an unreadable or missing snapshot of any FX
+pair, or a group whose direction is unknown, refuses (the intent is retried), and a group of unknown direction counts on
+both sides. The reservation is one Lua script over the two `autotrade:currency_exposure:{CCY}:{LONG|SHORT}` hashes, so
+concurrent admissions on pairs that share a currency admit exactly the cap. XAU has no `currency` block and is never
+touched. The refusal increments `currency_exposure_refused{currency,direction}` through `increment_metric`.
+Evidence: replay of the 196 FX groups since 4 Nov in admission order at cap 2 refused 16 with net R -5.75 (cap 1 would
+refuse 127 at -21.61R; informational). Rollback: remove the `currency` block from the FX packs. Deploy: Algo Bot only.
+
 ## Expiry and cancellation
 
 A plan past its entry validity expires in the executor; one whose opportunity is

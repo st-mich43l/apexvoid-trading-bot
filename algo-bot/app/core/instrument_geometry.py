@@ -115,6 +115,11 @@ def opposite_position_policy(symbol: str):
   return _effective(symbol).opposite_position
 
 
+def currency_exposure_policy(symbol: str):
+  """Instrument-owned cross-pair currency exposure cap (FX1), or ``None`` (no cap)."""
+  return _effective(symbol).currency_exposure_policy
+
+
 def same_direction_policy(symbol: str):
   """Instrument-owned same-direction exposure bound, or ``None`` (legacy)."""
   return _effective(symbol).same_direction_policy

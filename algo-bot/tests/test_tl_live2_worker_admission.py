@@ -65,7 +65,9 @@ class WorkerAdmissionTests(unittest.IsolatedAsyncioTestCase):
     await GoOpportunityPolicy._store_match(client, match, created + 30)
     await GoOpportunityPolicy._advance_setup(client, match)
     await client.set(f"analysis:zone_book:{symbol}", json.dumps({"symbol": symbol, "generated_at": clock, "barriers": []}))
-    await client.set(f"auto_trade:executor_snapshot:{symbol}", json.dumps({"account_equity": 10000.0, "updated_at": time.time(), "group_ids": [], "ready": True}))
+    # FX1: the cross-pair currency cap reads every FX pair's executor snapshot (production refreshes all of them every few seconds).
+    for pair in {symbol, "EURUSD", "GBPUSD", "USDJPY", "GBPJPY"}:
+      await client.set(f"auto_trade:executor_snapshot:{pair}", json.dumps({"account_equity": 10000.0, "updated_at": time.time(), "group_ids": [], "ready": True}))
     spot = AutoTradeSpot(price=(bid + ask) / 2, ts=clock, fresh=True, bid=bid, ask=ask)
     plan_id = await _publish_trade_plan_v8(client, symbol, spot, match, regime=None, frames=None)
     stream = await client.xrange("execution:trade_plans")
@@ -110,6 +112,32 @@ class WorkerAdmissionTests(unittest.IsolatedAsyncioTestCase):
     self.assertIsNotNone(first)
     self.assertEqual(again, first)
     self.assertEqual(len(plans_again), 1)
+
+  # FX1: the cross-pair currency cap (exposure.currency, shipped at 2) through the real worker path. SELL EURUSD is long USD.
+  async def seeded_usd_long(self, others):
+    client = fake_aioredis.FakeRedis(decode_responses=True)
+    now = int(time.time())
+    for i, symbol in enumerate(others):
+      await client.hset("autotrade:currency_exposure:USD:LONG", f"other{i}", f"{now + 600}|{now}|v8:other{i}|{symbol}")
+    return client
+
+  async def test_a_third_long_usd_plan_is_refused_and_gives_back_its_symbol_slot(self):
+    client = await self.seeded_usd_long(("GBPUSD", "USDJPY"))
+    plan_id, plans, _, client, _ = await self.publish(EUR_M15_SELL, 1.11930, 1.11932, client=client)
+    self.assertIsNone(plan_id)
+    self.assertEqual(plans, [])
+    self.assertEqual(await client.hgetall("autotrade:group_exposure:EURUSD:SELL"), {})  # the per-symbol reservation was released
+    self.assertEqual(await client.hget("auto_trade:metrics:EURUSD", "currency_exposure_refused"), "1")
+    self.assertEqual(await client.hget("auto_trade:metrics:EURUSD:currency_exposure_refused", "currency=USD:direction=LONG"), "1")
+    self.assertEqual(len(await client.hgetall("autotrade:currency_exposure:USD:LONG")), 2)  # nothing new reserved
+
+  async def test_the_second_long_usd_plan_is_published_and_holds_both_currency_sides(self):
+    client = await self.seeded_usd_long(("GBPUSD",))
+    plan_id, plans, _, client, _ = await self.publish(EUR_M15_SELL, 1.11930, 1.11932, client=client)
+    self.assertIsNotNone(plan_id)
+    self.assertEqual(len(plans), 1)
+    self.assertEqual(len(await client.hgetall("autotrade:currency_exposure:USD:LONG")), 2)  # the other plan and this one
+    self.assertEqual(len(await client.hgetall("autotrade:currency_exposure:EUR:SHORT")), 1)
 
 
 if __name__ == "__main__":

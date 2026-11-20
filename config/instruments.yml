@@ -27,6 +27,11 @@ instrument_packs:
       # never stacks. Unknown exposure fails closed (docs/execution.md (exposure)).
       same_direction:
         max_groups: 1
+      # FX1 (docs/execution.md "Exposure"): a group expresses its direction in BOTH currencies of its pair (BUY EURUSD = long EUR, short USD), and no more than 2
+      # live or in-flight groups, across all FX pairs, may sit on the same side of any currency. Replay of the 196 FX groups since 4 Nov: 16 refused, their net R -5.75
+      # (decision rule: refused net R <= 0 -> enabled). Delete this block to disable.
+      currency:
+        max_groups_per_currency_direction: 2
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best
@@ -110,6 +115,11 @@ instrument_packs:
       # never stacks. Unknown exposure fails closed (docs/execution.md (exposure)).
       same_direction:
         max_groups: 1
+      # FX1 (docs/execution.md "Exposure"): a group expresses its direction in BOTH currencies of its pair (BUY EURUSD = long EUR, short USD), and no more than 2
+      # live or in-flight groups, across all FX pairs, may sit on the same side of any currency. Replay of the 196 FX groups since 4 Nov: 16 refused, their net R -5.75
+      # (decision rule: refused net R <= 0 -> enabled). Delete this block to disable.
+      currency:
+        max_groups_per_currency_direction: 2
     # FX is one precise entry, never XAU's shallow/deep scale-in ladder.
     auto_entry:
       mode: single_best

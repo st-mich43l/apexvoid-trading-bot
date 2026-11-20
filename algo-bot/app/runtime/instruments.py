@@ -256,6 +256,40 @@ def _same_direction_policy(
   )
 
 
+@dataclass(frozen=True, slots=True)
+class CurrencyExposurePolicy:
+  """Instrument-owned cap on correlated exposure ACROSS FX pairs (FX1).
+
+  A group expresses a direction in both currencies of its pair (BUY EURUSD = long EUR, short USD; SELL USDJPY = short USD, long JPY). A new group is refused
+  when it would put more than ``max_groups_per_currency_direction`` live or in-flight groups on the same side of any currency. Absent from an instrument's
+  ``exposure`` block the behaviour is unchanged (only the per-symbol limits apply). Unknown exposure fails closed.
+  """
+
+  max_groups_per_currency_direction: int
+  reservation_ttl_seconds: int = 600
+
+
+def _currency_exposure_policy(instrument_id: str, exposure: Any) -> CurrencyExposurePolicy | None:
+  """Parse ``exposure.currency``; absent = no cross-pair cap (``None``)."""
+  node = _plain(exposure) if exposure is not None else None
+  policy = node.get("currency") if isinstance(node, Mapping) else None
+  if policy is None:
+    return None
+  label = f"{instrument_id} exposure.currency"
+  if not isinstance(policy, Mapping):
+    raise EffectiveInstrumentError(f"{label} must be a mapping")
+  unknown = set(policy) - {"max_groups_per_currency_direction", "reservation_ttl_seconds"}
+  if unknown:
+    raise EffectiveInstrumentError(f"{label} has unknown keys {sorted(unknown)}")
+  cap = policy.get("max_groups_per_currency_direction")
+  if isinstance(cap, bool) or not isinstance(cap, int) or cap < 1:
+    raise EffectiveInstrumentError(f"{label}.max_groups_per_currency_direction must be an integer >= 1")
+  ttl = policy.get("reservation_ttl_seconds", 600)
+  if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl < 180:
+    raise EffectiveInstrumentError(f"{label}.reservation_ttl_seconds must be an integer >= 180")
+  return CurrencyExposurePolicy(max_groups_per_currency_direction=cap, reservation_ttl_seconds=ttl)
+
+
 def _plain(value: Any) -> Any:
   if isinstance(value, ConfigNode):
     return {key: _plain(item) for key, item in value.items()}
@@ -558,6 +592,11 @@ class EffectiveInstrument:
     )
 
   @property
+  def currency_exposure_policy(self) -> CurrencyExposurePolicy | None:
+    """Cross-pair currency exposure cap (FX1), or ``None`` (no cap)."""
+    return _currency_exposure_policy(self.instrument_id, self._exposure)
+
+  @property
   def same_direction_policy(self) -> SameDirectionPolicy | None:
     """Same-direction exposure bound, or ``None`` when the instrument declares none."""
     return _same_direction_policy(self.instrument_id, self._exposure)
@@ -592,6 +631,7 @@ def instrument_for_broker_symbol(runtime: Any, symbol: str) -> EffectiveInstrume
 
 
 __all__ = [
+  "CurrencyExposurePolicy",
   "EffectiveInstrument",
   "EffectiveInstrumentError",
   "InstrumentRollout",
