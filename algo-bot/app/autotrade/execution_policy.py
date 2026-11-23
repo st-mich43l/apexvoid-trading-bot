@@ -19,7 +19,7 @@ from app.analysis_client.provenance import (
 )
 from app.autotrade.go_containment import STRUCTURE_TIMEFRAME_TAG
 from app.autotrade.execution_route import SCALP_MICRO_CLIPS, resolve_execution_route_plan, resolve_single_price_route
-from app.autotrade.xau_ladder import XAU_DIGITS, ladder_settings, round_price as round_xau_price
+from app.autotrade.xau_ladder import LADDER_RATIOS, XAU_DIGITS, ladder_settings, round_price as round_xau_price
 from app.autotrade.protective_stop import (
   ProtectiveStopError,
   approximate_structural_stop_price,
@@ -495,6 +495,17 @@ def _emit_metric(sink: Callable[[str, str, dict[str, str]], None] | None, name: 
     sink(name, symbol, dict(dimensions))
   except Exception:  # noqa: BLE001 - telemetry must not block admission
     log.exception("execution policy metric failed name=%s symbol=%s", name, symbol)
+
+
+def _ladder_ratio_profile(*, symbol: str, strategy: str, ratios: Any, settings: Any) -> str:
+  """``auto_vc`` when this plan is a non-scalp Auto XAU ladder split by ``execution.xau_ladder.auto_ratios`` (X3), else ``default``."""
+  table = settings.auto_ratio_table()
+  if not table or symbol.upper() not in {"XAU", "XAUUSD"} or is_scalp_strategy(strategy):
+    return "default"
+  planned = tuple(round(float(r), 6) for r in (ratios or ()))
+  if len(planned) not in table or planned == tuple(round(float(r), 6) for r in LADDER_RATIOS[len(planned)]):
+    return "default"
+  return "auto_vc" if planned == tuple(round(float(r), 6) for r in table[len(planned)]) else "default"
 
 
 def evaluate_execution_policy(
@@ -1160,6 +1171,10 @@ def evaluate_execution_policy(
     "planned_leg_volume_ratios": [
       round(float(ratio), 6) for ratio in route_plan.planned_leg_volume_ratios
     ],
+    "planned_ladder_ratio_profile": _ladder_ratio_profile(
+      symbol=symbol, strategy=str(getattr(match, "strategy", "") or ""),
+      ratios=route_plan.planned_leg_volume_ratios, settings=ladder_settings(instrument_cfg),
+    ),
     "routing_reason": route_plan.routing_reason,
     "target_model": target_model,
     "target_reference_price": str(

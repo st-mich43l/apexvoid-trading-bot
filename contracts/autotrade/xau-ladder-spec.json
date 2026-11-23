@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by the manual /algo plan builder (manual_plan.py), the Auto Algo XAU entry policy (execution_route.py) and the Python calculator (xau_ladder.py). The RISK leg belongs to the planner: risk_leg.py declares it in entry.risk_leg (price and lots from these cases) and the executor (TradePlanRuntime.cs) places exactly the declared leg; its C# parity test pins the lots-to-volume conversion. It applies to XAU multi-leg plans regardless of technical-source provenance. Since 2026-11-06 the XAU entry ladder of both Auto Algo (execution_route.py) and Manual /algo (manual_plan.py) is the 60/20/20 three-price ladder one price unit apart (xau_ladder.price_ladder); ZL-1 (ladder_price_cases below): the three prices are distinct, one price unit apart from the shallow edge (the live quote inside the zone), every neighbouring pair at least min_leg_spacing_pips (10 pips = 1.00) apart judged after rounding, and a zone that cannot hold two such prices has no ladder (the Auto path refuses the plan, ladder_geometry_unavailable); this file's 0.8/0.2 shallow/deep cases remain the legacy two-leg geometry (kept for non-XAU manual ladders) and the risk-leg contract.",
+  "description": "The single reviewed XAU shallow/deep entry-ladder and risk-leg specification, with hand-computed cases. Held identical by the manual /algo plan builder (manual_plan.py), the Auto Algo XAU entry policy (execution_route.py) and the Python calculator (xau_ladder.py). The RISK leg belongs to the planner: risk_leg.py declares it in entry.risk_leg (price and lots from these cases) and the executor (TradePlanRuntime.cs) places exactly the declared leg; its C# parity test pins the lots-to-volume conversion. It applies to XAU multi-leg plans regardless of technical-source provenance. Since 2026-11-06 the XAU entry ladder of both Auto Algo (execution_route.py) and Manual /algo (manual_plan.py) is the 60/20/20 three-price ladder one price unit apart (xau_ladder.price_ladder); ZL-1 (ladder_price_cases below): the three prices are distinct, one price unit apart from the shallow edge (the live quote inside the zone), every neighbouring pair at least min_leg_spacing_pips (10 pips = 1.00) apart judged after rounding, and a zone that cannot hold two such prices has no ladder (the Auto path refuses the plan, ladder_geometry_unavailable); this file's 0.8/0.2 shallow/deep cases remain the legacy two-leg geometry (kept for non-XAU manual ladders) and the risk-leg contract. X3: the AUTO Algo non-scalp ladder splits its volume by auto_ratios (20/20/60 over three prices, 40/60 over two: Vc of PR-X0, owner 23 Nov 2026) while Manual /algo, scalps and FX keep 60/20/20 and 60/40; prices and spacing are identical in both, so auto_ladder_price_cases repeats the prices of ladder_price_cases with the Auto ratios.",
   "instrument": {
     "symbol": "XAU",
     "pip_size": "0.1",
@@ -278,6 +278,151 @@
         "0.6",
         "0.2",
         "0.2"
+      ]
+    }
+  ],
+  "auto_ratios": {
+    "3": [
+      "0.2",
+      "0.2",
+      "0.6"
+    ],
+    "2": [
+      "0.4",
+      "0.6"
+    ]
+  },
+  "auto_ladder_price_cases": [
+    {
+      "name": "auto_buy_three_prices_20_20_60",
+      "direction": "BUY",
+      "start": "4303.00",
+      "far": "4300.00",
+      "prices": [
+        "4303.00",
+        "4302.00",
+        "4301.00"
+      ],
+      "ratios": [
+        "0.2",
+        "0.2",
+        "0.6"
+      ]
+    },
+    {
+      "name": "auto_sell_three_prices_20_20_60",
+      "direction": "SELL",
+      "start": "4300.00",
+      "far": "4303.00",
+      "prices": [
+        "4300.00",
+        "4301.00",
+        "4302.00"
+      ],
+      "ratios": [
+        "0.2",
+        "0.2",
+        "0.6"
+      ]
+    },
+    {
+      "name": "auto_buy_two_prices_40_60",
+      "direction": "BUY",
+      "start": "4303.00",
+      "far": "4301.50",
+      "prices": [
+        "4303.00",
+        "4302.00"
+      ],
+      "ratios": [
+        "0.4",
+        "0.6"
+      ]
+    },
+    {
+      "name": "auto_sell_two_prices_40_60",
+      "direction": "SELL",
+      "start": "4300.00",
+      "far": "4301.50",
+      "prices": [
+        "4300.00",
+        "4301.00"
+      ],
+      "ratios": [
+        "0.4",
+        "0.6"
+      ]
+    },
+    {
+      "name": "auto_half_a_price_unit_of_depth_has_no_ladder",
+      "direction": "BUY",
+      "start": "4303.00",
+      "far": "4302.50",
+      "unavailable": true
+    }
+  ],
+  "auto_volume_split_cases": [
+    {
+      "description": "executor SplitEntryVolume, XAU 0.01 lot step: the rounding remainder goes to the LAST (deepest, largest) slice",
+      "lots": "0.10",
+      "ratios": [
+        "0.2",
+        "0.2",
+        "0.6"
+      ],
+      "slices_lots": [
+        "0.02",
+        "0.02",
+        "0.06"
+      ]
+    },
+    {
+      "lots": "0.07",
+      "ratios": [
+        "0.2",
+        "0.2",
+        "0.6"
+      ],
+      "slices_lots": [
+        "0.01",
+        "0.01",
+        "0.05"
+      ]
+    },
+    {
+      "description": "the broker minimum wins over the ratio",
+      "lots": "0.03",
+      "ratios": [
+        "0.2",
+        "0.2",
+        "0.6"
+      ],
+      "slices_lots": [
+        "0.01",
+        "0.01",
+        "0.01"
+      ]
+    },
+    {
+      "lots": "0.10",
+      "ratios": [
+        "0.4",
+        "0.6"
+      ],
+      "slices_lots": [
+        "0.04",
+        "0.06"
+      ]
+    },
+    {
+      "lots": "0.02",
+      "ratios": [
+        "0.4",
+        "0.6"
+      ],
+      "slices_lots": [
+        "0.01",
+        "0.01"
       ]
     }
   ]
