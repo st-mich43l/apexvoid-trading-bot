@@ -203,6 +203,22 @@ is a preference note, and volume does not depend on the tier
 strategy's documented `score_*` dimensions in [0, 1]; replays found no positive
 separation of outcome by it, which is why it does not rank.
 
+## Setup timeframes (owner rule, 23 Nov 2026)
+
+Every strategy looks for its setup on **M5, M15 and H1**; **M1 is execution only**: it may time a fill after a setup is published, it never finds or confirms
+one. Each strategy declares the frames in its own block (`structure_timeframes`) and owns what it does with them. The shared plumbing only parses and orders
+(`strategyutil/structure_timeframes.go`):
+
+* `ParseStructureTimeframes(params, allowed)`: an ordered, distinct list; M1 is always refused ("M1 is execution only"), and so is anything outside the strategy's
+  own `allowed` set.
+* `ParseRequireConfirmation(params, global)`: a strategy's own optional `require_confirmation` wins over the global `analysis.require_candle_confirmation`
+  (the engine already injects the global into every strategy's parameters as `require_candle_confirmation`).
+* `PreferHigherTimeframe`: the duplicate-thesis order, higher timeframe, then more confluence stars, then the nearer entry. It never filters.
+* Structure-close retirement is open to every strategy: a published opportunity whose structure was found on timeframe T is withdrawn by a close of T beyond the
+  structure's far edge, with the strategy's own `structure_close_buffer_atr` (absent: no such rule, as today; `order_block` keeps `confirmed_break_buffer_atr`).
+* `test/architecture` holds the rule: no strategy's `RequiredTimeframes` contains M1 and no strategy package reads `market.M1` outside an `execution*.go` file.
+  Impulse Pullback is the one named exception until PR-Q11, and the test fails if the exception outlives its violation.
+
 ## Strategy independence
 
 Every strategy owns its candidates. Disabling one never changes another's, a

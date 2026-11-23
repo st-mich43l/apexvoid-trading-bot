@@ -200,8 +200,9 @@ func crtMinimumH1RangeATR(settings Settings, fallback float64) float64 {
 }
 
 // strategyBreakBufferATR is a strategy's own structure-close buffer in ATRs and whether the rule is on for it: order_block's confirmed_break_buffer_atr (on only
-// when > 0) and key_level's structure_close_buffer_atr (on whenever the key is present, 0 meaning any close beyond the band). Each strategy's rule is
-// independent of the other's.
+// when > 0), key_level's structure_close_buffer_atr (on whenever the key is present, 0 meaning any close beyond the band) and, for every other strategy, its own
+// structure_close_buffer_atr on the same terms (Q0, owner rule 23 Nov 2026: a published structure is withdrawn by a close of ITS OWN timeframe beyond its far edge).
+// Absent means no structure-close rule for that strategy, exactly as before. Each strategy's rule is independent of the others'.
 func strategyBreakBufferATR(settings Settings, id opportunity.StrategyID) (float64, bool) {
 	for _, cfg := range settings.Strategies {
 		if string(cfg.ID) != string(id) {
@@ -213,6 +214,10 @@ func strategyBreakBufferATR(settings Settings, id opportunity.StrategyID) (float
 				return v, true
 			}
 		case "key_level":
+			if v, ok := cfg.Parameters["structure_close_buffer_atr"].(float64); ok && v >= 0 {
+				return v, true
+			}
+		default:
 			if v, ok := cfg.Parameters["structure_close_buffer_atr"].(float64); ok && v >= 0 {
 				return v, true
 			}

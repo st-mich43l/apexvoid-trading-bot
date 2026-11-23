@@ -55,3 +55,13 @@ var strategyFactories = map[strategy.StrategyID]strategy.Factory{
 	rangescalp.ID:        rangescalp.New,
 	impulseretrace.ID:    impulseretrace.New,
 }
+
+// StrategyFactories is a copy of the composition root's factory map, for the architecture tests (test/architecture) that must build every strategy the engine can
+// run. It adds no way to construct one the engine does not.
+func StrategyFactories() map[strategy.StrategyID]strategy.Factory {
+	out := make(map[strategy.StrategyID]strategy.Factory, len(strategyFactories))
+	for id, factory := range strategyFactories {
+		out[id] = factory
+	}
+	return out
+}
