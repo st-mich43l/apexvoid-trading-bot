@@ -2405,6 +2405,14 @@ async def _publish_trade_plan_v8(
   # plus this one fit the group and risk limits; the slot is reserved atomically
   # here and held until the plan is visible in the executor runtime.
   group_slot_held = False
+  if symbol.upper() in {"XAU", "XAUUSD"} and plan.entry.legs and (
+    plan.entry.min_leg_spacing is not None or gate_measured.get("planned_ladder_ratio_profile") == "auto_vc"
+  ):
+    # X3: which volume split the non-scalp XAU ladder was planned with (auto_vc = execution.xau_ladder.auto_ratios, default = 60/20/20).
+    await increment_metric(
+      client, "xau_ladder_ratio_profile", symbol=symbol,
+      dimensions={"profile": str(gate_measured.get("planned_ladder_ratio_profile") or "default")},
+    )
   try:
     group_policy = instrument_geometry.same_direction_policy(symbol)
   except EffectiveInstrumentError as exc:

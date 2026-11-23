@@ -239,7 +239,7 @@ otherwise the leg is written off as already gone.
 
 ## Entry, stop and targets
 
-- **XAU** scales in over three prices (owner decision 2026-11-06): 60% / 20% / 20% of the volume. ZL-1 (the entry zone and the ladder prices):
+- **XAU** scales in over three prices (owner decision 2026-11-06): 60% / 20% / 20% of the volume for Manual /algo and scalps; **the Auto Algo non-scalp ladder is 20% / 20% / 60%** (40% / 60% over two prices) since X3 (owner 23 Nov 2026, PR-X0 rule D4 = Vc; `execution.xau_ladder.auto_ratios`, rollback = delete the key). The prices, the 1.00 step and the spacing rules are identical in both. When the equity-sized volume cannot fill three legs the Auto ladder drops the SHALLOW legs first (L2 + L3 at 40/60, then L3 alone; a dropped market L1 turns a `market_with_limit_scale` entry into a `limit_ladder` of resting limits), because the 60% deep leg is the point of the split. `xau_ladder_ratio_profile{profile=auto_vc|default}` counts the plans. ZL-1 (the entry zone and the ladder prices):
   - **The zone is the zone the engine found.** A non-scalping XAU opportunity needs an entry zone of at least **30 pips** (3.00 price units: `pip_size` 0.1, read from
     `instruments.yml` `stop_envelope.min_entry_zone_width_pips`, never assumed). The engine refuses a thinner one at publication (`entry_zone_below_minimum_width`,
     counted in `strategy_refused`) and Algo Bot refuses it again as a second line (the same code, in the plan-build rejection). Nothing stretches a thin zone toward the
@@ -279,7 +279,7 @@ otherwise the leg is written off as already gone.
   **XAU is sized by risk that follows equity** (owner decision 2026-11-06, `sizing.risk_percent_by_equity` in the XAU pack): 5% of equity per trade from $500 to $5,000,
   tapering linearly to 2% at $6,000 and 2% above; below $500 the owner equity table still applies. The percent is the total loss at the stop: the planner subtracts
   the separately-sized risk leg's own loss (15 pips from the stop x its fixed lots) from the budget, publishes the remainder as `risk.risk_percent` with
-  `sizing.mode: risk`, and the executor sizes the 60/20/20 entry ladder as budget / (stop pips x pip value per lot), floored to the broker step. The risk leg keeps its
+  `sizing.mode: risk`, and the executor sizes the entry ladder (60/20/20, or 20/20/60 on the Auto XAU ladder) as budget / (stop pips x pip value per lot), floored to the broker step. The risk leg keeps its
   fixed lots and is placed as its own order; a volume too small to give every entry leg 0.01 lot keeps as many legs as it can fill.
   `contracts/autotrade/xau-ladder-spec.json` pins the risk leg and the legacy two-leg prices.
 - **The card price is the order price.** Every price on a card (entry zone,
