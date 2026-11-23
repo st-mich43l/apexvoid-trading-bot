@@ -153,7 +153,7 @@ Run locally with the production image, an ephemeral Postgres 17 and Redis, and r
 
 Not performed; each step needs its own authorization.
 
-1. Prerequisites: this code deployed (algo-bot restart; no config change needed because the archive is disabled by default). If `config/runtime.yml` is rendered from `ansible-library`, add the `runtime.market_data_archive` block there first; with the key absent the archiver does not start.
+1. Prerequisites: this code deployed (algo-bot restart; no config change needed because the archive is disabled by default). Add the `runtime.market_data_archive` block to `config/runtime.yml` first (the repo's `config/` is the production configuration; no ansible change is needed); with the key absent the archiver does not start.
 2. `python -m tools.research_data init-schema`, then `seed-from-redis` (stores what the Redis windows hold now).
 3. Set `runtime.market_data_archive.enabled: true`; restart algo-bot. Check `tools.research_data status` (healthy, lag a few seconds), `gaps`, and the log line `bar archive started`.
 4. After a few days of coverage start the labeller (`python -m tools.outcome_labeller --once`, or `--follow` under whatever the operator uses to keep a process alive; nothing in this repository starts it), then `tools.research_quality`.

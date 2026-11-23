@@ -300,6 +300,39 @@ def _currency_exposure_policy(instrument_id: str, exposure: Any) -> CurrencyExpo
   return CurrencyExposurePolicy(max_groups_per_currency_direction=cap, reservation_ttl_seconds=ttl)
 
 
+_CURRENCY_EXPOSURE_VERIFIED: dict[tuple, tuple] = {}
+
+
+def _require_one_currency_exposure_policy(runtime: Any, instrument_id: str, exposure: Any) -> None:
+  """One cap per currency side across the FX instruments (FX3).
+
+  The currency cap counts groups across pairs, and it is read from the INCOMING pair's block. If two FX instruments declared different caps, a USD-major plan
+  and a JPY plan sharing USD would be judged against different limits for the same currency side. So every instrument that declares ``exposure.currency`` must
+  declare the same values; this is checked when such an instrument is loaded (an instrument that declares none, XAU, is never touched).
+  """
+  own = _currency_exposure_policy(instrument_id, exposure)
+  if own is None:
+    return
+  # Instruments are rebuilt on every lookup and the configuration does not change while the process runs, so a verified registry is remembered (the cache keeps the
+  # registry alive, so its id cannot be reused by another object).
+  key = (id(getattr(runtime, "instruments")), id(getattr(runtime, "instrument_packs", None)), instrument_id, own)
+  if key in _CURRENCY_EXPOSURE_VERIFIED:
+    return
+  registry = _plain(getattr(runtime, "instruments"))
+  for other_id, other_raw in registry.items():
+    if other_id == instrument_id or other_id == "instrument_packs" or not isinstance(other_raw, Mapping):
+      continue
+    _, declaration = _instrument_declaration(runtime, str(other_id))
+    other = _currency_exposure_policy(str(other_id), declaration.get("exposure"))
+    if other is not None and other != own:
+      raise EffectiveInstrumentError(
+        f"exposure.currency must be identical on every instrument that declares it (one cap per currency side): "
+        f"{instrument_id} has max_groups_per_currency_direction={own.max_groups_per_currency_direction} reservation_ttl_seconds={own.reservation_ttl_seconds}, "
+        f"{other_id} has max_groups_per_currency_direction={other.max_groups_per_currency_direction} reservation_ttl_seconds={other.reservation_ttl_seconds}"
+      )
+  _CURRENCY_EXPOSURE_VERIFIED[key] = (getattr(runtime, "instruments"), getattr(runtime, "instrument_packs", None))
+
+
 def _plain(value: Any) -> Any:
   if isinstance(value, ConfigNode):
     return {key: _plain(item) for key, item in value.items()}
@@ -525,6 +558,7 @@ class EffectiveInstrument:
     self.rollout = rollout
     self._raw = raw
     self._exposure = raw.get("exposure")
+    _require_one_currency_exposure_policy(runtime, instrument_id, self._exposure)
 
     analysis = _plain(getattr(runtime, "analysis"))
     execution = _plain(getattr(runtime, "execution"))

@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
 from app.autotrade.active_exposure import _as_int, normalize_direction, normalize_symbol
+from app.autotrade.units import effective_units
 from app.autotrade.group_exposure import (
   EXPOSURE_UNKNOWN,
   GroupDecision,
@@ -244,7 +245,7 @@ async def load_fx_exposures(client: Any, *, now: float | None = None) -> dict[st
   out: dict[str, SymbolExposure] = {}
   for pair in FX_PAIRS:
     policy = instrument_geometry.same_direction_policy(pair) or _default_same_direction(pair)
-    units = instrument_geometry.instrument_runtime(pair).units
+    units = await effective_units(client, pair, instrument_geometry.instrument_runtime(pair).units)
     out[pair] = await load_symbol_exposure(client, symbol=pair, units=units, policy=policy, now=now)
   return out
 

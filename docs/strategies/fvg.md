@@ -103,4 +103,4 @@ The name is the card's own setup label (`FVG`, `Supply` for a SELL, `Demand` for
 
 ## Release
 
-Deploy the Python bot first (or together with Go): its envelope models forbid unknown fields and already parse the optional `structure` block. If `config/analysis.yml` is rendered from `st-mich43l/ansible-library`, the `strategies.fvg` block changed shape (keys renamed `confirmed_minimum_*` -> `minimum_*`, `higher_timeframes` -> `structure_timeframes`, new keys); that repository was not edited. Opportunity ids change once at deploy (the strategy version is part of the id).
+Deploy the Python bot first (or together with Go): its envelope models forbid unknown fields and already parse the optional `structure` block. The repo's `config/` is the production configuration; no ansible change is needed. Opportunity ids change once at deploy (the strategy version is part of the id).

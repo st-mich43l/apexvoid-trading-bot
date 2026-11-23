@@ -88,7 +88,7 @@ All keys below are optional; a pack without them behaves as before.
 | `exposure.currency.reservation_ttl_seconds` | integer >= 180, default 600. Lifetime of the in-flight reservation that closes the race between admission and the executor snapshot. |
 | `stop_envelope.max_floor_widening_ratio` | number > 1, optional (FX1 part C). Refuses a plan whose executable stop exceeds this multiple of the technical stop (`stop_floor_widening_exceeded`). 2.0 on USDJPY and GBPJPY, absent elsewhere ([execution](execution.md#entry-stop-and-targets)). |
 | `sizing.apply` | boolean, default true. `false` keeps the pack's declared `sizing` rule but stops the planner from applying it (the XAU pack: it keeps the equity table). |
-| `contract.pip_value_per_lot` (JPY-quoted pairs) | fallback only: the executor derives the live value from the USDJPY quote (max age 300 s) and uses this number only when no usable quote exists. |
+| `contract.pip_value_per_lot` (JPY-quoted pairs) | fallback only: the executor and, since FX3, the planner's money estimates (risk leg, entry-leg fitting, group risk amount; `app/autotrade/units.py`) derive the live value from the USDJPY quote (`price:USDJPY:spot`, max age 300 s, rate 50-400) and use this number only when no usable quote exists. Every other pair uses it as configured. |
 
 Any other key under `exposure.currency` fails the load in Algo Bot ([execution](execution.md#exposure)).
 

@@ -70,4 +70,4 @@ What this does not fix: Demand stays negative in the replay in every slice (fres
 
 ## Release
 
-Deploy the Python bot first (or together with Go). If `config/analysis.yml` is rendered from `st-mich43l/ansible-library`, the `strategies.demand` block changed shape (`higher_timeframes` -> `structure_timeframes`, new keys, two removed); that repository was not edited. Opportunity ids change once at deploy (the strategy version is part of the id).
+Deploy the Python bot first (or together with Go). The repo's `config/` is the production configuration; no ansible change is needed. Opportunity ids change once at deploy (the strategy version is part of the id).

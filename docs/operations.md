@@ -27,7 +27,7 @@ secret store ([configuration](configuration.md)).
 
 ## Rollout
 
-1. Update the YAML and the synchronized Ansible-library config.
+1. Update the YAML in `config/`. The repo's `config/` is the production configuration; no ansible change is needed (Ansible ships it unchanged, and a value set only in ansible-library `group_vars` has no effect: [configuration](configuration.md)).
 2. Validate and run the service suites:
 
    ```bash
