@@ -128,7 +128,15 @@ def load_runtime_config(path: str | os.PathLike[str] | None = None) -> ConfigNod
   selected = Path(path or os.getenv("APEXVOID_CONFIG_FILE") or _default_config_path())
   document = _load_document(selected)
   _apply_secrets(document)
-  return native_config(document)
+  config = native_config(document)
+  # X3: an invalid execution.xau_ladder.auto_ratios fails loading with a clear error, never a silent fallback to the default split.
+  from app.autotrade.xau_ladder import LadderConfigError, parse_auto_ratios
+
+  try:
+    parse_auto_ratios(getattr(getattr(getattr(config, "execution", None), "xau_ladder", None), "auto_ratios", None))
+  except LadderConfigError as exc:
+    raise ConfigurationError(str(exc)) from exc
+  return config
 
 
 runtime_config = load_runtime_config()

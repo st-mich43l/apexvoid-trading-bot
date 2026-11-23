@@ -235,7 +235,7 @@ def _deeper_second_leg(
   )
 
 
-# Owner decision 2026-11-06: an XAU setup divides its entry volume 60% / 20% / 20% over three prices one price unit apart (xau_ladder.price_ladder, shared with
+# Owner decision 2026-11-06 (X3, 23 Nov: 20/20/60 for the non-scalp Auto ladder, ``execution.xau_ladder.auto_ratios``): an XAU setup divides its entry volume 60% / 20% / 20% over three prices one price unit apart (xau_ladder.price_ladder, shared with
 # Manual /algo), from the shallow edge (or the live quote when it is inside the zone) toward the zone's far edge.
 XAU_LADDER_RATIOS = xau_ladder.LADDER_RATIOS
 
@@ -249,6 +249,7 @@ def _xau_price_ladder(
   digits: int,
   pip_size: float,
   settings: xau_ladder.LadderSettings,
+  auto_ratios: bool = False,
 ) -> tuple[tuple[float, ...], tuple[float, ...]] | None:
   """Entry prices and volume ratios of the XAU ladder inside [low, high] (see xau_ladder.price_ladder), or None when no valid ladder (two or more distinct prices at
   least the minimum spacing apart, all inside the zone) fits."""
@@ -256,6 +257,7 @@ def _xau_price_ladder(
   try:
     return xau_ladder.price_ladder(
       side, min(high, max(low, start)), far, digits=digits, pip_size=pip_size, settings=settings, strict=True,
+      ratios=settings.auto_ratio_table() if auto_ratios else None,  # X3: only a non-scalp Auto ladder asks for the Auto split
     )
   except xau_ladder.LadderGeometryUnavailable:
     return None
@@ -351,7 +353,7 @@ def resolve_execution_route_plan(
       ladder_start = None if quote > high else max(low, quote)
     zone_ladder = (
       None if ladder_start is None
-      else _xau_price_ladder(side=side, start=ladder_start, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder)
+      else _xau_price_ladder(side=side, start=ladder_start, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder, auto_ratios=not scalp)
     )
     if zone_ladder is not None:
       manual_xau_legs, manual_xau_ratios = zone_ladder
@@ -451,7 +453,7 @@ def resolve_execution_route_plan(
       # part of the zone, from the live quote to the far edge, with every price the minimum apart (production 2026-10-02: SELL L1 4185.51, L2 4185.90 inside a
       # 4183.28-4187.19 zone clustered both entries; reusing a level price already crossed makes a marketable L2 that fills with L1). When the untraded part
       # cannot hold the ladder the plan is refused: it is never collapsed into one entry.
-      quote_ladder = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder)
+      quote_ladder = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder, auto_ratios=not scalp)
       if quote_ladder is not None:
         quote_prices, quote_ratios = quote_ladder
         return ExecutionRoutePlan(
@@ -565,7 +567,7 @@ def resolve_execution_route_plan(
         return scaled
     # XAU never enters its full volume at one price: market L1 now, limit L2 halfway from the quote to the far edge of the zone.
     if manual_xau_ladder and split_ok and geometry == "inside":
-      market_ladder = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder)
+      market_ladder = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder, auto_ratios=not scalp)
       if market_ladder is None and ladder_required:
         return _ladder_unavailable("the untraded part of the zone below the live quote is too shallow")
       if market_ladder is not None:

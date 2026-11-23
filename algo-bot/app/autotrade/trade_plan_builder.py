@@ -173,6 +173,60 @@ def pack_risk_sizing(
   return main_percent, total_percent
 
 
+def _estimated_lots(
+  *, entry: Any, symbol: str, direction: str, stop_price: Decimal, pip_size: Any, account_equity: float, cfg: Any, risk_sized: bool, main_risk_percent: Decimal,
+  risk_multiplier: Decimal, risk_percent: Decimal, pip_value_per_lot: float | None,
+) -> float | None:
+  """Lots the executor will size the plan to, estimated from the worst entry leg (shared by both fitting rules)."""
+  leg_pip_value = float(pip_value_per_lot or getattr(getattr(cfg, "units", None), "pip_value_per_lot", 0) or 0)
+  leg_prices = [float(leg.price) for leg in entry.legs]
+  worst_leg = max(leg_prices) if direction == "BUY" else min(leg_prices)
+  leg_stop_pips = abs(worst_leg - float(stop_price)) / float(pip_size) if float(pip_size) else 0.0
+  if leg_pip_value <= 0 or leg_stop_pips <= 0:
+    return None
+  if risk_sized:
+    return math.floor(float(account_equity) * float(main_risk_percent) / 100.0 / (leg_stop_pips * leg_pip_value) * 100.0) / 100.0
+  from app.autotrade.group_exposure import planned_lots
+
+  return planned_lots(
+    symbol=symbol, equity=float(account_equity), sizing_mode="equity_table", risk_multiplier=float(risk_multiplier), risk_percent=float(risk_percent),
+    stop_pips=leg_stop_pips, pip_value_per_lot=leg_pip_value,
+  )
+
+
+def _fit_deep_legs(
+  entry: Any, *, symbol: str, direction: str, stop_price: Decimal, pip_size: Any, account_equity: float | None, cfg: Any, risk_sized: bool,
+  main_risk_percent: Decimal, risk_multiplier: Decimal, risk_percent: Decimal, pip_value_per_lot: float | None,
+) -> Any:
+  if len(entry.legs) < 2 or not account_equity or account_equity <= 0:
+    return entry
+  estimated = _estimated_lots(
+    entry=entry, symbol=symbol, direction=direction, stop_price=stop_price, pip_size=pip_size, account_equity=account_equity, cfg=cfg, risk_sized=risk_sized,
+    main_risk_percent=main_risk_percent, risk_multiplier=risk_multiplier, risk_percent=risk_percent, pip_value_per_lot=pip_value_per_lot,
+  )
+  if estimated is None or estimated <= 0:
+    return entry
+  fillable = max(1, int(round(estimated * 100.0 + 1e-6)))
+  if fillable >= len(entry.legs):
+    return entry
+  kept = entry.legs[-fillable:]  # the deepest legs
+  auto = ladder_settings(cfg).auto_ratio_table() or {}
+  if fillable == 1:
+    new_ratios = (Decimal("1"),)
+  elif fillable in auto and len(auto[fillable]) == fillable:
+    new_ratios = tuple(Decimal(str(r)) for r in auto[fillable])
+  else:
+    total_ratio = sum(leg.volume_ratio for leg in kept)
+    new_ratios = tuple(leg.volume_ratio / total_ratio for leg in kept)
+  kept = tuple(replace(leg, volume_ratio=ratio) for leg, ratio in zip(kept, new_ratios))
+  kept = kept[:-1] + (replace(kept[-1], volume_ratio=Decimal("1") - sum(leg.volume_ratio for leg in kept[:-1])),)
+  if entry.type == ENTRY_TYPE_MARKET_WITH_LIMIT_SCALE:
+    # L1 (the market leg) is gone: the rest rest as limits, and the contract requires a market L1 for market_with_limit_scale.
+    kept = tuple(replace(leg, order_type=ORDER_TYPE_LIMIT) for leg in kept)
+    return replace(entry, type=ENTRY_TYPE_LIMIT_LADDER, legs=kept, zone_low=None, zone_high=None, price_side=None)
+  return replace(entry, legs=kept)
+
+
 def fit_entry_legs_to_volume(
   entry: Any,
   *,
@@ -187,12 +241,23 @@ def fit_entry_legs_to_volume(
   risk_multiplier: Decimal,
   risk_percent: Decimal,
   pip_value_per_lot: float | None = None,
+  deep_legs_first: bool = False,
 ) -> Any:
   """Keep as many entry legs as the estimated volume can fill (0.01 lot each).
 
   A volume that cannot give every leg the broker minimum collapses to ONE full-volume entry in the executor (VolumePlanner.SplitEntryVolume). A 3-leg XAU ladder
   (60/20/20) becomes 60/40 at two legs; other counts renormalise their ratios. Nothing changes when the volume is unknown or fills every leg.
+
+  ``deep_legs_first`` (X3, the Auto XAU ladder split 20/20/60): the DEEP legs are kept and the shallow ones dropped, because the 60% deep leg is what that split is for
+  and the executor's collapse would otherwise put the whole volume on the shallow L1. Three legs that cannot all fill become L2 + L3 (the 2-leg Auto split, 40/60), then
+  L3 alone; two legs become L2 alone. A market L1 that is dropped turns a ``market_with_limit_scale`` entry into a ``limit_ladder`` of resting limits (the contract needs a
+  market L1 for the first type). Every other plan is unchanged.
   """
+  if deep_legs_first:
+    return _fit_deep_legs(
+      entry, direction=direction, stop_price=stop_price, pip_size=pip_size, account_equity=account_equity, cfg=cfg, risk_sized=risk_sized,
+      main_risk_percent=main_risk_percent, pip_value_per_lot=pip_value_per_lot, symbol=symbol, risk_multiplier=risk_multiplier, risk_percent=risk_percent,
+    )
   if len(entry.legs) < 3 or not account_equity or account_equity <= 0:
     return entry
   leg_pip_value = float(pip_value_per_lot or getattr(getattr(cfg, "units", None), "pip_value_per_lot", 0) or 0)
@@ -1043,7 +1108,7 @@ def build_trade_plan_from_strategy_match(
   entry = fit_entry_legs_to_volume(
     entry, symbol=match.symbol, direction=direction, stop_price=stop.price, pip_size=pip_size, account_equity=account_equity, cfg=cfg_resolved,
     risk_sized=pack_risk_sized, main_risk_percent=pack_main_percent, risk_multiplier=risk.risk_multiplier, risk_percent=risk.risk_percent,
-    pip_value_per_lot=pip_value_per_lot,
+    pip_value_per_lot=pip_value_per_lot, deep_legs_first=measured.get("planned_ladder_ratio_profile") == "auto_vc",
   )
 
   if cfg is None:

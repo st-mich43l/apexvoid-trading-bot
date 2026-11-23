@@ -61,7 +61,8 @@ def entry_leg_prices(
   return EntryLegPrices(shallow=round_price(shallow, digits), deep=round_price(deep, digits))
 
 
-# Owner decision 2026-11-06: the XAU entry ladder (Auto Algo and Manual /algo) divides the volume 60% / 20% / 20% over three prices.
+# Owner decision 2026-11-06: the XAU entry ladder (Auto Algo and Manual /algo) divides the volume 60% / 20% / 20% over three prices. X3 (23 Nov 2026): the AUTO Algo non-scalp
+# ladder passes ``auto_ratios`` (20/20/60, 40/60) to ``price_ladder``; Manual /algo and scalps never do, so this table is still theirs.
 # ZL-1: the prices are distinct and meaningfully apart. The default is the original ladder, one price unit (the minimum spacing) between legs from the shallow edge (the
 # live quote when it is inside the zone); ``spread_across_zone`` (off) would instead spread toward the zone's far
 # edge (for a single-price manual zone, halfway to the stop): L1 near the proximal edge, L2 deeper, L3 deeper again, closer to the structural invalidation. Every
@@ -72,6 +73,47 @@ LADDER_RATIOS: dict[int, tuple[float, ...]] = {3: (0.6, 0.2, 0.2), 2: (0.6, 0.4)
 LADDER_UNAVAILABLE = "ladder_geometry_unavailable"
 DEFAULT_MIN_SPACING_PIPS = Decimal("10")
 XAU_PIP_SIZE = Decimal("0.1")
+
+
+class LadderConfigError(ValueError):
+  """``execution.xau_ladder`` is invalid (it fails configuration loading, never a silent fallback)."""
+
+
+AUTO_RATIO_KEYS = (2, 3)
+
+
+def parse_auto_ratios(raw: object) -> tuple[tuple[int, tuple[float, ...]], ...] | None:
+  """Validate ``execution.xau_ladder.auto_ratios`` (X3): ratios for the AUTO Algo non-scalp ladder, keyed by the number of legs (2 and 3).
+
+  Each tuple has exactly that many positive entries summing to 1 within 1e-9. Absent = the default ``LADDER_RATIOS``. Manual /algo, scalps and every other
+  instrument never read it.
+  """
+  if raw is None:
+    return None
+  items = getattr(raw, "items", None)
+  if not callable(items):
+    raise LadderConfigError("execution.xau_ladder.auto_ratios must be a mapping of leg count (2, 3) to a list of ratios")
+  table: dict[int, tuple[float, ...]] = {}
+  for key, value in items():
+    try:
+      count = int(key)
+    except (TypeError, ValueError):
+      raise LadderConfigError(f"execution.xau_ladder.auto_ratios key {key!r} must be a leg count (2 or 3)") from None
+    if count not in AUTO_RATIO_KEYS or isinstance(key, bool):
+      raise LadderConfigError(f"execution.xau_ladder.auto_ratios key {key!r} must be 2 or 3")
+    if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):
+      raise LadderConfigError(f"execution.xau_ladder.auto_ratios[{count}] must be a list of {count} ratios")
+    ratios = tuple(value)
+    if len(ratios) != count or any(isinstance(r, bool) or not isinstance(r, (int, float)) for r in ratios):
+      raise LadderConfigError(f"execution.xau_ladder.auto_ratios[{count}] must be {count} numbers, got {list(ratios)!r}")
+    if any(not r > 0 for r in ratios):
+      raise LadderConfigError(f"execution.xau_ladder.auto_ratios[{count}] must all be positive, got {list(ratios)!r}")
+    if abs(sum(ratios) - 1.0) > 1e-9:
+      raise LadderConfigError(f"execution.xau_ladder.auto_ratios[{count}] must sum to 1, got {sum(ratios)!r}")
+    table[count] = tuple(float(r) for r in ratios)
+  if set(table) != set(AUTO_RATIO_KEYS):
+    raise LadderConfigError("execution.xau_ladder.auto_ratios must declare both 2 and 3 legs")
+  return tuple(sorted(table.items()))
 
 
 class LadderGeometryUnavailable(ValueError):
@@ -86,6 +128,11 @@ class LadderSettings:
 
   min_spacing_pips: Decimal = DEFAULT_MIN_SPACING_PIPS
   spread_across_zone: bool = False
+  # X3: volume ratios of the AUTO Algo non-scalp ladder by leg count, ((2, (..)), (3, (..))), or None for the default LADDER_RATIOS. Only the Auto route reads it.
+  auto_ratios: tuple[tuple[int, tuple[float, ...]], ...] | None = None
+
+  def auto_ratio_table(self) -> dict[int, tuple[float, ...]] | None:
+    return None if self.auto_ratios is None else dict(self.auto_ratios)
 
   def min_spacing_price(self, pip_size: float | Decimal = XAU_PIP_SIZE) -> Decimal:
     return _d(self.min_spacing_pips) * _d(pip_size)
@@ -101,6 +148,7 @@ def ladder_settings(cfg: object | None) -> LadderSettings:
   return LadderSettings(
     min_spacing_pips=DEFAULT_MIN_SPACING_PIPS if spacing is None else _d(spacing),
     spread_across_zone=False if spread is None else bool(spread),
+    auto_ratios=parse_auto_ratios(getattr(section, "auto_ratios", None)),
   )
 
 
@@ -113,11 +161,14 @@ def price_ladder(
   pip_size: float | Decimal = XAU_PIP_SIZE,
   settings: LadderSettings | None = None,
   strict: bool = False,
+  ratios: dict[int, tuple[float, ...]] | None = None,
 ) -> tuple[tuple[float, ...], tuple[float, ...]]:
   """Entry prices and volume ratios of the XAU ladder from ``start`` toward ``far`` (BUY steps down, SELL steps up).
 
   Prices are rounded to ``digits``; the spacing rule is checked on the ROUNDED prices. A depth that cannot hold two prices ``min_spacing`` apart yields the single
   price ``start`` (a manual single-price intent), or raises ``LadderGeometryUnavailable`` when ``strict`` (the Auto path: a non-scalp ladder is never one entry).
+
+  ``ratios`` (X3, the Auto Algo ladder only) replaces the default volume split for the number of prices found; prices and spacing are never affected by it.
   """
   settings = settings or LadderSettings()
   sign = -1 if direction.upper() == "BUY" else 1
@@ -144,7 +195,8 @@ def price_ladder(
     rounded = tuple(round_price(price, digits) for price in prices)
     inside = all(abs(Decimal(str(price)) - start_price) <= depth for price in rounded)
     if inside and ladder_spacing_ok(rounded, minimum):
-      return rounded, LADDER_RATIOS[len(rounded)]
+      table = LADDER_RATIOS if not ratios or len(rounded) not in ratios else ratios
+      return rounded, tuple(table[len(rounded)])
   if strict:
     raise LadderGeometryUnavailable(
       f"no {direction.upper()} ladder fits depth {depth} with {settings.min_spacing_pips} pips between prices",
