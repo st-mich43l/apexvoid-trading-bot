@@ -39,7 +39,7 @@ Points per fact: fresh (never touched) 3 · touched once 1 · a demand base 1.5 
 
 ## Qualification and evidence
 
-The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the zone's touches, a fibonacci touch). Evidence codes: `m5_demand_zone_confirmed`, `m5_demand_zone_rejection_confirmed`, `htf_zone_<tf>`, `m5_demand_zone_discount` (the points were awarded), `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measures `room_r` and `pd_position`.
+The shared confluence rubric (stars, floor `confluence_floor`) with factors the confirmation measurably showed (the wick, the engulfing body, a reclaim, a change of character, the higher timeframe bias, the zone's touches, a fibonacci touch). **The floor reads only the zone score** (v1 stars come from the zone score, normalised by 24.5 and cut at 8/20.5 and 12/20.5, plus 2.5 for a fibonacci touch): the factors above are computed and published, but they do not decide stars for this strategy ([candle confirmation](candle-confirmation.md#known-limits-of-false)). Evidence codes: `m5_demand_zone_confirmed`, `m5_demand_zone_rejection_confirmed`, `htf_zone_<tf>`, `m5_demand_zone_discount` (the points were awarded), `invalidation_beyond_reaction_extreme`, the stop budget code. Quality (informational, never a gate): the zone-family dimensions plus the measures `room_r` and `pd_position`.
 
 ## Refusals
 

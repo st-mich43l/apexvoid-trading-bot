@@ -188,7 +188,10 @@ flowchart LR
    (`legacy_detect.go`); iFVG, CRT and Break & Retest apply the same floor to
    their own factors, Confluence Zone to its independent-fact count. v1 factor
    points: HTF 4, touches up to 3, wick 3, displacement 3, session 2, structural
-   3, fib 2.5, CHoCH 2 (of 20.5); 2 stars at 8, 3 at 12.
+   3, fib 2.5, CHoCH 2 (of 20.5); 2 stars at 8, 3 at 12. With a zone score above
+   zero (supply, demand, order block, FVG, flip zone), the v1 stars come from the zone score alone
+   (normalised by 24.5, cut at 8/20.5 and 12/20.5, plus 2.5 for a fibonacci touch) and the factors are not counted
+   ([candle confirmation](strategies/candle-confirmation.md#known-limits-of-false)).
 3. **Selection.** When one strategy has several valid candidates on a bar it
    publishes the one with more stars, then the nearest entry.
 
