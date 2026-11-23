@@ -24,7 +24,7 @@ opportunities trades: Algo Bot correlates them per thesis afterwards
 | `ifvg` | v3 | M5 | retest of a fair value gap that lost its role on a measured closing inversion | [ifvg](ifvg.md) |
 | `crt` | v3 | H1 range, M5 | H1 range, M5 sweep of one edge, reclaim, M5 structure shift | [crt](crt.md) |
 | `break_retest` | v3 | M5 | accepted break of its own key level or trendline, fresh retest, rejection | [break_retest](break_retest.md) |
-| `flip_zone` | v5 | M5 | zone born of an accepted role flip at a key level, confirmed reaction after the break | [flip_zone](flip_zone.md) |
+| `flip_zone` | v6 | M5, M15, H1 zones; M5 reaction | zone born of an accepted role flip at a key level (found on M5, M15 or H1), confirmed by an M5 reaction after the break | [flip_zone](flip_zone.md) |
 | `trendline` | v8 | M5, M15 | two causal anchors, a touch of the line from its valid side (the second anchor's own reaction included), a confirmed reaction; each timeframe on its own frame | [trendline](trendline.md) |
 | `confluence_zone` | v3 | M5 | two or more genuinely independent structures on one price region, measured rejection | [confluence_zone](confluence_zone.md), spec |
 | `round_number` | v1 | M5 | XAU: stop runs at gold handles (sweep, reclaim, structure shift) and accepted breaks of a handle (retest); one episode per handle and side per day | [round_number](round_number.md) |
