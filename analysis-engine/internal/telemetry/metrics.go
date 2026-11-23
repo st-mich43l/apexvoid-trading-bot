@@ -94,6 +94,10 @@ const (
 	// anything. Labels: symbol, strategy, the structure timeframe, the feature and its value, recorded with CountStrategyFeature.
 	CounterStrategyFeature Counter = "strategy_feature"
 
+	// CounterStrategyPublished counts every opportunity a strategy created, by the frame its structure was found on (Q-series, owner rule 23 Nov 2026: setups are found
+	// on M5, M15 and H1). Labels: symbol, strategy, structure_tf, recorded with CountStrategyPublished. A tally of what was published; it never blocks anything.
+	CounterStrategyPublished Counter = "strategy_published"
+
 	// CounterHistoryShort counts the closed-bar evaluations of a frame whose in-memory history holds fewer bars than its detection window or than the
 	// largest lookback an enabled strategy needs on it (analysis_history_short). Labels: symbol, timeframe. It never blocks an evaluation.
 	CounterHistoryShort Counter = "analysis_history_short"
@@ -225,6 +229,14 @@ func (r *Recorder) CountStrategyRefusal(symbol, strategy, structureTimeframe, re
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	k := key{label: string(CounterStrategyRefused), symbol: symbol, timeframe: structureTimeframe, reason: reason, strategy: strategy}
+	r.counts[k] += n
+}
+
+// CountStrategyPublished counts one created opportunity of a strategy by the frame its structure was found on (CounterStrategyPublished).
+func (r *Recorder) CountStrategyPublished(symbol, strategy, structureTimeframe string, n int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	k := key{label: string(CounterStrategyPublished), symbol: symbol, timeframe: structureTimeframe, strategy: strategy}
 	r.counts[k] += n
 }
 

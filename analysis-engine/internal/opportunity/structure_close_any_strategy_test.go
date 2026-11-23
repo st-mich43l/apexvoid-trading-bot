@@ -24,7 +24,7 @@ func structureOfStrategyCandidate(t *testing.T, strategy StrategyID, tf market.T
 }
 
 func TestAnyStrategyIsRetiredByAClosePastItsStructureOnTheStructuresOwnFrame(t *testing.T) {
-	for _, strategy := range []StrategyID{"supply", "demand", "fvg", "flip_zone", "confluence_zone"} {
+	for _, strategy := range []StrategyID{"supply", "demand", "fvg", "flip_zone", "confluence_zone", "key_level"} {
 		for _, tf := range []market.Timeframe{market.M5, market.M15, market.H1} {
 			c := structureOfStrategyCandidate(t, strategy, tf, market.Buy, 4300, 4303)
 			b := liveBook(t, c)

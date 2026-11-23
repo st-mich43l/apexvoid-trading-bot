@@ -28,8 +28,8 @@ func TestKeyLevelShipsTheStructureCloseRule(t *testing.T) {
 			cfg = c
 		}
 	}
-	if cfg.Version != "v11" {
-		t.Fatalf("key_level version %q, want v11", cfg.Version)
+	if cfg.Version != "v12" {
+		t.Fatalf("key_level version %q, want v12", cfg.Version)
 	}
 	if _, err := keylevel.New(cfg); err != nil {
 		t.Fatalf("the shipped Key Level config must build: %v", err)

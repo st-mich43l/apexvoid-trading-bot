@@ -43,6 +43,8 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
+	"sync"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/confluence"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/context"
@@ -55,7 +57,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v11"
+const Version = "v12"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -102,7 +104,23 @@ type Config struct {
 	Detector strategyutil.LegacyDetectorSettings
 	// StopBudget is the instrument's stop envelope (strategyutil.StopBudget); the zero value is no budget.
 	StopBudget strategyutil.StopBudget
+	// StructureTimeframes are the frames a level may be found on (v12, owner rule 23 Nov 2026: setups are found on M5, M15 and H1; M1 is execution only). The
+	// touch, the reaction, the stop and the entry are always read on M5, whatever frame the level lives on.
+	StructureTimeframes []market.Timeframe
+	// RequireConfirmation is whether a confirming M5 reaction is needed: the strategy's own require_confirmation, else the global
+	// analysis.require_candle_confirmation. A bare touch is published only when it is false.
+	RequireConfirmation bool
 }
+
+// Refusals of Key Level (v12), by reason (strategy_refused{strategy="key_level", structure_timeframe, reason}).
+const (
+	// RefusedNoM5Reaction: a level with enough touches on its own frame that no M5 reaction confirmed (a level is counted once per evaluation).
+	RefusedNoM5Reaction = "no_m5_reaction"
+	// RefusedBothSides: both directions confirmed off one level in one evaluation, a contradiction that publishes nothing.
+	RefusedBothSides = "both_sides_confirmed"
+	// RefusedDuplicateThesis: the same level qualified on more than one frame; the higher timeframe (then more stars, then the nearer entry) published and this one did not.
+	RefusedDuplicateThesis = "duplicate_thesis"
+)
 
 // LevelSource replaces the levels Key Level reads (the frame's SwingLevels under the profit_week contract) for this strategy's evaluation only: the frame itself, and
 // every other strategy that reads its levels, is untouched. seed is the latest closed bar's open time, so a source that draws random levels is deterministic.
@@ -113,10 +131,30 @@ type LevelSource func(frame *context.LegacyFrame, seed int64) []techniquezone.Le
 type Strategy struct {
 	strategyutil.RefusalCounter
 	strategyutil.SweepRefusalCounter
+	mu          sync.Mutex
+	refusals    map[strategy.Refusal]int64
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
 	levelSource LevelSource
+}
+
+func (s *Strategy) refuse(tf market.Timeframe, reason string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refusals == nil {
+		s.refusals = map[strategy.Refusal]int64{}
+	}
+	s.refusals[strategy.Refusal{Reason: reason, Timeframe: tf}]++
+}
+
+// TakeRefusals returns the refusals counted since the last call and resets them (strategy.RefusalReporter).
+func (s *Strategy) TakeRefusals() map[strategy.Refusal]int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.refusals
+	s.refusals = nil
+	return out
 }
 
 // UseLevelSource installs a LevelSource. Test-only: nothing in production calls it.
@@ -192,6 +230,14 @@ func parseConfig(params map[string]any) (Config, error) {
 	if cfg.StopBudget, err = strategyutil.ParseStopBudget(params); err != nil {
 		return Config{}, err
 	}
+	if cfg.StructureTimeframes, err = strategyutil.ParseStructureTimeframes(params, []market.Timeframe{market.M5, market.M15, market.H1}); err != nil {
+		return Config{}, err
+	}
+	if cfg.RequireConfirmation, err = strategyutil.ParseRequireConfirmation(params, strategyutil.RequireCandleConfirmation(params)); err != nil {
+		return Config{}, err
+	}
+	// The detector's own switch follows the strategy's: a bare touch publishes only when this strategy does not require a confirming candle.
+	cfg.Detector.CandleConfirmationOptional = !cfg.RequireConfirmation
 	switch {
 	case cfg.MinimumTouches < 1:
 		return Config{}, fmt.Errorf("minimum_touches must be >= 1")
@@ -229,27 +275,66 @@ type attempt struct {
 	level        techniquezone.Level
 	role         keylevel.RoleKind
 	widened      bool
+	// structureTF is the frame the level was found on (M5 when unset); bandFloor is proximal_band_atr x THAT frame's ATR, the floor of the level's band.
+	structureTF market.Timeframe
+	bandFloor   float64
+}
+
+// published is one candidate the strategy would publish, with what the duplicate-thesis order and the selection across levels read.
+type published struct {
+	candidate  opportunity.Candidate
+	stars      int
+	tf         market.Timeframe
+	direction  market.Direction
+	levelPrice float64
+	levelBand  float64
+	distance   float64 // |level price - the latest M5 close|, the "nearest level" of the selection across levels
+	entryGap   float64 // |entry reference - the latest M5 close|, the "nearer entry" of the duplicate-thesis order
 }
 
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
-	base, ok := strategyutil.NewLegacyDetectorForFrame(ctx, s.timeframe, s.cfg.Detector)
+	// The touch, the reaction, the stop and the entry are read on M5, whatever frame a level lives on.
+	m5, ok := strategyutil.NewLegacyDetectorForFrame(ctx, market.M5, s.cfg.Detector)
 	if !ok {
 		return nil
 	}
-	frame, price, atr := base.Frame, base.Price, base.ATR
+	var found []published
+	for _, tf := range s.cfg.StructureTimeframes {
+		frame := m5
+		if tf != market.M5 {
+			var available bool
+			if frame, available = strategyutil.NewLegacyDetectorForFrame(ctx, tf, s.cfg.Detector); !available {
+				continue
+			}
+		}
+		found = append(found, s.evaluateFrame(ctx, m5, frame, tf)...)
+	}
+	best := s.selectOne(found)
+	if best == nil {
+		return nil
+	}
+	return []opportunity.Candidate{best.candidate}
+}
+
+// evaluateFrame is every candidate Key Level would publish for the levels of ONE structure frame (frame, tf): the level, its touches, its role and the moment it
+// became known are read on that frame; the touch of the band and the reaction (and so the stop and the entry) are read on M5 (m5).
+//
+// Each level's confirmed attempt becomes a full candidate (reaction-anchored invalidation, the sweep requirement, the stop budget, the target) BEFORE
+// the highest-stars one is kept, so an attempt the strategy then refuses can no longer suppress a valid one on another level. (v5 chose the best
+// attempt by stars first and refused it afterwards, dropping the rest.)
+func (s *Strategy) evaluateFrame(ctx *context.MarketContext, m5, frameDetector *strategyutil.LegacyDetector, tf market.Timeframe) []published {
+	frame, atr := frameDetector.Frame, frameDetector.ATR
+	price := m5.Price
 	closes := make([]float64, len(frame.Bars))
 	for i, bar := range frame.Bars {
 		closes[i] = bar.Close
 	}
+	// The level's band is its own on its frame, never thinner than proximal_band_atr of THAT frame's ATR.
 	zoneBandFloor := math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr))
-	levels, zones := s.structure(base)
+	levels, zones := s.structure(frameDetector)
 	coverage := levelCoverage(levels, s.cfg.MinimumTouches, frame.Bars)
 
-	// Each level's confirmed attempt becomes a full candidate (reaction-anchored invalidation, the sweep requirement, the stop budget, the target) BEFORE
-	// the highest-stars one is kept, so an attempt the strategy then refuses can no longer suppress a valid one on another level. (v5 chose the best
-	// attempt by stars first and refused it afterwards, dropping the rest.)
-	var best *opportunity.Candidate
-	bestStars := 0
+	var out []published
 	for _, level := range levels {
 		if level.Touches < maxInt(1, s.cfg.MinimumTouches) {
 			continue
@@ -306,8 +391,8 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 		}
 
 		var confirmed []attempt
-		// The reaction can only be at a level that already exists: the touch and the confirmation are bars on or after the one on which the level became known.
-		knownFrom := levelKnownFrom(frame, level.Price, level.Band, s.cfg.MinimumTouches)
+		// The reaction can only be at a level that already exists: the touch and the confirmation are M5 bars at or after the moment the level became known on its frame.
+		knownFrom := reactionKnownFrom(m5.Frame.Bars, frame, tf, level, s.cfg.MinimumTouches)
 		for _, direction := range directions {
 			if direction == market.Sell && s.cfg.MinimumSellZoneScore > 0 {
 				score, found := nearestSameSideZoneScore(zones, price, "supply")
@@ -319,7 +404,7 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			if contra != "" && direction == contra {
 				levelPrice = contraLevel
 			}
-			d := base.WithDirection(direction)
+			d := m5.WithDirection(direction)
 			conf := s.confirmReaction(d, reactLow, reactHigh, d.LevelGrab(level.Price, level.Band), knownFrom)
 			if conf == nil {
 				continue
@@ -337,27 +422,114 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 			confirmed = append(confirmed, attempt{
 				direction: direction, levelPrice: levelPrice, reactLow: reactLow, reactHigh: reactHigh,
 				confirmation: conf, result: result, detector: d, level: level, role: role, widened: widened,
+				structureTF: tf, bandFloor: zoneBandFloor,
 			})
 		}
-		// Zero confirmations: nothing to keep. Two (both sides confirmed off the
-		// same level in one evaluation): a contradiction, not a coin flip.
-		if len(confirmed) != 1 {
+		switch len(confirmed) {
+		case 0:
+			s.refuse(tf, RefusedNoM5Reaction)
+			continue
+		case 1:
+		default:
+			// Two (both sides confirmed off the same level in one evaluation): a contradiction, not a coin flip.
+			s.refuse(tf, RefusedBothSides)
 			continue
 		}
 		chosen := confirmed[0]
-		candidate, ok := s.candidate(ctx, base, &chosen, coverage)
+		candidate, ok := s.candidate(ctx, m5, &chosen, coverage)
 		if !ok {
 			continue
 		}
-		// The highest stars among the PUBLISHED candidates; the first one wins at equal stars.
-		if best == nil || chosen.result.Stars > bestStars {
-			best, bestStars = &candidate, chosen.result.Stars
+		entryReference := candidate.Entry.High
+		if chosen.direction == market.Sell {
+			entryReference = candidate.Entry.Low
 		}
+		out = append(out, published{
+			candidate: candidate, stars: chosen.result.Stars, tf: tf, direction: chosen.direction, levelPrice: level.Price, levelBand: band,
+			distance: math.Abs(level.Price - price), entryGap: math.Abs(entryReference - price),
+		})
 	}
-	if best == nil {
+	return out
+}
+
+// reactionKnownFrom is the M5 bar on which a level found on frame (tf) became known, the earliest M5 bar the touch and the reaction may be. On M5 it is the bar index
+// the level's own frame gives (as before v12). On a higher frame the level is known when the bar that completed it CLOSED: the first M5 bar that opens at or after
+// that close, so a reaction can never precede the level and no M5 bar sees an H1 bar that had not closed. A level with no swing in its band (a measurement hook's
+// level) has no formation to wait for: 0.
+func reactionKnownFrom(m5Bars []market.Candle, frame *context.LegacyFrame, tf market.Timeframe, level techniquezone.Level, minimumTouches int) int {
+	index := levelKnownFrom(frame, level.Price, level.Band, minimumTouches)
+	if tf == market.M5 || index <= 0 {
+		return index
+	}
+	if index >= len(frame.Bars) {
+		return len(m5Bars)
+	}
+	minutes, _ := tf.Minutes()
+	knownAt := frame.Bars[index].Time + int64(minutes)*60
+	return sort.Search(len(m5Bars), func(i int) bool { return m5Bars[i].Time >= knownAt })
+}
+
+// selectOne is the strategy's selection: first, one candidate per level thesis across frames (the same direction and a level within the wider of the two level
+// bands, found on different frames), by strategyutil.PreferHigherTimeframe (the higher frame, then more stars, then the nearer entry); then the existing rule
+// across levels, the highest stars with the nearest level winning ties. Candidates the thesis rule drops are counted (duplicate_thesis).
+func (s *Strategy) selectOne(found []published) *published {
+	if len(found) == 0 {
 		return nil
 	}
-	return []opportunity.Candidate{*best}
+	type group struct{ members []int }
+	var groups []group
+	for i, c := range found {
+		placed := false
+		for g := range groups {
+			if sameThesis(found, groups[g].members, c) {
+				groups[g].members = append(groups[g].members, i)
+				placed = true
+				break
+			}
+		}
+		if !placed {
+			groups = append(groups, group{members: []int{i}})
+		}
+	}
+	winners := make([]published, 0, len(groups))
+	for _, g := range groups {
+		best := g.members[0]
+		for _, i := range g.members[1:] {
+			if strategyutil.PreferHigherTimeframe(rankOf(found[i]), rankOf(found[best])) {
+				best = i
+			}
+		}
+		for _, i := range g.members {
+			if i != best {
+				s.refuse(found[i].tf, RefusedDuplicateThesis)
+			}
+		}
+		winners = append(winners, found[best])
+	}
+	sort.SliceStable(winners, func(i, j int) bool { return winners[i].distance < winners[j].distance })
+	best := &winners[0]
+	for i := 1; i < len(winners); i++ {
+		if winners[i].stars > best.stars {
+			best = &winners[i]
+		}
+	}
+	return best
+}
+
+func rankOf(p published) strategyutil.ThesisRank {
+	return strategyutil.ThesisRank{Timeframe: p.tf, Stars: p.stars, EntryDistance: p.entryGap}
+}
+
+// sameThesis reports whether c is the same level thesis as every member of a group so far: the same direction, a different frame from each member, and a level
+// within the wider of the two level bands.
+func sameThesis(found []published, members []int, c published) bool {
+	for _, i := range members {
+		m := found[i]
+		if m.direction != c.direction || m.tf == c.tf || math.Abs(m.levelPrice-c.levelPrice) > math.Max(m.levelBand, c.levelBand) {
+			return false
+		}
+	}
+	return true
 }
 
 // reactionFactors mirrors _reaction_factors: the evidence the confirmation
@@ -399,7 +571,12 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	levelID := fmt.Sprintf("keylevel:%s:%.*f", a.level.Kind, s.cfg.PriceDigits, a.level.Price)
 	conf := a.confirmation
 	setupKey := fmt.Sprintf("%s:%s:%d:%d", levelID, direction, conf.TouchTime, conf.ConfirmationTime)
+	structureTF := a.structureTF
+	if structureTF == "" {
+		structureTF = market.M5
+	}
 	evidence := []string{
+		"structure_tf_" + strings.ToLower(string(structureTF)),
 		"m5_key_level_" + a.level.Kind,
 		"m5_key_level_touches_sufficient",
 		"m5_key_level_role_" + a.role.String(),
@@ -423,6 +600,9 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	}
 	// The band the reaction was read in: the level's own, but never thinner than the detector's proximal floor (a round number has none).
 	effectiveBand := math.Max(a.level.Band, math.Max(1e-9, s.cfg.Detector.ProximalBandATR*math.Max(0, atr)))
+	if a.bandFloor > 0 {
+		effectiveBand = math.Max(a.level.Band, a.bandFloor) // the floor of the frame the level lives on
+	}
 	htfTouches, htfWeight := higherTimeframeLevel(ctx, a.level.Price, s.cfg.Contract, s.cfg.Detector)
 	quality := scoreQuality(qualityInputs{
 		bars: d.Frame.Bars, touchIndex: conf.TouchIndex, confirmIndex: conf.ConfirmationIndex,
@@ -450,7 +630,10 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	// Rounded OUTWARD to the instrument's price digits, as the engine rounds the entry band, so the structure always contains the published entry and a close inside the
 	// entry band can never read as a close through the structure.
 	structLow, structHigh := roundOut(fullLow, fullHigh, s.cfg.PriceDigits)
-	candidate.Structure = &opportunity.StructureZone{Timeframe: market.M5, Low: structLow, High: structHigh, FormedAt: conf.TouchTime}
+	// v12: the structure's timeframe is the frame the level was found on (never the confirming M5 frame unless the level is an M5 one); a close of THAT frame beyond
+	// the band's far edge withdraws the opportunity.
+	candidate.Structure = &opportunity.StructureZone{Timeframe: structureTF, Low: structLow, High: structHigh, FormedAt: conf.TouchTime}
+	candidate.StructureTimeframe = structureTF
 	if conf.Type != "" {
 		candidate.Reaction = &opportunity.ReactionConfirmation{
 			ZoneID: levelID, TouchBarTime: conf.TouchTime, ConfirmationBarTime: conf.ConfirmationTime,

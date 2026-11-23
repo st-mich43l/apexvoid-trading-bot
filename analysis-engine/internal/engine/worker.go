@@ -349,6 +349,14 @@ func sortedZoneReporters(zones map[opportunity.StrategyID]opportunity.ZoneLivene
 // 0/1 and break_kind bos/choch/none) under strategy_feature{strategy, feature, value, structure_timeframe}. A tally of what was published; it never blocks.
 func (w *SymbolWorker) countFeatures(candidate opportunity.Candidate, symbol string) {
 	structureTimeframe := string(candidate.StructureTimeframe)
+	published := structureTimeframe
+	if published == "" && candidate.Structure != nil {
+		published = string(candidate.Structure.Timeframe)
+	}
+	if published == "" {
+		published = string(candidate.ObservedTimeframe)
+	}
+	w.telemetry.CountStrategyPublished(symbol, string(candidate.Strategy), published, 1)
 	if sweep, ok := candidate.Quality.Components["prior_sweep"]; ok {
 		value := "0"
 		if sweep >= 0.5 {
