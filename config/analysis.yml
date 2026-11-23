@@ -397,7 +397,8 @@ analysis:
       # candle before it), M5 confirms and executes, and an entry with no room to the nearest opposing structure is refused (counted as
       # strategy_refused{strategy="order_block"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v11
+      # v12 (FX2): room is judged against the EFFECTIVE risk (the structural stop, or the instrument floor when that is tighter: execution widens to the floor and places the 1R/2R targets on the widened risk); room_r_structural is published beside room_r. 32 of the 34 FX FVG/Order Block trades since 4 Nov were widened (median 1.83x).
+      version: v12
       enabled: true
       structure_timeframes: [M15, H1]
       # v9: the block's structure break is computed by the strategy itself, causally (a swing joins the reference set when it is confirmed, BOS against CHoCH
@@ -439,7 +440,8 @@ analysis:
       # measured rejection and executes, and an entry with no room to the nearest opposing structure or at the extreme of a stretched leg is refused (counted as
       # strategy_refused{strategy="fvg"}). Nothing else is read: the instrument scale (pip_size, entry_max_width_price, the stop envelope) and the shared
       # confluence rubric are injected by the engine.
-      version: v11
+      # v12 (FX2): room is judged against the EFFECTIVE risk (the structural stop, or the instrument floor when that is tighter: execution widens to the floor and places the 1R/2R targets on the widened risk); room_r_structural is published beside room_r. 32 of the 34 FX FVG/Order Block trades since 4 Nov were widened (median 1.83x).
+      version: v12
       enabled: true
       structure_timeframes: [M15, H1]
       # The prior-sweep test: a gap is traded only when the impulse that made it followed a sweep of resting liquidity in its favour (no_prior_sweep otherwise). The

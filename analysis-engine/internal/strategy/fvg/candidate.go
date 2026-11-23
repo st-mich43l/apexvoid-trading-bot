@@ -178,6 +178,7 @@ func (s *Strategy) quality(ctx candidateContext, d *decision, reference, invalid
 	}
 	strategyutil.ScoreRoom(m, strategyutil.MeasureQualityRoom(ctx.market, buy, reference, invalidation, target, structural, d.v.cfg.StopBudget, d.v.cfg.Barrier.RoomParams(pip, strategyutil.ScalpRoomATR(ctx.market, atr)), 0), pip)
 	m.Measure("room_r", d.room.RoomR)
+	m.Measure("room_r_structural", d.room.RoomStructuralR)
 	m.Measure("deep_entry_pips", deepEntryPips(d))
 	m.Measure("leg_retracement", d.room.Retracement)
 	m.Measure("formation_steepness_atr_per_bar", v.steepness(d.inst))
