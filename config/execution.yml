@@ -73,8 +73,8 @@ execution:
     # Prices, spacing and spread_across_zone are unchanged. Manual /algo, scalps, FX and Trendline single-price keep their own splits (60/20/20, 60/40 for the manual ladder).
     # PR-X0 replay of 13 zone trades: V0 -0.25 R_v0, Vc +0.37 (+0.05 per trade); re-measure at about 40 post-deploy zone trades. Rollback: delete this key.
     auto_ratios:
-      3: [0.2, 0.2, 0.6]
-      2: [0.4, 0.6]
+      "3": [0.2, 0.2, 0.6]
+      "2": [0.4, 0.6]
 
   scaling:
     add:

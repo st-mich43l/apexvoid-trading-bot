@@ -42,6 +42,10 @@ jobs:
         working-directory: algo-bot
         run: python scripts/kl_replay.py --selftest
 
+      - name: X0 XAU review replay script self-test
+        working-directory: algo-bot
+        run: python scripts/xau_review_replay.py --selftest
+
   go-analysis:
     name: Go analysis engine builds
     runs-on: ubuntu-latest
