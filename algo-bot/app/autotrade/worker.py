@@ -2451,6 +2451,9 @@ async def _publish_trade_plan_v8(
         publish_status=False,
       )
       return None
+    for _skipped in group_decision.measured.get("skipped_risk_free_plan_ids") or ():
+      # X4: a live group was not counted because TP2 is booked and its stop leaves at most the break-even buffer of risk.
+      await increment_metric(client, "same_direction_risk_free_skipped", symbol=symbol)
     if not group_decision.allowed:
       await _release_claims()
       log.info(

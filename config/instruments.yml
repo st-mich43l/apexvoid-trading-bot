@@ -198,6 +198,11 @@ instrument_packs:
       # Unknown exposure fails closed (docs/execution.md (exposure)).
       same_direction:
         max_groups: 1
+        # X4 (owner 23 Nov 2026, PR-X0 rule D5): a RISK-FREE group stops counting toward max_groups, so a new setup is not refused by a runner that has already booked TP2
+        # (the executor's HasBlockingSameDirectionLivePlan already stops blocking at HighestBookedTargetIndex >= 1, i.e. TP2, and Python's own stacking gate, same_direction_active_before_tp2, unlocks at the same point, so this agrees with both; a TP1-only group is refused by that gate whatever this key says). Risk-free = TP2 booked AND
+        # the live stop leaves at most the break-even buffer (be_buffer_ticks) of remaining risk; a missing value keeps counting the group. The group's own thesis still blocks a
+        # duplicate (duplicate_thesis_block). FX packs keep the default. Rollback: delete this line.
+        risk_free_groups_count: false
     # Gold retains the separately tuned scale-in and optional XAU-only risk leg.
     auto_entry:
       mode: scale
