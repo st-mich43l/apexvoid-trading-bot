@@ -111,9 +111,8 @@ plan admission, so a match stored before a containment change cannot become a pl
 
 For the zone family (`supply`, `demand`, `order_block`, `fvg`) Go also publishes an optional, display-only
 `structure: {timeframe, low, high, formed_at}` block on `analysis.opportunity.v1`: the whole structure on its own
-timeframe (M5, M15 or H1), not the execution band in `entry`. The root card prints it as
-`Structure: FVG M15 · 4,152.30–4,154.40 · formed 14:15 UTC` (plus `Order zone: low–high` when the order is placed on
-a different band). No policy, identity or statistic reads it; an event without it renders as before. See
+timeframe (M5, M15 or H1), not the execution band in `entry`. The root card no longer prints it (the "Structure:" line was removed on 23 Nov 2026);
+no policy, identity or statistic reads it. See
 [fvg](strategies/fvg.md).
 
 `fvg`, `order_block`, `supply` and `demand` own their mechanism and name the frames their structures are found on with `structure_timeframes: [M15, H1]`
