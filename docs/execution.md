@@ -295,6 +295,9 @@ otherwise the leg is written off as already gone.
   up). EURUSD and GBPUSD use $10 per lot per pip, USDJPY and GBPJPY their `contract.pip_value_per_lot`. Before this, FX used the equity table x 1.5 (0.18 lot at
   $1,000-$2,000), which risked 1.6-3.7% depending on the stop. XAU keeps the equity table; scalps keep their own sizing. The plan's `risk.risk_percent` and
   `sizing.mode` carry the rule, so a card shows what the executor will use.
+  **JPY pip value (FX3):** the executor sizes a JPY-quoted pair (USDJPY, GBPJPY) with `pip size x contract size / USDJPY mid` from the live quote (at most 300 s old, rate 50-400), and the planner's money
+  estimates (the risk leg's loss, how many entry legs the volume can fill, the group's risk amount) use the same value, read from `price:USDJPY:spot` through `app/autotrade/units.py`; the configured
+  `contract.pip_value_per_lot` is the fallback, and EURUSD, GBPUSD and XAU use it as configured.
 - **Stop floor widening (FX1 part C, JPY pack only).** Each FX pair has a stop floor (`stop_envelope.min_pips`: EURUSD 12, USDJPY 18, GBPJPY 22) that widens a tighter structural
   stop. The optional `stop_envelope.max_floor_widening_ratio` refuses a plan whose executable stop is more than that many times the technical stop
   (`stop_floor_widening_exceeded`, with `stop_widening_ratio`, `planned_base_stop_pips` and `planned_final_stop_pips` in the measurements). It is set to **2.0 on USDJPY and GBPJPY only**: the

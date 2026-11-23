@@ -143,6 +143,7 @@ def pack_risk_sizing(
   risk_leg: Any,
   stop_price: Decimal,
   pip_size: Any,
+  pip_value_per_lot: float | None = None,
 ) -> tuple[Decimal, Decimal] | None:
   """(main risk percent, total risk percent) when the instrument pack sizes by risk, else None (the owner equity table applies).
 
@@ -164,7 +165,8 @@ def pack_risk_sizing(
   total_percent = Decimal(str(total))
   main_percent = total_percent
   if risk_leg is not None and account_equity and account_equity > 0:
-    pip_value = getattr(getattr(cfg, "units", None), "pip_value_per_lot", None)
+    # ``pip_value_per_lot`` is the live value for a JPY-quoted pair (app.autotrade.units); absent, the configured one.
+    pip_value = pip_value_per_lot or getattr(getattr(cfg, "units", None), "pip_value_per_lot", None)
     if pip_value and float(pip_size) > 0:
       leg_loss = float(risk_leg.lots) * abs(float(risk_leg.price) - float(stop_price)) / float(pip_size) * float(pip_value)
       main_percent = max(Decimal("0.1"), total_percent - Decimal(str(round(100.0 * leg_loss / float(account_equity), 4))))
@@ -184,6 +186,7 @@ def fit_entry_legs_to_volume(
   main_risk_percent: Decimal,
   risk_multiplier: Decimal,
   risk_percent: Decimal,
+  pip_value_per_lot: float | None = None,
 ) -> Any:
   """Keep as many entry legs as the estimated volume can fill (0.01 lot each).
 
@@ -192,7 +195,7 @@ def fit_entry_legs_to_volume(
   """
   if len(entry.legs) < 3 or not account_equity or account_equity <= 0:
     return entry
-  leg_pip_value = float(getattr(getattr(cfg, "units", None), "pip_value_per_lot", 0) or 0)
+  leg_pip_value = float(pip_value_per_lot or getattr(getattr(cfg, "units", None), "pip_value_per_lot", 0) or 0)
   leg_prices = [float(leg.price) for leg in entry.legs]
   worst_leg = max(leg_prices) if direction == "BUY" else min(leg_prices)
   leg_stop_pips = abs(worst_leg - float(stop_price)) / float(pip_size) if float(pip_size) else 0.0
@@ -519,6 +522,7 @@ def build_trade_plan_from_strategy_match(
   same_direction_stack: bool = False,
   same_direction_size_fraction: float = 0.60,
   account_equity: float | None = None,
+  pip_value_per_lot: float | None = None,
 ) -> TradePlan:
   """Translate a CONFIRMED StrategyMatch into a TradePlan V8.
 
@@ -1016,7 +1020,7 @@ def build_trade_plan_from_strategy_match(
   pack_sizing_result = (
     None if is_scalp_plan
     else pack_risk_sizing(
-      cfg_resolved, account_equity=account_equity, risk_leg=risk_leg, stop_price=stop.price, pip_size=pip_size,
+      cfg_resolved, account_equity=account_equity, risk_leg=risk_leg, stop_price=stop.price, pip_size=pip_size, pip_value_per_lot=pip_value_per_lot,
     )
   )
   pack_risk_sized = pack_sizing_result is not None
@@ -1039,6 +1043,7 @@ def build_trade_plan_from_strategy_match(
   entry = fit_entry_legs_to_volume(
     entry, symbol=match.symbol, direction=direction, stop_price=stop.price, pip_size=pip_size, account_equity=account_equity, cfg=cfg_resolved,
     risk_sized=pack_risk_sized, main_risk_percent=pack_main_percent, risk_multiplier=risk.risk_multiplier, risk_percent=risk.risk_percent,
+    pip_value_per_lot=pip_value_per_lot,
   )
 
   if cfg is None:

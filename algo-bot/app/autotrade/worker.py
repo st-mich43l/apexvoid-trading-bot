@@ -77,6 +77,7 @@ from app.autotrade.entry_overlap import (
   reserve_entry_zone,
 )
 from app.autotrade.risk_leg import load_account_equity
+from app.autotrade.units import effective_units, live_pip_value_per_lot
 from app.autotrade import scalp_outcome
 from app.autotrade.strategy_catalog import exposure_lane
 from app.autotrade.strategy_match import (
@@ -2301,6 +2302,8 @@ async def _publish_trade_plan_v8(
       be_after_target_index=0,
       approved_measured=gate_measured,
       account_equity=await load_account_equity(client, symbol),
+      # FX3: a JPY-quoted pair is estimated with the live USDJPY pip value (the executor's rule); any other pair keeps the configured one.
+      pip_value_per_lot=await live_pip_value_per_lot(client, symbol, instrument_geometry.instrument_runtime(symbol).units),
     )
   except TradePlanBuildRejected as exc:
     await _release_claims()
@@ -2411,7 +2414,7 @@ async def _publish_trade_plan_v8(
     )
     return None
   if group_policy is not None:
-    group_units = instrument_geometry.instrument_runtime(symbol).units
+    group_units = await effective_units(client, symbol, instrument_geometry.instrument_runtime(symbol).units)
     try:
       incoming_group = IncomingGroup(
         setup_id=setup_id,

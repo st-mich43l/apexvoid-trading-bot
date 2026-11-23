@@ -74,4 +74,4 @@ See the pull request that introduced v7: commit A moved the code and was proven 
 
 ## Release
 
-Deploy the Python bot first (or together with Go). If `config/analysis.yml` is rendered from `st-mich43l/ansible-library`, the `strategies.order_block` block changed shape (`higher_timeframes` -> `structure_timeframes`, new keys, three removed); that repository was not edited. Opportunity ids change once at deploy (the strategy version is part of the id).
+Deploy the Python bot first (or together with Go). The repo's `config/` is the production configuration; no ansible change is needed. Opportunity ids change once at deploy (the strategy version is part of the id).
