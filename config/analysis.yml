@@ -207,8 +207,15 @@ analysis:
       # v11 (docs/strategies/key_level.md, KL11): the full reaction band is the opportunity's published structure and an M5 CLOSE beyond its far edge (more than
       # structure_close_buffer_atr M5 ATRs) withdraws it (STRUCTURE_CLOSED_THROUGH), so a reaction whose level already failed is never filled later. The level's role
       # (breakout_accept_bars) is unchanged. expiry_hours stays 24.0: the wait between creation and admission did not separate November outcomes (docs/strategies/key_level.md).
-      version: v11
+      # v12 (docs/strategies/key_level.md, Q2): owner rule 23 Nov 2026, setups are found on M5, M15 and H1 and M1 is execution only. A level is read on each frame of
+      # structure_timeframes (touches, role, the moment it became known and its band on THAT frame); the touch, the reaction, the stop and the entry are read on M5.
+      # require_confirmation: true makes a confirming M5 reaction necessary (a bare touch no longer publishes), overriding the global analysis.require_candle_confirmation.
+      # One candidate per level thesis across frames (higher timeframe, then more stars, then the nearer entry); a published structure is withdrawn by a close of ITS frame
+      # beyond the band's far edge (structure_close_buffer_atr in ATRs of that frame).
+      version: v12
       enabled: true
+      structure_timeframes: [M5, M15, H1]
+      require_confirmation: true
       minimum_touches: 2
       # The structure Key Level reads: profit_week is the detector contract of
       # 14–18 Sep 2026 (levels counted from fractal swings; order blocks caused
