@@ -237,8 +237,8 @@ class StrategyMatch:
   go_stop_envelope_cap_pips: float | None = None
   go_stop_envelope_desired_minimum_pips: float | None = None
   go_stop_envelope_source: str | None = None
-  # Display only (the root card's "Structure:" line): the whole structure behind a zone-family setup on its own timeframe, as Go published it.
-  # Additive; older cached matches omit it and no policy, identity or statistic reads it.
+  # The whole structure behind a zone-family setup on its own timeframe, as Go published it. Carried only (the root card no longer prints it); additive, older cached
+  # matches omit it, and no policy, identity or statistic reads it.
   structure_timeframe: str | None = None
   structure_low: float | None = None
   structure_high: float | None = None

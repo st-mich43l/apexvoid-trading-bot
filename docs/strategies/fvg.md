@@ -90,15 +90,7 @@ See the pull request that introduced v7: commit A moved the code and was proven 
 
 Go publishes an optional `structure: {timeframe, low, high, formed_at}` on the candidate and on `analysis.opportunity.v1` (`contracts/analysis/opportunity-v1.schema.json`, `kafka.StructurePayload`) for the zone family (`supply`, `demand`, `order_block`, `fvg`), on every timeframe including M5: the whole structure on its own timeframe (the whole gap, not the clipped entry band) and `formed_at`, the open time of the bar that completed it (the third candle of a gap; for a higher-timeframe structure that frame's bar time, carried by `techniquezone.Instance.OriginTime`). `opportunity.Candidate.Validate` rejects an invalid timeframe or an inverted range. Documented in `docs/redis-contract.md`.
 
-Python (`app/analysis_client/models.py` `StructureZone`, optional so old events still parse) copies it to `StrategyMatch` (`structure_timeframe/low/high/formed_at`, optional) and the root card (`app/autotrade/setup_card.structure_lines`) prints one line under the setup name:
-
-```
-📈 BUY · FVG · ⭐⭐
-Structure: FVG M15 · 4,152.30–4,154.40 · formed 14:15 UTC
-Order zone: 4,153.60–4,154.40
-```
-
-The name is the card's own setup label (`FVG`, `Supply` for a SELL, `Demand` for a BUY, `Order Block`), prices use the instrument's card digits, and `Order zone` appears only when the zone the plan trades differs from the structure. An event, cached match or card without the block renders exactly as before. Display only: strategy identity, stats keys, policy and results do not read it, and an already-published card still matches its setup (`forming_card_matches_strategy`, #814).
+Python (`app/analysis_client/models.py` `StructureZone`, optional so old events still parse) copies it to `StrategyMatch` (`structure_timeframe/low/high/formed_at`, optional). **The root card does not print it**: the "Structure:" and "Order zone:" lines were removed (23 Nov 2026, owner request); the block is carried only, and strategy identity, stats keys, policy and results do not read it.
 
 
 ## Release
