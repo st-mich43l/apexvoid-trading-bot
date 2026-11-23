@@ -178,7 +178,7 @@ flowchart TD
   LUA --> OK[plan may publish]
 ```
 
-A group counts from pending until fully closed, including after TP1 or break-even.
+A group counts from pending until fully closed, including after TP1 or break-even; the XAU pack sets `same_direction.risk_free_groups_count: false` (X4), so a **risk-free** XAU group stops counting: TP2 booked (`HighestBookedTargetIndex >= 1`, the point where the executor's `HasBlockingSameDirectionLivePlan` and Python's own `same_direction_active_before_tp2` stacking gate both unlock) **and** the live stop leaves at most the break-even buffer (`execution.stops.be_buffer_ticks` ticks over the remaining lots) of remaining risk. A missing risk or booking keeps counting the group, the group's own thesis still blocks a duplicate, and FX is unchanged. A refusal now records, per blocking group, `plan_id`, `highest_booked_target_index`, `risk_amount`, `stop_price`, `entry_reference` and `counted` (`existing_groups`), and `skipped_risk_free_plan_ids`; the counter `same_direction_risk_free_skipped{symbol}` counts the groups skipped.
 An XAU scale-in ladder is one group. Unknown is never zero: a stale snapshot, an
 unreadable runtime state or a recovering group refuses with `exposure_unknown` and
 the intent is retried. Manual `/algo` groups count as exposure but are never refused.

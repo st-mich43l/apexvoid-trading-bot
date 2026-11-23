@@ -48,6 +48,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Iterable
 
 from app.autotrade.active_exposure import (
+  SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX,
   _OPEN_TRADE_PLAN_GROUP_STAGES,
   _OPEN_TRADE_PLAN_STAGES,
   _PENDING_TRADE_PLAN_GROUP_STAGES,
@@ -210,6 +211,11 @@ class GroupExposure:
   risk_basis: str = "unknown"
   highest_booked_target_index: int | None = None
   remaining_lots: float | None = None
+  # X4: what the risk-free test and the recorded refusal inputs read. ``stop_price`` is the live stop, ``entry_reference`` the group's weighted fill, and
+  # ``risk_free_allowance`` the break-even buffer in account currency (be_buffer_ticks x tick, over the remaining lots): the most remaining risk a break-even group may carry.
+  stop_price: float | None = None
+  entry_reference: float | None = None
+  risk_free_allowance: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -240,6 +246,29 @@ def _setup_id(value: str) -> str:
 def _leg_price(leg: dict[str, Any], *keys: str) -> float | None:
   price = _as_float(_payload_get(leg, *keys))
   return price if price is not None and price > 0 else None
+
+
+def _first_positive(payload: dict[str, Any], *keys: str) -> float | None:
+  for key in keys:
+    value = _as_float(payload.get(key))
+    if value is not None and value > 0:
+      return value
+  return None
+
+
+def be_buffer_allowance(units: Any, lots: float | None) -> float:
+  """The break-even buffer (``execution.stops.be_buffer_ticks`` ticks) as account currency over ``lots``: what a group stopped at break-even may still risk and count as risk-free."""
+  if lots is None or not lots > 0:
+    return 0.0
+  try:
+    from app.core.config import runtime_config
+
+    ticks = float(runtime_config.execution.stops.be_buffer_ticks)
+    tick = 10.0 ** -int(units.price_digits)
+    pip = float(units.pip_size)
+    return ticks * tick / pip * float(lots) * float(units.pip_value_per_lot) if pip > 0 else 0.0
+  except (AttributeError, TypeError, ValueError):
+    return 0.0
 
 
 def runtime_group_risk(
@@ -421,6 +450,8 @@ async def load_symbol_exposure(
       pip_value_per_lot=float(units.pip_value_per_lot),
       volume_units_per_lot=float(units.volume_units_per_lot),
     )
+    stop_price = _first_positive(payload, "current_stop", "CurrentStop", "group_absolute_stop", "GroupAbsoluteStop")
+    entry_reference = _first_positive(payload, "group_weighted_fill_price", "GroupWeightedFillPrice", "entry_fill_price", "EntryFillPrice")
     booked = _as_int(_payload_get(payload, "highest_booked_target_index", "HighestBookedTargetIndex"))
     if booked is not None and booked < 0:
       booked = None
@@ -436,6 +467,9 @@ async def load_symbol_exposure(
       risk_basis="runtime" if risk is not None else "unknown",
       highest_booked_target_index=booked,
       remaining_lots=lots,
+      stop_price=stop_price,
+      entry_reference=entry_reference,
+      risk_free_allowance=be_buffer_allowance(units, lots),
     ))
   await _enrich_from_plans_and_reservations(client, exposure, policy=policy, now=now)
   # A broker group the runtime cannot account for is live exposure of unknown
@@ -493,10 +527,44 @@ async def _enrich_from_plans_and_reservations(client: Any, exposure: SymbolExpos
   exposure.groups = [g for g in exposure.groups if g.source != "runtime"] + enriched
 
 
+# TP2 is the one point three things already agree on: the executor stops treating a same-direction plan as blocking at ``HighestBookedTargetIndex >= 1``
+# (TradePlanRuntime.HasBlockingSameDirectionLivePlan: "still pending or open without TP2"), and Python's own stacking gate (active_exposure,
+# ``same_direction_active_before_tp2``) unlocks only once every open same-direction plan has booked TP2. The index is -1 with nothing booked, 0 once TP1 is booked, 1 once
+# TP2 is. A group is risk-free here from the same point, so Python never admits a plan the executor would reject (same_direction_live_plan); before TP2 the earlier gate
+# refuses anyway.
+RISK_FREE_MIN_BOOKED_TARGET_INDEX = SAME_DIRECTION_UNLOCK_BOOKED_TARGET_INDEX
+
+
+def is_risk_free(group: GroupExposure) -> bool:
+  """TP2 booked and the live stop leaves at most the break-even buffer of risk. An unknown risk or booking is never risk-free (fail closed)."""
+  return (
+    group.risk_amount is not None
+    and group.risk_amount <= max(_EPSILON, group.risk_free_allowance)
+    and group.highest_booked_target_index is not None
+    and group.highest_booked_target_index >= RISK_FREE_MIN_BOOKED_TARGET_INDEX
+  )
+
+
 def _counts_toward_groups(policy: SameDirectionPolicy, group: GroupExposure) -> bool:
   if policy.risk_free_groups_count:
     return True
-  return not (group.risk_amount is not None and group.risk_amount <= _EPSILON and group.highest_booked_target_index is not None)
+  return not is_risk_free(group)
+
+
+def group_inputs(policy: SameDirectionPolicy, groups: Iterable[GroupExposure]) -> dict[str, Any]:
+  """The decision inputs recorded with a same-direction refusal (X4): per live group, what the count and the risk-free test read, and which groups were skipped as risk-free."""
+  rows = []
+  skipped = []
+  for g in groups:
+    counted = _counts_toward_groups(policy, g)
+    if not counted:
+      skipped.append(g.plan_id)
+    rows.append({
+      "plan_id": g.plan_id, "source": g.source, "stage": g.stage, "highest_booked_target_index": g.highest_booked_target_index,
+      "risk_amount": None if g.risk_amount is None else round(g.risk_amount, 4), "risk_basis": g.risk_basis, "stop_price": g.stop_price,
+      "entry_reference": g.entry_reference, "risk_free_allowance": round(g.risk_free_allowance, 4), "counted": counted,
+    })
+  return {"existing_plan_ids": [r["plan_id"] for r in rows], "existing_groups": rows, "skipped_risk_free_plan_ids": skipped}
 
 
 def _same_side(group: GroupExposure, direction: str) -> bool:
@@ -540,10 +608,10 @@ def evaluate_group_exposure(
     "symbol_risk": round(symbol_risk, 4),
     "max_symbol_risk": limits.max_symbol_risk,
     "incoming_risk": None if incoming_risk is None else round(incoming_risk, 4),
-    "existing_plan_ids": [g.plan_id for g in same],
     "existing_sources": [g.source for g in same],
     "existing_risk_bases": [g.risk_basis for g in same],
     "unknown_reasons": unknown_reasons,
+    **group_inputs(policy, same),
   }
 
   def block(code: str, message: str) -> GroupDecision:
@@ -846,6 +914,7 @@ async def reserve_group_slot(
     "max_cumulative_risk": limits.max_cumulative_risk,
     "max_symbol_risk": limits.max_symbol_risk,
     "unknown_reasons": list(exposure.unknown_reasons),
+    **group_inputs(policy, same),
   }
   if ok:
     return GroupDecision(True, None, "", measured)
