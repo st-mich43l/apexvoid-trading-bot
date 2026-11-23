@@ -265,7 +265,8 @@ func (s *Strategy) publish(base *view, in instance, refuse func(reason string)) 
 	if direction == market.Sell {
 		reference = entryLow
 	}
-	room := v.room(in, reference, math.Abs(reference-invalidation))
+	risk, structural := s.cfg.roomRisk(reference, invalidation)
+	room := v.room(in, reference, risk, structural)
 	if len(room.Reasons) > 0 {
 		for _, r := range room.Reasons {
 			refuse(r)

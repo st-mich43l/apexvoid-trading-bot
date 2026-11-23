@@ -144,35 +144,28 @@ func (v *view) impulse(in instance) (extreme, origin float64, ok bool) {
 
 // roomResult is the room and extension judgement of one entry.
 type roomResult struct {
-	Target      float64
-	Label       string
-	RoomR       float64 // distance to the target in units of the risk
-	Retracement float64 // how far the entry sits back from the leg's extreme, as a share of the leg (NaN without a leg)
-	Reasons     []string
+	Target          float64
+	Label           string
+	RoomR           float64 // distance to the target in units of the EFFECTIVE risk (the structural distance, or the instrument floor when that is tighter)
+	RoomStructuralR float64 // the same distance in units of the structural risk alone (published as room_r_structural; what v11 called room_r)
+	Retracement     float64 // how far the entry sits back from the leg's extreme, as a share of the leg (NaN without a leg)
+	Reasons         []string
 }
 
-// room places the target and judges the entry. risk is |reference - invalidation|. The target is the nearest obstacle when it is at least
-// MinimumTargetR x risk away (otherwise the entry has no room: no_target_room) and a fixed FallbackTargetR x risk when nothing stands in the way. A leg
-// that is both stretched (ExtensionMinimumLegATR of the structure frame's ATR) and barely retraced (under MinimumLegRetracement) refuses
-// entry_at_leg_extreme. Both reasons are reported when both apply.
-func (v *view) room(in instance, reference, risk float64) roomResult {
-	out := roomResult{Retracement: math.NaN()}
-	sign := 1.0
-	if v.dir == market.Sell {
-		sign = -1
-	}
-	if list := v.obstacles(in, reference); len(list) > 0 {
-		nearest := list[0]
-		out.Target, out.Label = nearest, "nearest_opposing_structure"
-		if math.Abs(nearest-reference) < v.cfg.MinimumTargetR*risk {
-			out.Reasons = append(out.Reasons, refusedNoTargetRoom)
-		}
-	} else {
-		out.Target, out.Label = reference+sign*v.cfg.FallbackTargetR*risk, fixedRewardRisk
-	}
-	if risk > 0 {
-		out.RoomR = math.Abs(out.Target-reference) / risk
-	}
+// roomRisk is the risk the room is judged against: the distance from the proximal entry edge (reference) to the stop execution will actually place. A
+// structural stop tighter than the instrument floor is widened to it (and the fixed-RR targets are placed at 1R/2R of the widened risk), so a trade whose
+// structural stop is 5 pips on an FX pair with a 12-pip floor has the room of a 12-pip risk, not of a 5-pip one. Without a floor it is the structural
+// distance. It never moves a price. (FVG v12; v11 judged the structural distance.)
+func (c Config) roomRisk(reference, invalidation float64) (effective, structural float64) {
+	return c.StopBudget.EffectiveRisk(reference, invalidation), math.Abs(reference - invalidation)
+}
+
+// room places the target and judges the entry. risk is the effective risk (roomRisk) and structural the structural distance |reference - invalidation|,
+// kept only to publish the ratio in both units. The target is the nearest obstacle when it is at least MinimumTargetR x risk away (otherwise the entry has
+// no room: no_target_room) and a fixed FallbackTargetR x risk when nothing stands in the way. A leg that is both stretched (ExtensionMinimumLegATR of the
+// structure frame's ATR) and barely retraced (under MinimumLegRetracement) refuses entry_at_leg_extreme. Both reasons are reported when both apply.
+func (v *view) room(in instance, reference, risk, structural float64) roomResult {
+	out := placeRoom(v.obstacles(in, reference), reference, risk, structural, v.dir == market.Buy, v.cfg.MinimumTargetR, v.cfg.FallbackTargetR)
 	if extreme, origin, ok := v.impulse(in); ok {
 		leg := math.Abs(extreme - origin)
 		atr := frameATRAt(in)
@@ -182,6 +175,31 @@ func (v *view) room(in instance, reference, risk float64) roomResult {
 				out.Reasons = append(out.Reasons, refusedEntryAtLegExtreme)
 			}
 		}
+	}
+	return out
+}
+
+// placeRoom is the target half of room: obstacles are the opposing obstacles nearest first.
+func placeRoom(obstacles []float64, reference, risk, structural float64, buy bool, minimumTargetR, fallbackTargetR float64) roomResult {
+	out := roomResult{Retracement: math.NaN()}
+	sign := 1.0
+	if !buy {
+		sign = -1
+	}
+	if len(obstacles) > 0 {
+		nearest := obstacles[0]
+		out.Target, out.Label = nearest, "nearest_opposing_structure"
+		if math.Abs(nearest-reference) < minimumTargetR*risk {
+			out.Reasons = append(out.Reasons, refusedNoTargetRoom)
+		}
+	} else {
+		out.Target, out.Label = reference+sign*fallbackTargetR*risk, fixedRewardRisk
+	}
+	if risk > 0 {
+		out.RoomR = math.Abs(out.Target-reference) / risk
+	}
+	if structural > 0 {
+		out.RoomStructuralR = math.Abs(out.Target-reference) / structural
 	}
 	return out
 }

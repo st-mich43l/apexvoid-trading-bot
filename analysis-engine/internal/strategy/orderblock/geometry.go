@@ -131,30 +131,48 @@ func (v *view) impulse(in instance) (extreme float64, ok bool) {
 
 // roomResult is the room judgement of one entry.
 type roomResult struct {
-	Target  float64
-	Label   string
-	RoomR   float64 // distance to the target in units of the risk
-	Refused bool
+	Target          float64
+	Label           string
+	RoomR           float64 // distance to the target in units of the EFFECTIVE risk (the structural distance, or the instrument floor when that is tighter)
+	RoomStructuralR float64 // the same distance in units of the structural risk alone (published as room_r_structural; what v11 called room_r)
+	Refused         bool
 }
 
-// room places the target and judges the entry. risk is |reference - invalidation|. The target is the nearest obstacle when it is at least
-// MinimumTargetR x risk away (otherwise the entry has no room: no_target_room) and a fixed FallbackTargetR x risk when nothing stands in the way. A block
-// sits at the origin of its leg, so there is no extension rule.
-func (v *view) room(in instance, reference, risk float64) roomResult {
+// roomRisk is the risk the room is judged against: the distance from the proximal entry edge (reference) to the stop execution will actually place. A
+// structural stop tighter than the instrument floor is widened to it (and the fixed-RR targets are placed at 1R/2R of the widened risk), so a trade whose
+// structural stop is 5 pips on an FX pair with a 12-pip floor has the room of a 12-pip risk, not of a 5-pip one. Without a floor it is the structural
+// distance. It never moves a price. (Order Block v12; v11 judged the structural distance.)
+func (c Config) roomRisk(reference, invalidation float64) (effective, structural float64) {
+	return c.StopBudget.EffectiveRisk(reference, invalidation), math.Abs(reference - invalidation)
+}
+
+// room places the target and judges the entry. risk is the effective risk (roomRisk) and structural the structural distance |reference - invalidation|,
+// kept only to publish the ratio in both units. The target is the nearest obstacle when it is at least MinimumTargetR x risk away (otherwise the entry has
+// no room: no_target_room) and a fixed FallbackTargetR x risk when nothing stands in the way. A block sits at the origin of its leg, so there is no
+// extension rule.
+func (v *view) room(in instance, reference, risk, structural float64) roomResult {
+	return placeRoom(v.obstacles(in, reference), reference, risk, structural, v.dir == market.Buy, v.cfg.MinimumTargetR, v.cfg.FallbackTargetR)
+}
+
+// placeRoom is room over the opposing obstacles, nearest first.
+func placeRoom(obstacles []float64, reference, risk, structural float64, buy bool, minimumTargetR, fallbackTargetR float64) roomResult {
 	var out roomResult
 	sign := 1.0
-	if v.dir == market.Sell {
+	if !buy {
 		sign = -1
 	}
-	if list := v.obstacles(in, reference); len(list) > 0 {
-		nearest := list[0]
+	if len(obstacles) > 0 {
+		nearest := obstacles[0]
 		out.Target, out.Label = nearest, "nearest_opposing_structure"
-		out.Refused = math.Abs(nearest-reference) < v.cfg.MinimumTargetR*risk
+		out.Refused = math.Abs(nearest-reference) < minimumTargetR*risk
 	} else {
-		out.Target, out.Label = reference+sign*v.cfg.FallbackTargetR*risk, fixedRewardRisk
+		out.Target, out.Label = reference+sign*fallbackTargetR*risk, fixedRewardRisk
 	}
 	if risk > 0 {
 		out.RoomR = math.Abs(out.Target-reference) / risk
+	}
+	if structural > 0 {
+		out.RoomStructuralR = math.Abs(out.Target-reference) / structural
 	}
 	return out
 }
