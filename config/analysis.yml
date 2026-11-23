@@ -613,8 +613,16 @@ analysis:
       minimum_reward_risk: 1.15
       expiry_hours: 4.0
     flip_zone:
-      version: v5
+      # v6 (docs/strategies/flip_zone.md, Q3): owner rule 23 Nov 2026, setups are found on M5, M15 and H1 and M1 is execution only. The flip level, the break and its
+      # acceptance (breakout_accept_bars) and the zone are read on each frame of structure_timeframes; the retest rejection, the stop and the entry are read on M5.
+      # require_confirmation: true needs a confirming M5 rejection (a bare touch no longer publishes), overriding the global analysis.require_candle_confirmation.
+      # One candidate per flip-level thesis across frames (higher timeframe, then more stars, then the nearer entry); a published zone is withdrawn by a close of ITS frame
+      # beyond its far edge by more than structure_close_buffer_atr ATRs of that frame (the order block rule's 0.1).
+      version: v6
       enabled: true
+      structure_timeframes: [M5, M15, H1]
+      require_confirmation: true
+      structure_close_buffer_atr: 0.1
       invalidation_buffer_atr: 0.5
       minimum_target_distance_atr: 1.0
       expiry_hours: 24.0

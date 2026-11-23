@@ -5,7 +5,7 @@
 
 ## Strategy ID / version
 
-`flip_zone`, `v5`. Implemented in
+`flip_zone`, `v6`. Implemented in
 `analysis-engine/internal/strategy/flipzone`. Algorithm versions:
 `structure=v2`, `liquidity=v1`, `zone=v1`, `config=3`.
 
@@ -20,11 +20,28 @@ canonical V2 identity — direction-symmetric, one strategy, not two.
 
 ## Supported instruments / timeframes
 
-Any symbol; single timeframe `M5`.
+Any symbol. The flip structure is read on M5, M15 and H1 (`structure_timeframes: [M5, M15, H1]`); the retest rejection, the stop and the entry are read on M5; M1 is execution only (the parser refuses it).
+
+**Structure from M5, M15 and H1 (Q3, v6; owner rule 23 Nov 2026).** For each listed frame the flip level (its role broken by `breakout_accept_bars` closes of THAT frame), the break and the zone are that frame's primitives, so the age, the strength and the relevance of the zone are measured in that frame's bars and ATR. The confirmation is always an **M5** reaction: a rejection (`confirmReaction`) at or after the first M5 bar that opens once the bar that completed the flip zone has closed (on M5 itself, the zone's own bar index as before), so a higher-frame zone is never confirmed by a bar that was still forming when it was built. `require_confirmation: true` (shipped, the strategy's own switch, overriding the global `analysis.require_candle_confirmation: false`): a bare touch no longer publishes; there is no `candle_confirmation_optional` Flip Zone. The stop is the structure's far edge or the M5 reaction extreme, whichever is further out, plus `invalidation_buffer_atr` M5 ATRs (v4 rule, unchanged); the instrument stop envelope is unchanged. **One candidate per flip-level thesis** across frames (same direction, flip level within the wider of the two zone widths, found on different frames): `strategyutil.PreferHigherTimeframe`, i.e. the higher frame, then more stars, then the nearer entry; the others are counted as `duplicate_thesis`. The published `structure` is the zone on its own frame (`structure.timeframe` and `structure_timeframe`; evidence `structure_tf_m5`, `structure_tf_m15` or `structure_tf_h1`), and a close of THAT frame beyond the zone's far edge by more than `structure_close_buffer_atr` (shipped 0.1) ATRs of that frame withdraws it (`STRUCTURE_CLOSED_THROUGH`, `go_opportunity_structure_closed_through{strategy="flip_zone"}`); a wick that closes back inside never does.
+
+Refusals are counted as `strategy_refused{strategy="flip_zone", structure_timeframe, reason}`: `no_m5_reaction` (a flip zone qualifies on its frame but no M5 rejection confirms it), `both_sides_confirmed`, `duplicate_thesis`, plus the existing detector reasons (`entry_zone_below_minimum_width`, ...). `strategy_published{strategy, structure_tf}` counts every opportunity by frame.
+
+**What the replay showed (production bars, 23 Nov; 2,000 bars per timeframe, before = v5 at the Q2 tip, after = v6).**
+
+| Instrument | v5 published | v6 published | identical | dropped (v5 only) | new (v6 only) | v6 by frame M5 / M15 / H1 | v6 stop (pips) by frame |
+|---|---|---|---|---|---|---|---|
+| XAU | 8 | 2 | 1 | 7 | 1 | 1 / 1 / 0 | 68.8 / 69.0 / - |
+| EURUSD | 6 | 2 | 1 | 1 | 0 | 1 / 1 / 0 | 2.2 / 2.8 / - |
+| GBPUSD | 20 | 3 | 3 | 2 | 0 | 2 / 1 / 0 | 3.0, 5.1 / 5.4 / - |
+| USDJPY | 21 | 5 | 1 | 20 | 4 | 1 / 2 / 2 | 7.0 / 4.8, 11.1 / 5.3, 6.3 |
+| GBPJPY | 15 | 3 | 1 | 13 | 2 | 1 / 1 / 1 | 7.6 / 8.7 / 12.8 |
+| **all** | **70** | **15** | | | | | |
+
+(The published stops here are before execution widens them to the instrument floor.) The fall is the confirmation requirement, not the frames: 64 of the 70 v5 setups were bare touches (`candle_confirmation_optional`) and 6 had a rejection; all 6 v5 setups that had a rejection are published again with the identical entry and stop, and the 7 setups v6 adds are all M15 or H1 zones. `no_m5_reaction` is the dominant refusal in every instrument (XAU 76, EURUSD 38, GBPUSD 108, USDJPY 89, GBPJPY 76 zone-evaluations over the capture, M5 + M15 + H1); the higher frames supply 9 of the 15 published setups, 3 of them on H1 (2 USDJPY, 1 GBPJPY). One USDJPY M15 zone was withdrawn by a close of M15 beyond its far edge. Real XAU regression (`internal/replaycapture/flip_zone_multi_tf_test.go`, bars 14-18 Nov): the v5 bare touch of 18 Nov 23:10 UTC (BUY 3728.87-3733.87, stop 3727.17) is replaced by the confirmed M15 reading of the same zone at 23:25 (BUY 3728.99-3734.00, stop 3727.10); the touch of 08:50 that never got a rejection no longer publishes. A sample this small (15 setups in 5-7 days) proves nothing about the edge; it shows what is published and why the rest is refused.
 
 ## Required regime / structure / liquidity / location
 
-- Zone `Kind == KindFlip`.
+- Zone `Kind == KindFlip`, on a listed frame.
 - `State` is `Fresh` or `Touched`.
 - `Relevance` is `Immediate` or `Nearby`.
 - `Strength >= minimum_strength` (no positive-strength floor required —
@@ -70,7 +87,7 @@ worn down). `test/strategy/flipzone/flipzone_test.go`'s
 `TestFlipZone_AConfirmedRetestScoresHigherThanAnUnconfirmedFlip` asserts
 this three-way ordering directly.
 
-Evidence codes: `m5_flip_zone_<state>`, `m5_flip_zone_relevance_<relevance>`,
+Evidence codes: `structure_tf_<m5|m15|h1>`, `m5_flip_zone_<state>`, `m5_flip_zone_relevance_<relevance>`,
 `m5_flip_zone_new_side_<side>`.
 
 ## Bullish / bearish examples
