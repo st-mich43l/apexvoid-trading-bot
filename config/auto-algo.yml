@@ -51,7 +51,9 @@ auto_algo:
 
   risk:
     position_limits:
-      same_direction_stack_size_fraction: 0.6
+      # Owner 2026-11-24: a same-direction add is sized on equity like any plan; a resting limit order or an open trade on the symbol no longer cuts it to 60%.
+      # (Whether an add is admitted at all stays with the exposure gates: group count and cumulative risk, TP2 + Tier A for non-scalps.)
+      same_direction_stack_size_fraction: 1.0
     sizing:
       risk_pct: 2.0
       equity_table_version: owner_equity_v1
