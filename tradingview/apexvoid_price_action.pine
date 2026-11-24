@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.22", "AV PA v2.22", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.25", "AV PA v2.25", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -119,6 +119,8 @@ float scaleWindowATR = input.float(15.0, "Candle-scale window (ATR)", minval = 3
 int maxDrawBars = input.int(250, "Maximum drawn length of zones and pool lines (bars)", minval = 30, maxval = 2000, group = G6)
 int zoneOpacity = input.int(92, "Zone transparency", minval = 65, maxval = 98, group = G6)
 int maxZones = input.int(80, "Maximum retained zone state", minval = 10, maxval = 120, group = G6)
+string perfMode = input.string("Free plan (fast)", "Performance", options = ["Free plan (fast)", "Full"], group = G6, tooltip = "Free plan (fast) keeps the last bar under TradingView's 0.5 s limit (RE10110): the nearest-internal-swing markers are off, at most 30 retained zones, 12 retained liquidity pools and a 150-bar key level window. Full restores every setting as configured (needs a plan with a longer limit).")
+bool fastMode = perfMode == "Free plan (fast)"
 int visibleZones = input.int(8, "Visible qualified zones", minval = 1, maxval = 40, group = G6)
 float zoneDisplayDistanceATR = input.float(10.0, "Maximum visible zone distance (ATR)", minval = 2, maxval = 50, step = 0.5, group = G6)
 int poiStructureWindow = input.int(96, "POI structure-confluence window", minval = 5, maxval = 300, group = G6)
@@ -152,7 +154,8 @@ int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
 int externalLength = sensitivity == "Manual" ? manualExternal : chartSecs <= 300 ? 12 : chartSecs <= 900 ? 16 : chartSecs <= 3600 ? 20 : chartSecs <= 14400 ? 24 : 30
 float atr = ta.atr(14)
-int keyWindow = keyWindowInput > 0 ? keyWindowInput : chartSecs <= 300 ? 150 : chartSecs <= 900 ? 250 : 400
+int keyWindowFull = keyWindowInput > 0 ? keyWindowInput : chartSecs <= 300 ? 150 : chartSecs <= 900 ? 250 : 400
+int keyWindow = fastMode ? math.min(keyWindowFull, 150) : keyWindowFull
 bool isGold = str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")
 bool keyV7 = keyDefinition == "Selective (v7 preview)"
 float keyStep = keyRoundInput > 0 ? keyRoundInput : isGold ? (keyV7 ? 10.0 : 5.0) : 0.0
@@ -170,18 +173,20 @@ float internalLow = ta.pivotlow(low, internalLength, internalLength)
 bool newInternalHigh = barstate.isconfirmed and not na(internalHigh)
 bool newInternalLow = barstate.isconfirmed and not na(internalLow)
 bool minimalMode = displayProfile == "Minimal"
+int effMaxZones = fastMode ? math.min(maxZones, 30) : maxZones
+int effMaxLiquidity = fastMode ? math.min(maxLiquidity, 12) : maxLiquidity
 bool balancedMode = displayProfile == "Balanced — Recommended"
 bool detailedMode = displayProfile == "Detailed"
 bool debugMode = displayProfile == "Debug"
 bool showInternal = showInternalSwing and (detailedMode or debugMode)
 bool renderLiquidity = showLiquidity and not minimalMode
 bool renderSweeps = showSweeps and not minimalMode
-int effectiveVisibleZones = minimalMode ? math.min(visibleZones, 4) : balancedMode ? math.min(visibleZones, 8) : detailedMode ? math.max(visibleZones, 12) : math.min(maxZones, 20)
+int effectiveVisibleZones = minimalMode ? math.min(visibleZones, 4) : balancedMode ? math.min(visibleZones, 8) : detailedMode ? math.max(visibleZones, 12) : math.min(effMaxZones, 20)
 float effZoneDistanceATR = zoneDisplayDistanceATR
 float effObDistanceATR = obDisplayDistanceATR
 float effLiqDistanceATR = liqDisplayDistanceATR
 float effLiqNearestATR = liqDisplayDistanceATR * 2.0
-int effectiveVisibleLiquidity = minimalMode ? 0 : balancedMode ? math.min(visibleLiquidity, 8) : detailedMode ? math.max(visibleLiquidity, 12) : maxLiquidity
+int effectiveVisibleLiquidity = minimalMode ? 0 : balancedMode ? math.min(visibleLiquidity, 8) : detailedMode ? math.max(visibleLiquidity, 12) : effMaxLiquidity
 int effectiveExternalEvents = minimalMode ? math.min(majorEventLimit, 3) : balancedMode ? math.min(majorEventLimit, 6) : majorEventLimit
 int effectiveAsiaHistory = minimalMode ? 1 : asiaHistory
 bool compactText = textScaleInput == "Compact"
@@ -368,7 +373,7 @@ f_addZone(int origin, float top, float bottom, int side, int kind, string title,
             added := 1
             // Capacity eviction removes imbalance zones first, then supply/demand,
             // and only then order blocks, so FVG volume cannot erase analytical OBs.
-            if array.size(zones) > maxZones
+            if array.size(zones) > effMaxZones
                 int evictIndex = -1
                 for pass = 0 to 2
                     int evictKind = pass == 0 ? 2 : pass == 1 ? 3 : 1
@@ -1076,7 +1081,7 @@ f_poolNew(int side, float top, float bottom, int birth, int tests, int degree, s
     array.push(poolExtremeBars, -1)
     array.push(poolBeyond, 0)
     array.push(poolVisible, false)
-    if array.size(poolStates) > maxLiquidity
+    if array.size(poolStates) > effMaxLiquidity
         // Evict consumed pools first, then the lowest structural degree, then the oldest.
         int evictIdx = 0
         float evictKey = 1.0e12
@@ -2252,6 +2257,8 @@ f_vpLine(int x1, int x2, float y, int tr, string sty) =>
 
 string vpPer = vpMode == "Manual" ? vpPerIn : chartSecs <= 300 ? "Session" : chartSecs <= 1800 ? "Day" : chartSecs <= 7200 ? "Week" : chartSecs <= 14400 ? "Month" : "Quarter"
 bool vpOn = vpMode != "Off" and not minimalMode
+// v2.25: the profile only needs the developing period plus the few completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only; older bars do no volume profile work at all.
+bool vpLive = vpOn and bar_index > last_bar_index - 900
 string vpIb = vpMode == "Manual" ? vpIbIn : chartSecs <= 300 ? "1" : chartSecs <= 900 ? "3" : chartSecs <= 1800 ? "5" : chartSecs <= 7200 ? "15" : "60"
 int vpKeep = vpMode == "Manual" ? vpKeepIn : chartSecs <= 300 ? 2 : chartSecs <= 7200 ? 1 : 0
 float vpExp = (vpPer == "Session" ? 28800.0 : vpPer == "Day" ? 82800.0 : vpPer == "Week" ? 414000.0 : vpPer == "Month" ? 1738800.0 : 5216400.0) / chartSecs
@@ -2282,7 +2289,7 @@ var int[] nkB = array.new_int()
 var string[] nkT = array.new_string()
 var line[] nkLines = array.new_line()
 
-if vpOn and barstate.isconfirmed
+if vpLive and barstate.isconfirmed
     if vpOpen and array.size(vpH) > 0
         float lo = array.min(vpL)
         float hi = math.max(array.max(vpH), lo + syminfo.mintick)
@@ -2394,7 +2401,7 @@ if barstate.islast
     float gapBsl = 1.0e10
     float gapSsl = 1.0e10
     float safeAtr = math.max(nz(atr, syminfo.mintick), syminfo.mintick)
-    if showNearestInternal and not minimalMode and not na(atr) and array.size(ringPrices) > 0
+    if showNearestInternal and not minimalMode and not fastMode and not na(atr) and array.size(ringPrices) > 0
         for r = 0 to array.size(ringPrices) - 1
             float rp = array.get(ringPrices, r)
             int rb = array.get(ringBars, r)
