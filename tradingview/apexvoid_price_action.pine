@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.23", "AV PA v2.23", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.24", "AV PA v2.24", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
