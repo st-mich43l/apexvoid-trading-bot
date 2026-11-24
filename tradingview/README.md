@@ -6,7 +6,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.21). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.22). |
 
 ## ApexVoid Price Action
 
@@ -185,7 +185,7 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
-distance` (10 ATR, FVG and supply/demand), actionable POI distance (3 ATR), POI
+distance` (10 ATR, FVG and supply/demand), POI
 structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12); `Show session titles` is in 05 Sessions.
 
 
@@ -239,6 +239,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
+| 2.22 | **Second runtime fix for `RE10110` (0.5 s on the free plans), not measured in TradingView (it showed on AV PA v2.21, XAUUSD M15, so the v2.21 volume-profile change was not the cause or not the only one).** Work removed from the last bar and from event bars, with identical output: (1) the "analytical POI", "actionable POI" and POI-barrier passes (three loops over all retained zones, two of them nested) fed only variables that nothing has read since the panel was removed in v2.19, so they are deleted, with the unused `Actionable POI distance` input; (2) the POI qualification walked every zone against every other zone twice (once inline, once in `f_poiPath`): the overlap relation is symmetric, so it is now walked once per pair (about a quarter of the iterations); (3) `f_pullbackOk` re-walked up to 750 bars of history for every equal-high / equal-low candidate, up to 80 candidates per pivot in a range: one running high / low table per pivot is now shared by all of its candidates. Pools, zones, POIs, captions and alerts are unchanged. If the error persists, set `Display profile` to `Minimal` to confirm it is a feature, then switch features off one at a time and report the first that clears it (or use TradingView's Profiler: Pine Editor, More, Profiler). |
 | 2.21 | **Runtime fix for `RE10110` (the script takes too long to execute, 0.5 s on the free plans), not measured in TradingView.** The volume profile is recomputed over every intrabar of the period on the last bar; on a 15m chart that was up to 1,380 one-minute intrabars (a trading day), and when a profile outgrew 3,000 intrabars it was thinned with 1,500 `array.remove` calls. v2.21 uses coarser automatic intrabar timeframes (15m chart: 3m, 30m: 5m, 1h to 2h: 15m, 3h to 4h: 60m, so a day is at most 460 intrabars), caps a profile at 800 intrabars (when it passes that, neighbours are merged pairwise and the tail popped, no `array.remove`), and nothing else changes: same periods, rows, POC and value-area rules. If the error persists, set `Volume profile` to `Off` and use TradingView's Profiler (Pine Editor, More, Profiler) to see which block is slow. |
 | 2.20 | Volume profile inside the main indicator (tick volume): POC, value area, naked POCs, polylines, `request.security_lower_tf` of the plain high / low / volume, period and intrabar timeframe follow the chart timeframe (`Auto`). Right-column captions get a category `volume` (listed together, appended next to other labels). New group `08 Volume Profile`, `max_polylines_count` 20. Display only; no measured edge. |
 | 2.19 | The Market Intelligence panel (the table) and the state that only fed it are removed. |

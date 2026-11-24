@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.21", "AV PA v2.21", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.22", "AV PA v2.22", overlay = true, behind_chart = true, max_bars_back = 800, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -121,7 +121,6 @@ int zoneOpacity = input.int(92, "Zone transparency", minval = 65, maxval = 98, g
 int maxZones = input.int(80, "Maximum retained zone state", minval = 10, maxval = 120, group = G6)
 int visibleZones = input.int(8, "Visible qualified zones", minval = 1, maxval = 40, group = G6)
 float zoneDisplayDistanceATR = input.float(10.0, "Maximum visible zone distance (ATR)", minval = 2, maxval = 50, step = 0.5, group = G6)
-float actionablePoiDistanceATR = input.float(3.0, "Actionable POI distance (ATR)", minval = 0.5, maxval = 15, step = 0.25, group = G6)
 int poiStructureWindow = input.int(96, "POI structure-confluence window", minval = 5, maxval = 300, group = G6)
 int maxEventLabels = input.int(150, "Maximum event labels", minval = 20, maxval = 280, group = G6)
 int maxStructureEvents = input.int(60, "Maximum BOS/CHoCH events", minval = 10, maxval = 110, group = G6)
@@ -1091,16 +1090,25 @@ f_poolNew(int side, float top, float bottom, int birth, int tests, int degree, s
 
 // Two tests are independent only if price pulled back between them and neither
 // level was exceeded in between (otherwise the first was already swept).
-f_pullbackOk(int side, int fromBar, int toBar, float priceA, float priceB, float tol, float atrRef) =>
+f_pullbackOk(int side, int fromBar, int toBar, float priceA, float priceB, float tol, float atrRef, float[] cumHi, float[] cumLo) =>
     bool ok = false
     int span = bar_index - fromBar
     int newest = bar_index - toBar
     if span <= 750 and newest >= 0 and span >= newest
-        float segHigh = high[newest]
-        float segLow = low[newest]
-        for k = newest to span
-            segHigh := math.max(segHigh, high[k])
-            segLow := math.min(segLow, low[k])
+        // v2.22: cumHi / cumLo hold the running highest high / lowest low from `newest` bars ago outward (entry n = offsets newest .. newest + n). Every candidate of one
+        // f_poolIngest call shares `newest`, so the history is walked once per call and only as far as the farthest candidate needs, not once per candidate.
+        int need = span - newest + 1
+        int have = array.size(cumHi)
+        if have < need
+            float h = have == 0 ? high[newest] : array.get(cumHi, have - 1)
+            float l = have == 0 ? low[newest] : array.get(cumLo, have - 1)
+            for k = newest + have to span
+                h := math.max(h, high[k])
+                l := math.min(l, low[k])
+                array.push(cumHi, h)
+                array.push(cumLo, l)
+        float segHigh = array.get(cumHi, need - 1)
+        float segLow = array.get(cumLo, need - 1)
         if side == 1
             ok := segHigh <= math.max(priceA, priceB) + tol and segLow <= math.min(priceA, priceB) - eqMinPullbackATR * atrRef
         else
@@ -1110,6 +1118,8 @@ f_pullbackOk(int side, int fromBar, int toBar, float priceA, float priceB, float
 // degree: 1 = internal pivot candidate, 2 = confirmed external swing.
 f_poolIngest(float price, int bar, int side, int degree, float tol, float atrRef) =>
     bool handled = false
+    float[] cumHi = array.new_float()
+    float[] cumLo = array.new_float()
     if array.size(poolStates) > 0
         for i = 0 to array.size(poolStates) - 1
             if not handled and array.get(poolStates, i) == 0 and array.get(poolSides, i) == side
@@ -1118,7 +1128,7 @@ f_poolIngest(float price, int bar, int side, int degree, float tol, float atrRef
                     int lastTest = array.get(poolLastTests, i)
                     if bar - lastTest < eqMinSeparation
                         handled := true
-                    else if not f_pullbackOk(side, lastTest, bar, ref, price, tol, atrRef)
+                    else if not f_pullbackOk(side, lastTest, bar, ref, price, tol, atrRef, cumHi, cumLo)
                         handled := true
                     else
                         float newTop = math.max(array.get(poolTops, i), price)
@@ -1141,7 +1151,7 @@ f_poolIngest(float price, int bar, int side, int degree, float tol, float atrRef
                         array.remove(ringPrices, r)
                         array.remove(ringBars, r)
                         array.remove(ringSides, r)
-                else if bar_index - ringBar <= 400 and f_pullbackOk(side, ringBar, bar, partner, price, tol, atrRef)
+                else if bar_index - ringBar <= 400 and f_pullbackOk(side, ringBar, bar, partner, price, tol, atrRef, cumHi, cumLo)
                     array.remove(ringPrices, r)
                     array.remove(ringBars, r)
                     array.remove(ringSides, r)
@@ -1692,28 +1702,10 @@ if bearFVG
     f_addZone(bar_index - 2, low[2], high, -1, 2, "Bear FVG", bearFvgColor, 0, "")
 
 // Named POI qualification path of zone i ("Candidate" = not qualified). Used by the display pass.
-f_poiPath(int i, bool fresh) =>
+f_poiPath(int i, bool fresh, bool hasOB, bool hasFVG, bool hasSD) =>
     int side = array.get(zoneSides, i)
     int kind = array.get(zoneKinds, i)
     int born = array.get(zoneBirth, i)
-    float top = array.get(zoneTops, i)
-    float bottom = array.get(zoneBottoms, i)
-    bool hasOB = kind == 1
-    bool hasFVG = kind == 2
-    bool hasSD = kind == 3
-    if array.size(zones) > 1
-        for j = 0 to array.size(zones) - 1
-            if j != i and array.get(zoneSides, j) == side
-                float otherTop = array.get(zoneTops, j)
-                float otherBottom = array.get(zoneBottoms, j)
-                float overlapSize = math.min(top, otherTop) - math.max(bottom, otherBottom)
-                float smallerHeight = math.min(top - bottom, otherTop - otherBottom)
-                // v2.13: a component counts only when it is independent: an OB and the FVG its own impulse printed (origins within 3 bars) are one event
-                if overlapSize > 0 and smallerHeight > 0 and overlapSize / smallerHeight >= 0.25 and math.abs(array.get(zoneOrigins, j) - array.get(zoneOrigins, i)) > 3
-                    int otherKind = array.get(zoneKinds, j)
-                    hasOB := hasOB or otherKind == 1
-                    hasFVG := hasFVG or otherKind == 2
-                    hasSD := hasSD or otherKind == 3
     bool componentConfluence = (hasOB and hasFVG) or (hasOB and hasSD) or (hasFVG and hasSD)
     bool structureRelated = not na(lastBreakBar) and born >= lastBreakBar - obLookback and born - lastBreakBar <= poiStructureWindow
     bool structureOriginOB = kind == 1 and array.get(zoneClasses, i) == 2 and side == bias and structureRelated
@@ -1844,18 +1836,6 @@ f_renderZones() =>
 
 // Closed-bar zone management. FVG invalidation follows the selected wick,
 // midpoint, or close policy; OB and supply/demand require a far-edge close.
-float nearestBullPoi = na
-float nearestBearPoi = na
-float nearestBullPoiDistanceATR = na
-float nearestBearPoiDistanceATR = na
-float nearestActionableBullPoi = na
-float nearestActionableBearPoi = na
-float nearestActionableBullDistanceATR = na
-float nearestActionableBearDistanceATR = na
-bool actionableBullPoi = false
-bool actionableBearPoi = false
-float bullPoiBarrier = na
-float bearPoiBarrier = na
 
 if array.size(zones) > 0
     // Lifecycle pass. Analytical state survives visual suppression.
@@ -1889,33 +1869,49 @@ if array.size(zones) > 0
     if array.size(zones) > 0 and barstate.islast
         // POI qualification pass. Confluence requires at least two independent
         // inputs; freshness and bias alignment alone never promote an FVG.
-        for i = 0 to array.size(zones) - 1
+        // v2.22: the independent-overlap relation is symmetric, so it is walked once per PAIR of zones (it was walked twice per zone: here and again inside f_poiPath).
+        int zoneTotal = array.size(zones)
+        bool[] ovOB = array.new_bool(zoneTotal, false)
+        bool[] ovFVG = array.new_bool(zoneTotal, false)
+        bool[] ovSD = array.new_bool(zoneTotal, false)
+        if zoneTotal > 1
+            for i = 0 to zoneTotal - 2
+                int pairSide = array.get(zoneSides, i)
+                float pairTop = array.get(zoneTops, i)
+                float pairBottom = array.get(zoneBottoms, i)
+                int pairKind = array.get(zoneKinds, i)
+                int pairOrigin = array.get(zoneOrigins, i)
+                for j = i + 1 to zoneTotal - 1
+                    if array.get(zoneSides, j) == pairSide
+                        float otherTop = array.get(zoneTops, j)
+                        float otherBottom = array.get(zoneBottoms, j)
+                        float overlapSize = math.min(pairTop, otherTop) - math.max(pairBottom, otherBottom)
+                        float smallerHeight = math.min(pairTop - pairBottom, otherTop - otherBottom)
+                        if overlapSize > 0 and smallerHeight > 0 and overlapSize / smallerHeight >= 0.25 and math.abs(array.get(zoneOrigins, j) - pairOrigin) > 3
+                            int otherKind = array.get(zoneKinds, j)
+                            if otherKind == 1
+                                array.set(ovOB, i, true)
+                            else if otherKind == 2
+                                array.set(ovFVG, i, true)
+                            else if otherKind == 3
+                                array.set(ovSD, i, true)
+                            if pairKind == 1
+                                array.set(ovOB, j, true)
+                            else if pairKind == 2
+                                array.set(ovFVG, j, true)
+                            else if pairKind == 3
+                                array.set(ovSD, j, true)
+        for i = 0 to zoneTotal - 1
             array.set(zoneVisible, i, false)
             int side = array.get(zoneSides, i)
             int kind = array.get(zoneKinds, i)
-            int born = array.get(zoneBirth, i)
-            float top = array.get(zoneTops, i)
-            float bottom = array.get(zoneBottoms, i)
             bool fresh = not array.get(zoneTouched, i)
-            bool hasOB = kind == 1
-            bool hasFVG = kind == 2
-            bool hasSD = kind == 3
-            if array.size(zones) > 1
-                for j = 0 to array.size(zones) - 1
-                    if j != i and array.get(zoneSides, j) == side
-                        float otherTop = array.get(zoneTops, j)
-                        float otherBottom = array.get(zoneBottoms, j)
-                        float overlapSize = math.min(top, otherTop) - math.max(bottom, otherBottom)
-                        float smallerHeight = math.min(top - bottom, otherTop - otherBottom)
-                        bool meaningfulOverlap = overlapSize > 0 and smallerHeight > 0 and overlapSize / smallerHeight >= 0.25 and math.abs(array.get(zoneOrigins, j) - array.get(zoneOrigins, i)) > 3
-                        if meaningfulOverlap
-                            int otherKind = array.get(zoneKinds, j)
-                            hasOB := hasOB or otherKind == 1
-                            hasFVG := hasFVG or otherKind == 2
-                            hasSD := hasSD or otherKind == 3
+            bool hasOB = kind == 1 or array.get(ovOB, i)
+            bool hasFVG = kind == 2 or array.get(ovFVG, i)
+            bool hasSD = kind == 3 or array.get(ovSD, i)
             // Named qualification paths replace the v1.x summed confluence score.
             // Proximity and display rank never promote a candidate.
-            string qualificationPath = f_poiPath(i, fresh)
+            string qualificationPath = f_poiPath(i, fresh, hasOB, hasFVG, hasSD)
             bool qualifiedPoi = qualificationPath != "Candidate"
             string sideName = side == 1 ? "Bull" : "Bear"
             string sdName = side == 1 ? "Demand" : "Supply"
@@ -1923,73 +1919,6 @@ if array.size(zones) > 0
             array.set(zonePoi, i, qualifiedPoi)
             array.set(zonePoiTitles, i, qualifiedPoi ? poiTitle : "")
             array.set(zoneQualification, i, fresh ? (qualifiedPoi ? "Qualified · " + qualificationPath : "Candidate") : "Tested · " + qualificationPath)
-
-        // Analytical POI pass is independent of visual ranking. Hidden qualified
-        // zones still participate in nearest-distance and barrier calculations.
-        for i = 0 to array.size(zones) - 1
-            if array.get(zonePoi, i)
-                float poiTop = array.get(zoneTops, i)
-                float poiBottom = array.get(zoneBottoms, i)
-                float poiMid = (poiTop + poiBottom) / 2.0
-                float poiDistance = math.abs(close - poiMid) / math.max(atr, syminfo.mintick)
-                int poiSide = array.get(zoneSides, i)
-                if poiSide == 1 and (na(nearestBullPoi) or poiDistance < nearestBullPoiDistanceATR)
-                    nearestBullPoi := poiMid
-                    nearestBullPoiDistanceATR := poiDistance
-                if poiSide == -1 and (na(nearestBearPoi) or poiDistance < nearestBearPoiDistanceATR)
-                    nearestBearPoi := poiMid
-                    nearestBearPoiDistanceATR := poiDistance
-
-        // Select the nearest genuinely actionable POI separately from the
-        // nearest qualified POI. Each candidate must be fresh, close enough,
-        // on the relevant side of price, and have one ATR of room when an
-        // opposing confirmed swing or qualified zone exists.
-        for i = 0 to array.size(zones) - 1
-            if array.get(zonePoi, i)
-                int candidateSide = array.get(zoneSides, i)
-                float candidateMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
-                float candidateDistance = math.abs(close - candidateMid) / math.max(atr, syminfo.mintick)
-                bool candidateFresh = not array.get(zoneTouched, i)
-                bool technicallyRelevant = candidateSide == 1 ? candidateMid <= close : candidateMid >= close
-                bool baseActionable = candidateFresh and technicallyRelevant and candidateDistance <= actionablePoiDistanceATR
-                if baseActionable
-                    float candidateBarrier = candidateSide == 1 ? (not na(lastSwingHigh) and lastSwingHigh > candidateMid ? lastSwingHigh : na) : (not na(lastSwingLow) and lastSwingLow < candidateMid ? lastSwingLow : na)
-                    if array.size(zones) > 1
-                        for j = 0 to array.size(zones) - 1
-                            if j != i and array.get(zonePoi, j) and array.get(zoneSides, j) == -candidateSide
-                                float barrierMid = (array.get(zoneTops, j) + array.get(zoneBottoms, j)) / 2.0
-                                if candidateSide == 1 and barrierMid > candidateMid and (na(candidateBarrier) or barrierMid < candidateBarrier)
-                                    candidateBarrier := barrierMid
-                                if candidateSide == -1 and barrierMid < candidateMid and (na(candidateBarrier) or barrierMid > candidateBarrier)
-                                    candidateBarrier := barrierMid
-                    float roomATR = na(candidateBarrier) ? na : math.abs(candidateBarrier - candidateMid) / math.max(atr, syminfo.mintick)
-                    bool hasRoom = na(roomATR) or roomATR >= 1.0
-                    if hasRoom and candidateSide == 1 and (na(nearestActionableBullPoi) or candidateDistance < nearestActionableBullDistanceATR)
-                        nearestActionableBullPoi := candidateMid
-                        nearestActionableBullDistanceATR := candidateDistance
-                        bullPoiBarrier := candidateBarrier
-                    if hasRoom and candidateSide == -1 and (na(nearestActionableBearPoi) or candidateDistance < nearestActionableBearDistanceATR)
-                        nearestActionableBearPoi := candidateMid
-                        nearestActionableBearDistanceATR := candidateDistance
-                        bearPoiBarrier := candidateBarrier
-        actionableBullPoi := not na(nearestActionableBullPoi)
-        actionableBearPoi := not na(nearestActionableBearPoi)
-
-        // When no actionable candidate exists, still report the barrier around
-        // the nearest qualified POI.
-        if not actionableBullPoi and not na(nearestBullPoi)
-            bullPoiBarrier := not na(lastSwingHigh) and lastSwingHigh > nearestBullPoi ? lastSwingHigh : na
-        if not actionableBearPoi and not na(nearestBearPoi)
-            bearPoiBarrier := not na(lastSwingLow) and lastSwingLow < nearestBearPoi ? lastSwingLow : na
-        if not actionableBullPoi or not actionableBearPoi
-            for i = 0 to array.size(zones) - 1
-                if array.get(zonePoi, i)
-                    float barrierMid = (array.get(zoneTops, i) + array.get(zoneBottoms, i)) / 2.0
-                    int barrierSide = array.get(zoneSides, i)
-                    if not actionableBullPoi and not na(nearestBullPoi) and barrierSide == -1 and barrierMid > nearestBullPoi and (na(bullPoiBarrier) or barrierMid < bullPoiBarrier)
-                        bullPoiBarrier := barrierMid
-                    if not actionableBearPoi and not na(nearestBearPoi) and barrierSide == 1 and barrierMid < nearestBearPoi and (na(bearPoiBarrier) or barrierMid > bearPoiBarrier)
-                        bearPoiBarrier := barrierMid
 
         // Order-block display selection. Order blocks have their own per-side budget and
         // distance limit, independent of POI qualification and of the FVG / supply-demand
