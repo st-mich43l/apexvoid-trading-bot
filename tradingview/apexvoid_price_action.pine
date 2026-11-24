@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.24", "AV PA v2.24", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.25", "AV PA v2.25", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -119,7 +119,7 @@ float scaleWindowATR = input.float(15.0, "Candle-scale window (ATR)", minval = 3
 int maxDrawBars = input.int(250, "Maximum drawn length of zones and pool lines (bars)", minval = 30, maxval = 2000, group = G6)
 int zoneOpacity = input.int(92, "Zone transparency", minval = 65, maxval = 98, group = G6)
 int maxZones = input.int(80, "Maximum retained zone state", minval = 10, maxval = 120, group = G6)
-string perfMode = input.string("Free plan (fast)", "Performance", options = ["Free plan (fast)", "Full"], group = G6, tooltip = "Free plan (fast) keeps the last bar under TradingView's 0.5 s limit (RE10110): volume profile and the nearest-internal-swing markers are off, at most 30 retained zones, 12 retained liquidity pools and a 150-bar key level window. Full restores every setting as configured (needs a plan with a longer limit).")
+string perfMode = input.string("Free plan (fast)", "Performance", options = ["Free plan (fast)", "Full"], group = G6, tooltip = "Free plan (fast) keeps the last bar under TradingView's 0.5 s limit (RE10110): the nearest-internal-swing markers are off, at most 30 retained zones, 12 retained liquidity pools and a 150-bar key level window. Full restores every setting as configured (needs a plan with a longer limit).")
 bool fastMode = perfMode == "Free plan (fast)"
 int visibleZones = input.int(8, "Visible qualified zones", minval = 1, maxval = 40, group = G6)
 float zoneDisplayDistanceATR = input.float(10.0, "Maximum visible zone distance (ATR)", minval = 2, maxval = 50, step = 0.5, group = G6)
@@ -2256,7 +2256,9 @@ f_vpLine(int x1, int x2, float y, int tr, string sty) =>
     line.new(x1, y, x2, y, xloc = xloc.bar_index, color = color.new(vpColor, tr), style = sty, width = 1)
 
 string vpPer = vpMode == "Manual" ? vpPerIn : chartSecs <= 300 ? "Session" : chartSecs <= 1800 ? "Day" : chartSecs <= 7200 ? "Week" : chartSecs <= 14400 ? "Month" : "Quarter"
-bool vpOn = vpMode != "Off" and not minimalMode and not fastMode
+bool vpOn = vpMode != "Off" and not minimalMode
+// v2.25: the profile only needs the developing period plus the few completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only; older bars do no volume profile work at all.
+bool vpLive = vpOn and bar_index > last_bar_index - 900
 string vpIb = vpMode == "Manual" ? vpIbIn : chartSecs <= 300 ? "1" : chartSecs <= 900 ? "3" : chartSecs <= 1800 ? "5" : chartSecs <= 7200 ? "15" : "60"
 int vpKeep = vpMode == "Manual" ? vpKeepIn : chartSecs <= 300 ? 2 : chartSecs <= 7200 ? 1 : 0
 float vpExp = (vpPer == "Session" ? 28800.0 : vpPer == "Day" ? 82800.0 : vpPer == "Week" ? 414000.0 : vpPer == "Month" ? 1738800.0 : 5216400.0) / chartSecs
@@ -2287,7 +2289,7 @@ var int[] nkB = array.new_int()
 var string[] nkT = array.new_string()
 var line[] nkLines = array.new_line()
 
-if vpOn and barstate.isconfirmed
+if vpLive and barstate.isconfirmed
     if vpOpen and array.size(vpH) > 0
         float lo = array.min(vpL)
         float hi = math.max(array.max(vpH), lo + syminfo.mintick)
