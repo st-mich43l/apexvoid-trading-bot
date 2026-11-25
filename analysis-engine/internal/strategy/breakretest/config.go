@@ -2,7 +2,9 @@ package breakretest
 
 import (
 	"fmt"
+	"math"
 
+	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/strategyutil"
 )
 
@@ -15,11 +17,22 @@ const (
 	ProtectedBreakOrigin = "break_origin"
 )
 
-// Config is the Break & Retest v3 technical contract. Every coefficient is
+// Config is the Break & Retest v4 technical contract. Every coefficient is
 // read from the strategy's parameters (config/analysis.yml); none has a code
 // default, so a missing key fails construction. The defaults are validated
 // against captures (docs/strategies/break_retest.md), not claimed universal.
 type Config struct {
+	// StructureTimeframes are the frames the broken level or trendline, the break and its acceptance and the protected structure are read on (M1 is never one).
+	// The retest and its rejection are always read on M5. Every "_bars" parameter that describes the structure (pivots, lookbacks, the ATR window) counts bars of the
+	// structure frame; retest_max_bars and confirmation_max_age_bars are counted in structure-frame bars and converted to time; confirmation_window_bars (touch to
+	// rejection) counts M5 bars.
+	StructureTimeframes []market.Timeframe
+	// RequireConfirmation: a confirming M5 rejection is required (the strategy's own switch, overriding the global analysis.require_candle_confirmation).
+	RequireConfirmation bool
+	// StructureCloseBufferATR is the engine's structure-close rule: a close of the structure's own frame beyond the broken reference's far edge by more than this many
+	// ATRs of that frame withdraws the published opportunity.
+	StructureCloseBufferATR float64
+
 	// Volatility and history.
 	ATRLength     int
 	ATRWindowBars int
@@ -123,7 +136,23 @@ func parseConfig(params map[string]any) (Config, error) {
 		}
 		*dst = value
 	}
-	c.CandleConfirmationOptional = !strategyutil.RequireCandleConfirmation(params)
+	var tfErr error
+	if c.StructureTimeframes, tfErr = strategyutil.ParseStructureTimeframes(params, []market.Timeframe{market.M5, market.M15, market.H1}); tfErr != nil {
+		return c, fmt.Errorf("break_retest: %w", tfErr)
+	}
+	var confErr error
+	if c.RequireConfirmation, confErr = strategyutil.ParseRequireConfirmation(params, strategyutil.RequireCandleConfirmation(params)); confErr != nil {
+		return c, fmt.Errorf("break_retest: %w", confErr)
+	}
+	c.CandleConfirmationOptional = !c.RequireConfirmation
+	closeBuffer, closeErr := strategyutil.Float(params, "structure_close_buffer_atr")
+	if closeErr != nil {
+		return c, fmt.Errorf("break_retest: %w", closeErr)
+	}
+	if closeBuffer < 0 || math.IsNaN(closeBuffer) || math.IsInf(closeBuffer, 0) {
+		return c, fmt.Errorf("break_retest: structure_close_buffer_atr must be a finite number >= 0")
+	}
+	c.StructureCloseBufferATR = closeBuffer
 	var ok bool
 	if c.ProtectedStructure, ok = params["protected_structure"].(string); !ok {
 		return c, fmt.Errorf("break_retest: parameter %q must be a string", "protected_structure")

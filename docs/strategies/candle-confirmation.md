@@ -42,7 +42,7 @@ Each strategy takes the touch of its entry location as the trigger when no confi
 | `flip_zone`, `trendline` | `reaction.Evaluate` through `LegacyDetector` | the latest touch of the zone or line | role flip, two anchors, valid-side touch |
 | `confluence_zone` | measured rejection (`measure`) | the touch candle itself (`ci == ti`), with its measured numbers | independent-structure overlap |
 | `ifvg` | rejecting retest candle | the first retest touch | inversion |
-| `break_retest` | retest rejection candle | the first retest touch | break, acceptance, protected structure |
+| `break_retest` | retest rejection candle (M5; required since v4, `require_confirmation: true`) | the first retest touch | break, acceptance, protected structure |
 | `round_number`, `asia_range` (accepted-break kind) | wick or engulfing retest candle (`FindLevelRetest`) | the first candle entering the band | the sweep, reclaim and structure-shift kind |
 | `shock_retest` | wick or engulfing retest candle | the first candle in the retracement band | shock leg, band, dead zone |
 | `impulse_pullback` | directional M1 candle that interacted with the reference (`ConfirmM1Execution`) | an M1 candle that interacted with it (`TouchM1Execution`) | M5 impulse, corrective pullback, reference |

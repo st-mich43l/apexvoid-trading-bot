@@ -115,6 +115,8 @@ type Retest struct {
 
 // Setup is a confirmed, geometry-valid break-and-retest.
 type Setup struct {
+	// Frame is the structure frame the reference, its break and the protected structure were read on; the retest was read on M5.
+	Frame     market.Timeframe
 	Direction market.Direction
 	Reference Reference
 	Break     Break
@@ -124,18 +126,23 @@ type Setup struct {
 	Stop                float64
 	Target              float64
 	ProtectedStructure  float64
-	ATR                 float64 // ATR at the confirmation bar
-	RiskPips            float64
-	RewardRisk          float64
-	TargetRoomATR       float64
-	WickRejection       bool
-	Rejected            bool  // the confirming candle is a real directional rejection (false: optional-confirmation touch trigger)
-	ConfirmedAt         int64 // = Retest.ConfirmedAt
+	ATR                 float64 // M5 ATR at the confirmation bar
+	StructureATR        float64 // ATR of the structure frame at the acceptance bar
+	// ThesisBand is the price distance within which two references of the same direction found on different frames are one thesis: the level cluster tolerance of the
+	// structure frame at the break.
+	ThesisBand    float64
+	RiskPips      float64
+	RewardRisk    float64
+	TargetRoomATR float64
+	WickRejection bool
+	Rejected      bool  // the confirming candle is a real directional rejection (false: optional-confirmation touch trigger)
+	ConfirmedAt   int64 // = Retest.ConfirmedAt
 }
 
 // Episode is the audit record of one break attempt and where it ended as of
 // the evaluated bar.
 type Episode struct {
+	Frame      market.Timeframe
 	Direction  market.Direction
 	Reference  Reference
 	BreakStart int64
@@ -148,7 +155,7 @@ type Episode struct {
 
 // Key identifies the episode independently of where it is evaluated.
 func (e Episode) Key() string {
-	return fmt.Sprintf("%s:%s:%d", e.Direction, e.Reference.ID, e.BreakStart)
+	return fmt.Sprintf("%s:%s:%s:%d", e.Frame, e.Direction, e.Reference.ID, e.BreakStart)
 }
 
 // Analysis is everything one evaluation decided.

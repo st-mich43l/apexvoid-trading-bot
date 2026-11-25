@@ -1,4 +1,4 @@
-# Break & Retest (v3)
+# Break & Retest (v4)
 
 
 `break_retest` trades the retest of a structure price has just broken. v3 replaces
@@ -12,10 +12,36 @@ intentional difference from the Python detector.
   scanner or second decision exists; the Algo Bot only applies execution policy.
 - **Independence**: no strategy-family base, no import of another strategy
   package (`internal/strategy/independence_test.go`), and nothing from Confluence
-  Zone. It reads only closed M5 candles plus the engine's HTF alignment, M5
+  Zone. It reads only closed candles of M5, M15 and H1 (v4; M5 only before) plus the engine's HTF alignment, M5
   structure bias and confluence rubric as *measured evidence*.
-- **Contract version**: `v3`. `Quality.Overall` is **unchanged** (0.75, see
+- **Contract version**: `v4`. `Quality.Overall` is **unchanged** (0.75, see
   [Quality and arbitration](#quality-and-arbitration)).
+
+## v4: structure on M5, M15 and H1, retest on M5 (Q4, owner rule 23 Nov 2026)
+
+Every strategy finds its setup on M5, M15 and H1; M1 is execution only. `structure_timeframes: [M5, M15, H1]` (the parser refuses M1). For each listed frame, on that frame's **closed bars**:
+
+- the reference (key level or two-pivot line), its break and its acceptance (`breakout_accept_bars` closes of that frame), the protected structure and the opposing structure that is the target (swing size and room in that frame's ATR) are read as before, and every `_bars` value that describes the structure (`pivot_bars`, `reference_lookback_bars`, `episode_lookback_bars`, `atr_window_bars`, `target_*_bars`) counts that frame's bars;
+- the **retest and its rejection are read on M5**, from the first M5 bar that opens once the acceptance bar has closed (so an M15 or H1 bar that is still forming is never seen; on M5 itself that is the next bar, as before). The line's value on an M5 bar is the frame's line at that bar's time. The touch tolerance, the entry tolerance, the stop buffer (`invalidation_buffer_atr`) and the entry distance are M5 ATRs; the break failure buffer (`break_fail_*`) is the structure frame's. The stop is beyond the M5 retest extreme and the protected structure, plus the M5 buffer; the instrument stop envelope, the reward:risk floor and the target are unchanged in kind;
+- **freshness is counted in structure-frame bars, converted to time**: `retest_max_bars` (24: six hours after an M15 acceptance, a day after an H1 one) and `confirmation_max_age_bars` (2: 30 minutes on M15, two hours on H1). `confirmation_window_bars` (touch to rejection, 3) counts M5 bars: the rejection is an M5 reading. The age in "bars after acceptance" that the quality model scores is in structure-frame bars too;
+- `require_confirmation: true` (the strategy's own switch, overriding the global `analysis.require_candle_confirmation: false`): the retest must be rejected by an M5 candle; **a bare first touch no longer publishes** (`candle_confirmation_optional` no longer appears on Break & Retest);
+- **one candidate per thesis across frames**: the same direction and a broken reference within the wider of the two structure-frame cluster bands, found on different frames, is one thesis, ordered by `strategyutil.PreferHigherTimeframe` (higher frame, then more stars, then the nearer entry); a frame's own candidates are never merged with each other (the per-frame rule of v3, one candidate per direction among references broken in the same move, still applies inside each frame);
+- the published `structure` is the retest band on its own frame (`structure.timeframe`, `structure_timeframe`, evidence `structure_tf_m5|m15|h1`), and a close of THAT frame beyond the band's far edge by more than `structure_close_buffer_atr` (shipped 0.1) ATRs of that frame withdraws the opportunity (`STRUCTURE_CLOSED_THROUGH`, `go_opportunity_structure_closed_through{strategy="break_retest"}`). The thesis id and the setup key carry the frame.
+
+Counters: `strategy_refused{strategy="break_retest", structure_timeframe, reason}`, once per episode: `no_m5_reaction` (the retest was touched and no M5 rejection came inside the window), the reason a confirmed retest was not published (`risk_exceeds_execution_envelope`, `no_opposing_structure`, `insufficient_target_room`, `reward_risk_below_minimum`, `confluence_below_floor`, `superseded_by_stronger_reference`, `entry_too_far`, `confirmation_stale`, ...) and `duplicate_thesis`; `strategy_published{strategy, structure_tf}` counts every opportunity by frame. With `structure_timeframes: [M5]` and `require_confirmation: false` the detector reproduces v3 exactly (37 of 37 replayed setups identical).
+
+**What the replay showed (production bars, 23 Nov; 2,000 bars per timeframe; v3 = the Q3 tip).**
+
+| Instrument | v3 | v4 shipped | M5 | M15 | H1 | identical to v3 | v3 only | v4 only | stop pips M5 / M15 |
+|---|---|---|---|---|---|---|---|---|---|
+| XAU | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | - |
+| EURUSD | 13 | 7 | 5 | 2 | 0 | 2 | 11 | 5 | 4.7-7.2 / 9.9-10.0 |
+| GBPUSD | 5 | 7 | 5 | 2 | 0 | 0 | 5 | 7 | 5.6-9.5 / 7.6-10.4 |
+| USDJPY | 7 | 5 | 3 | 2 | 0 | 1 | 6 | 4 | 3.7-15.3 / 6.1-12.1 |
+| GBPJPY | 12 | 9 | 8 | 1 | 0 | 3 | 9 | 6 | 6.6-27.6 / 21.2 |
+| **all** | **37** | **28** | 21 | 7 | 0 | 6 | 31 | 22 | |
+
+(Published stops, before execution widens them to the instrument floor.) 33 of the 37 v3 setups were bare touches; all 4 that had a rejection are published again with the identical entry, stop and target, and 2 more are identical. The M15 frame adds 7 setups; 6 M5 readings of the same retest (EURUSD 3, USDJPY 3) lose to the M15 reading and are counted as `duplicate_thesis` on M5. **H1 publishes nothing in the five captures**: 18 H1 episodes were read and refused (an H1 break leaves a retest stop wider than the instrument envelope, or no opposing H1 structure with the room: `no_opposing_structure` 9, `risk_exceeds_execution_envelope` 5, `no_m5_reaction` 3, `reward_risk_below_minimum` 1). **XAU publishes nothing in v3 or v4**: the 78 XAU refusals counted over the capture are `no_opposing_structure`, `risk_exceeds_execution_envelope` (a structural stop wider than the 70-pip cap), `no_m5_reaction`, `insufficient_target_room` and `entry_zone_below_minimum_width`; the structure frame does not change that. A sample this small (28 setups in 5-7 days) says nothing about edge.
 
 ## Status and execution
 
