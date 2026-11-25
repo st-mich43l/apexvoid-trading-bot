@@ -1,6 +1,6 @@
 # ApexVoid colour schemes
 
-Colour guide for `apexvoid_price_action.pine` (v2.27): the indicator's built-in schemes and the chart (candle and background) settings that go with them. Every value here is also in the Pine source (`f_palette`).
+Colour guide for `apexvoid_price_action.pine` (v2.27): the indicator's built-in schemes and the chart (candle and background) settings that go with them. Every value here is also in the Pine source (`f_palette`). Fourteen complete chart looks built on these schemes are in [`CHART_THEMES.md`](CHART_THEMES.md).
 
 ## Choosing a scheme
 

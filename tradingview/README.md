@@ -9,6 +9,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 | `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.27). |
 | `apexvoid_price_geometry.pine` | Price Geometry v1.0: major trendlines and parallel price channels (Pine Script v6), a companion to Price Action. |
 | `COLOR_SCHEMES.md` | Colour schemes of Price Action v2.27 (dark and light variants, contrast tables) and the matching TradingView candle and background settings. |
+| `CHART_THEMES.md` | 14 ready-made TradingView chart colour packs (canvas, candles and matching indicator settings), each contrast-checked on its own background. |
 | `tests/` | Offline reference models and fixtures: the Price Geometry rules and the Price Action v2.27 right-edge label layout (`python -m unittest discover -s tradingview/tests`). |
 
 ## ApexVoid Price Action
