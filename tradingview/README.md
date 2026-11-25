@@ -8,6 +8,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 | --- | --- |
 | `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.27). |
 | `apexvoid_price_geometry.pine` | Price Geometry v1.0: major trendlines and parallel price channels (Pine Script v6), a companion to Price Action. |
+| `COLOR_SCHEMES.md` | Colour schemes of Price Action v2.27 (dark and light variants, contrast tables) and the matching TradingView candle and background settings. |
 | `tests/` | Offline reference models and fixtures: the Price Geometry rules and the Price Action v2.27 right-edge label layout (`python -m unittest discover -s tradingview/tests`). |
 
 ## ApexVoid Price Action
@@ -154,6 +155,16 @@ hide them, so:
 Not covered: Asian levels and session boxes and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
 
+### Colour schemes (v2.27)
+
+`06 Visuals & Performance` → `Colour scheme`: **ApexVoid** (default; on a dark chart exactly the v2.26 colours), **Classic**,
+**Colorblind safe** (blue / orange, Okabe-Ito), **Ocean**, **Muted**, or **Custom** (the per-category colour inputs, as before).
+`Chart theme` (Auto / Dark / Light; Auto reads the chart background) picks each scheme's dark or light variant. Every scheme colour is
+at least 4.5:1 against its chart background (`#131722` dark, white light), and caption text, label backgrounds and text outlines
+follow the theme, so the indicator reads on both black and white charts. The colour inputs only apply with `Custom`: a chart that
+used customised colours needs `Colour scheme` = Custom after the update. Palettes, contrast tables and the matching candle /
+background settings for TradingView are in [`COLOR_SCHEMES.md`](COLOR_SCHEMES.md). Rendering only: nothing analytical depends on a colour.
+
 ### Right-edge labels (v2.27)
 
 `06 Visuals & Performance` → `Right-edge labels`: **Smart** (default), **Compact** or **Legacy (v2.26)**. One shared layout; only the
@@ -227,7 +238,7 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), POI
-structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)); `Show session titles` is in 05 Sessions.
+structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)), `Colour scheme` (ApexVoid / Classic / Colorblind safe / Ocean / Muted / Custom), `Chart theme` (Auto / Dark / Light); `Show session titles` is in 05 Sessions.
 
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
@@ -280,7 +291,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
-| 2.27 | **Smart annotation rail (rendering only; not compiled or run in TradingView).** The right-edge column is rebuilt as collection (structured fields per annotation), layout and rendering: short rows with the price in a monospace column instead of merged sentences such as `PROT · KL 3565.83 ×2 · 3558.42 ×3 · VAH 3560.65`; groups only within one colour family and with a bounded span (no chain merging); multi-row heights in an order-preserving, tier-weighted collision layout; connectors for displaced labels; a 20-label budget that hides only low-priority unpriced context and names it in a tooltip. New input `Right-edge labels` (Smart / Compact / Legacy (v2.26)). Zone-caption fit follows the text scale. Structure, zones, liquidity, key levels, volume profile, premium / discount and alerts are unchanged. See *Right-edge labels (v2.27)*. |
+| 2.27 | **Smart annotation rail (rendering only; not compiled or run in TradingView).** The right-edge column is rebuilt as collection (structured fields per annotation), layout and rendering: short rows with the price in a monospace column instead of merged sentences such as `PROT · KL 3565.83 ×2 · 3558.42 ×3 · VAH 3560.65`; groups only within one colour family and with a bounded span (no chain merging); multi-row heights in an order-preserving, tier-weighted collision layout; connectors for displaced labels; a 20-label budget that hides only low-priority unpriced context and names it in a tooltip. New input `Right-edge labels` (Smart / Compact / Legacy (v2.26)). Zone-caption fit follows the text scale. Colour schemes (ApexVoid, Classic, Colorblind safe, Ocean, Muted, Custom) with dark and light variants chosen by `Chart theme` (Auto reads the chart background), theme-aware caption text, backgrounds and outlines; see *Colour schemes (v2.27)* and `COLOR_SCHEMES.md`. Structure, zones, liquidity, key levels, volume profile, premium / discount and alerts are unchanged. See *Right-edge labels (v2.27)*. |
 | 2.26 | **One volume profile, built from chart bars on the last bar (not measured in TradingView).** The profile of v2.20 to v2.25 accumulated lower-timeframe intrabars on every bar (`request.security_lower_tf` over the whole history plus per-bar array work), which is where the volume profile's share of `RE10110` came from. v2.26 draws one profile of the current period, computed on the last bar from at most 480 chart bars: no lower-timeframe request, no per-bar accumulation, no stored history. Naked POCs, completed-profile history and the intrabar / profiles-drawn inputs are gone; period rules, rows, POC and value-area rules are unchanged. Approximation: a chart bar's volume is spread evenly over its range. |
 | 2.25 | **The volume profile stays on in every mode, and now costs almost nothing outside the last 900 bars (not measured in TradingView).** v2.23's `Free plan (fast)` switched it off; that is reverted (fast mode keeps it). The profile only needs the developing period plus the completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only (9 days on 15m, 37 days on 1h, 150 days on 4h, 3 days on 5m); older bars do no volume-profile work at all. Periods, intrabar timeframes, rows, POC and value-area rules are unchanged. With v2.24's `calc_bars_count = 2000` the intrabar request covers at most 2,000 chart bars. |
 | 2.24 | **`calc_bars_count = 2000`: the fourth `RE10110` fix, not measured in TradingView.** The error survived v2.21 to v2.23 (all of which only shortened the last bar), so the limit is probably being spent over the whole history, not on one bar: a free plan loads up to 10,000 bars and the script runs its structure, pool, zone and session logic on every one. The script now calculates only the last 2,000 bars (about 21 days on 15m, 7 on 5m, 1.4 on 1m; every window it uses is at most 800 bars, zones age out after 600), which cuts the total work 5x on a 10,000-bar chart. Objects are drawn at most 250 bars back, so nothing visible changes; the first ~800 calculated bars are the warm-up of the structure state. If it still fails, use More, Profiler in the Pine Editor and send the table. |

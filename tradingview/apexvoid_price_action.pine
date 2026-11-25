@@ -101,16 +101,18 @@ int sessionBoxHistory = input.int(3, "Retained session boxes per session", minva
 int sessionBoxTransparency = input.int(93, "Session box fill transparency (higher = fainter)", minval = 60, maxval = 99, group = G5)
 bool showSessionTitles = input.bool(false, "Show session titles (the box colour already names the session)", group = G5)
 
-color bullColor = input.color(#00C7AE, "Bullish / demand color", group = G6)
-color bearColor = input.color(#F26B85, "Bearish / supply color", group = G6)
-color bullFvgColor = input.color(#5194FF, "Bullish FVG color", group = G6)
-color bearFvgColor = input.color(#FFA957, "Bearish FVG color", group = G6)
-color demandColor = input.color(#36D399, "Demand color", group = G6)
-color supplyColor = input.color(#FF7892, "Supply color", group = G6)
-color asiaColor = input.color(#B48AFF, "Asian levels color", group = G6)
-color londonColor = input.color(#5AA9E6, "London session color", group = G6)
-color nyColor = input.color(#E6B84A, "New York session color", group = G6)
-color liquidityColor = input.color(#AEB8CC, "Liquidity pool color", group = G6)
+string colorScheme = input.string("ApexVoid", "Colour scheme", options = ["ApexVoid", "Classic", "Colorblind safe", "Ocean", "Muted", "Custom"], group = G6, tooltip = "Every scheme has a dark-chart and a light-chart variant; each colour is at least 4.5:1 against its chart background (#131722 dark, #FFFFFF light), so captions stay readable in both themes. Custom uses the colours below (and the key level / volume profile colours) as set, on either theme. Recommended candle colours per scheme: tradingview/COLOR_SCHEMES.md.")
+string chartThemeIn = input.string("Auto", "Chart theme", options = ["Auto", "Dark", "Light"], group = G6, tooltip = "Auto reads the chart background colour. Pick Dark or Light if a custom or gradient background is misread.")
+color bullColorIn = input.color(#00C7AE, "Bullish / demand color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color bearColorIn = input.color(#F26B85, "Bearish / supply color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color bullFvgColorIn = input.color(#5194FF, "Bullish FVG color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color bearFvgColorIn = input.color(#FFA957, "Bearish FVG color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color demandColorIn = input.color(#36D399, "Demand color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color supplyColorIn = input.color(#FF7892, "Supply color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color asiaColorIn = input.color(#B48AFF, "Asian levels color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color londonColorIn = input.color(#5AA9E6, "London session color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color nyColorIn = input.color(#E6B84A, "New York session color", group = G6, tooltip = "Used when Colour scheme = Custom.")
+color liquidityColorIn = input.color(#AEB8CC, "Liquidity pool color", group = G6, tooltip = "Used when Colour scheme = Custom.")
 bool showPremiumDiscount = input.bool(true, "Show premium / discount range (equilibrium)", group = G6)
 bool protectCandleScale = input.bool(true, "Keep candles readable: limit objects to a window around price", group = G6)
 int scaleLookbackBars = input.int(300, "Candle range reference (bars)", minval = 50, maxval = 780, group = G6)
@@ -139,14 +141,48 @@ int keyPerSide = input.int(3, "Key levels per side", minval = 1, maxval = 10, gr
 int keyWindowInput = input.int(0, "Key level window (0 = auto)", minval = 0, maxval = 780, group = G7)
 float keyRoundInput = input.float(0.0, "Round step (0 = by definition: XAU 5 / 10)", minval = 0, step = 0.5, group = G7)
 bool showKeyBand = input.bool(false, "Show key level band", group = G7)
-color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
+color keyColorIn = input.color(#8A93A6, "Key level colour", group = G7, tooltip = "Used when Colour scheme = Custom.")
 
 string vpMode = input.string("Auto", "Volume profile", options = ["Auto", "Manual", "Off"], group = G8)
 float vpVaPct = input.float(70.0, "Value area %", minval = 50, maxval = 95, step = 1, group = G8)
-color vpColor = input.color(#8A93A6, "Volume profile colour", group = G8)
+color vpColorIn = input.color(#8A93A6, "Volume profile colour", group = G8, tooltip = "Used when Colour scheme = Custom.")
 string vpPerIn = input.string("Session", "Manual: period", options = ["Session", "Day", "Week", "Month"], group = G8)
 int vpRowsIn = input.int(32, "Manual: rows", minval = 16, maxval = 40, group = G8)
 
+
+// ------- COLOUR SCHEMES (v2.27) -------
+// Roles: bull, bear, bull FVG, bear FVG, demand, supply, Asia, London, New York, liquidity, key level, volume profile. Each scheme has a
+// dark-chart and a light-chart variant; every colour is at least 4.5:1 (WCAG text contrast) against #131722 (dark) or #FFFFFF (light).
+// Values and contrast tables: tradingview/COLOR_SCHEMES.md. ApexVoid dark is exactly the v2.26 default palette.
+f_palette(string scheme, bool light) =>
+    switch scheme
+        "Classic" => light ? array.from(#00796B, #C62828, #1565C0, #A04A00, #2E7D32, #AD1457, #7B1FA2, #0B6A9E, #7A6000, #546E7A, #56707C, #56707C) : array.from(#26A69A, #EF5350, #42A5F5, #FFB74D, #66BB6A, #E57373, #BA68C8, #4FC3F7, #FFD54F, #B0BEC5, #90A4AE, #90A4AE)
+        "Colorblind safe" => light ? array.from(#0067A3, #A35A00, #2B6CB0, #6E6400, #00745A, #B34A00, #99446F, #2D6E99, #73661A, #525C6E, #5A6273, #5A6273) : array.from(#56B4E9, #E69F00, #9AD0F5, #F0E442, #2FBF9B, #F08A4B, #CC79A7, #7FB8DE, #D9C25A, #AEB8CC, #8A93A6, #8A93A6)
+        "Ocean" => light ? array.from(#0F766E, #B83280, #2563A8, #A0520B, #25784A, #C53030, #6B46C1, #0E7490, #7A6500, #4A5568, #55657A, #55657A) : array.from(#4FD1C5, #F687B3, #63B3ED, #F6AD55, #68D391, #FC8181, #B794F4, #76E4F7, #F6E05E, #A0AEC0, #8A9BB0, #8A9BB0)
+        "Muted" => light ? array.from(#3E7D6B, #9E4A57, #47669C, #8A6033, #3F7A58, #A24E5C, #62559A, #486F96, #7A6536, #5B6474, #5F6777, #5F6777) : array.from(#6FBFA6, #D98A94, #8EA9D8, #D9B38C, #7FC8A0, #E0A0AA, #A99BD6, #8FB3D9, #D6BE8A, #A3ACBA, #8A93A6, #8A93A6)
+        => light ? array.from(#00796B, #C2294A, #1D5FD1, #A85400, #12784A, #B8245A, #6B3FD4, #1C6AA8, #805E00, #525C6E, #5A6273, #5A6273) : array.from(#00C7AE, #F26B85, #5194FF, #FFA957, #36D399, #FF7892, #B48AFF, #5AA9E6, #E6B84A, #AEB8CC, #8A93A6, #8A93A6)
+
+float chartBgLuma = (0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)) / 255.0
+bool lightTheme = chartThemeIn == "Light" or (chartThemeIn == "Auto" and chartBgLuma > 0.5)
+bool customColors = colorScheme == "Custom"
+var color[] schemePalette = f_palette(colorScheme, lightTheme)
+color bullColor = customColors ? bullColorIn : array.get(schemePalette, 0)
+color bearColor = customColors ? bearColorIn : array.get(schemePalette, 1)
+color bullFvgColor = customColors ? bullFvgColorIn : array.get(schemePalette, 2)
+color bearFvgColor = customColors ? bearFvgColorIn : array.get(schemePalette, 3)
+color demandColor = customColors ? demandColorIn : array.get(schemePalette, 4)
+color supplyColor = customColors ? supplyColorIn : array.get(schemePalette, 5)
+color asiaColor = customColors ? asiaColorIn : array.get(schemePalette, 6)
+color londonColor = customColors ? londonColorIn : array.get(schemePalette, 7)
+color nyColor = customColors ? nyColorIn : array.get(schemePalette, 8)
+color liquidityColor = customColors ? liquidityColorIn : array.get(schemePalette, 9)
+color keyColor = customColors ? keyColorIn : array.get(schemePalette, 10)
+color vpColor = customColors ? vpColorIn : array.get(schemePalette, 11)
+// Theme neutrals: caption text, label backgrounds and text outlines follow the chart theme in every scheme (Custom included).
+color uiTextPrimary = lightTheme ? #1E293B : #CBD5E1
+color uiTextSecondary = lightTheme ? #475569 : #94A3B8
+color uiMatte = lightTheme ? #F1F5F9 : #161923
+color uiOutline = lightTheme ? #FFFFFF : #090D18
 
 int chartSecs = nz(timeframe.in_seconds(), 900)
 int internalLength = sensitivity == "Manual" ? manualInternal : chartSecs <= 300 ? 3 : chartSecs <= 900 ? 4 : chartSecs <= 3600 ? 5 : chartSecs <= 14400 ? 6 : 8
@@ -229,7 +265,7 @@ f_eventLabel(int x, float y, string title, color tone, bool above) =>
     for pass = 0 to 2
         if f_labelsNear(eventLabels, safeX, renderY) or f_labelsNear(externalEventLabels, safeX, renderY)
             renderY += above ? atr * annotationATRSpacing : -atr * annotationATRSpacing
-    label l = label.new(x = safeX, y = renderY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(#090D18, 10), textcolor = tone, size = tier3Size)
+    label l = label.new(x = safeX, y = renderY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(uiOutline, 10), textcolor = tone, size = tier3Size)
     array.push(eventLabels, l)
     if array.size(eventLabels) > maxEventLabels
         label.delete(array.shift(eventLabels))
@@ -248,7 +284,7 @@ f_structureLine(int x1, int x2, float level, bool bullish, bool choch, bool inte
     for pass = 0 to 2
         if f_labelsNear(externalEventLabels, midX, labelY) or f_labelsNear(internalEventLabels, midX, labelY)
             labelY -= atr * annotationATRSpacing
-    label structureLabel = label.new(x = midX, y = labelY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(#090D18, 10), textcolor = color.new(c, internal ? 20 : 0), size = internal ? tier3Size : tier2Size)
+    label structureLabel = label.new(x = midX, y = labelY, text = title, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_text_outline, color = color.new(uiOutline, 10), textcolor = color.new(c, internal ? 20 : 0), size = internal ? tier3Size : tier2Size)
     if internal
         array.push(internalEventLines, structureLine)
         array.push(internalEventLabels, structureLabel)
@@ -582,7 +618,7 @@ f_majorLine(line old, int bar, float price, color tone) =>
 f_majorTag(label old, int bar, float price, bool isLow, color tone) =>
     if not na(old)
         label.delete(old)
-    label.new(x = math.max(bar, bar_index - 9999), y = price + (isLow ? -1 : 1) * nz(atr[externalLength], atr) * primaryLabelOffsetATR, text = isLow ? "MAJOR LOW" : "MAJOR HIGH", xloc = xloc.bar_index, yloc = yloc.price, style = isLow ? label.style_label_up : label.style_label_down, color = color.new(#090D18, 16), textcolor = tone, size = tier1Size, text_formatting = text.format_bold, tooltip = isLow ? "Confirmed external swing low" : "Confirmed external swing high")
+    label.new(x = math.max(bar, bar_index - 9999), y = price + (isLow ? -1 : 1) * nz(atr[externalLength], atr) * primaryLabelOffsetATR, text = isLow ? "MAJOR LOW" : "MAJOR HIGH", xloc = xloc.bar_index, yloc = yloc.price, style = isLow ? label.style_label_up : label.style_label_down, color = color.new(uiOutline, 16), textcolor = tone, size = tier1Size, text_formatting = text.format_bold, tooltip = isLow ? "Confirmed external swing low" : "Confirmed external swing high")
 
 // Internal structure remains independent from external bias.
 if newInternalHigh
@@ -2657,11 +2693,11 @@ f_rail() =>
                     body += " +" + str.tostring(folded)
                 if array.get(hidden, i) != ""
                     tip += "\nAlso near this price (hidden for space):" + array.get(hidden, i)
-                color txt = f_railNeutral(lead) ? (tier <= 2 ? #CBD5E1 : #94A3B8) : color.new(array.get(rlTone, lead), tier == 1 ? 0 : tier == 2 ? 10 : 25)
+                color txt = f_railNeutral(lead) ? (tier <= 2 ? uiTextPrimary : uiTextSecondary) : color.new(array.get(rlTone, lead), tier == 1 ? 0 : tier == 2 ? 10 : 25)
                 string sz = railCompact ? (tier == 1 ? tier2Size : tier3Size) : tier == 1 ? tier1Size : tier == 2 ? tier2Size : tier3Size
                 float y = array.get(ys, i)
                 if used >= array.size(colLabels)
-                    array.push(colLabels, label.new(bar_index + gutter + 4, y, body, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#161923, 18), textcolor = txt, size = sz, tooltip = tip, textalign = text.align_left, text_font_family = font.family_monospace))
+                    array.push(colLabels, label.new(bar_index + gutter + 4, y, body, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(uiMatte, lightTheme ? 8 : 18), textcolor = txt, size = sz, tooltip = tip, textalign = text.align_left, text_font_family = font.family_monospace))
                 else
                     label existing = array.get(colLabels, used)
                     label.set_xy(existing, bar_index + gutter + 4, y)
@@ -2669,13 +2705,13 @@ f_rail() =>
                     label.set_textcolor(existing, txt)
                     label.set_size(existing, sz)
                     label.set_tooltip(existing, tip)
-                    label.set_color(existing, color.new(#161923, 18))
+                    label.set_color(existing, color.new(uiMatte, lightTheme ? 8 : 18))
                     label.set_textalign(existing, text.align_left)
                     label.set_text_font_family(existing, font.family_monospace)
                 used += 1
                 float tg = array.get(itTgt, i)
                 if math.abs(y - tg) > 0.5 * railRowH and linksUsed < railMaxLinks
-                    color linkTone = color.new(f_railNeutral(lead) ? #94A3B8 : array.get(rlTone, lead), 45)
+                    color linkTone = color.new(f_railNeutral(lead) ? uiTextSecondary : array.get(rlTone, lead), 45)
                     if linksUsed >= array.size(railLinks)
                         array.push(railLinks, line.new(bar_index + gutter, tg, bar_index + gutter + 4, y, xloc = xloc.bar_index, color = linkTone, style = line.style_solid, width = 1))
                     else
