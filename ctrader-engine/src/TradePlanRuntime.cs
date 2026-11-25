@@ -3369,21 +3369,17 @@ public sealed partial class TradePlanRuntime(
         // close math. Then snap to broker StepVolume.
         var groupRemaining = openLegs.Sum(leg => leg.RemainingVolume);
         var isFinalTarget = state.NextTargetIndex >= plan.Targets.Count - 1;
-        var desiredClose = decimal.ToInt64(
-          groupRemaining * target.CloseRatio / remainingTargetsSum
-        );
-        // Owner's call: book by the plan's actual declared % share, even on
-        // a small partially-filled ladder - never force a non-final target
-        // up to a size it didn't earn just to book *something*. But a share
-        // under two broker steps (eg. a single 0.01 lot on an 0.08 lot
-        // position) still isn't a meaningful booking on its own - defer it
-        // the same way a sub-one-step share already deferred, just with a
-        // higher bar (2026-08-07: raised from one step to two after a live
-        // 0.08 lot position kept booking bare single-step TPs). The final
-        // target still closes whatever is left regardless of size - that
-        // floor belongs to the *last* target only.
-        var minimumMeaningfulClose = checked(2 * symbol.StepVolume);
-        var closeVolume = !isFinalTarget && desiredClose < minimumMeaningfulClose
+        // Owner 25 Nov 2026: every TP level books a partial of the FILLED remainder by the plan's declared close ratios (VolumePlanner.PlanTargetShare: no step lost
+        // to rounding, at least the broker minimum per target while the volume allows one for each, the earliest targets first when it does not, a minimum always
+        // left for the final target). This replaces the 7 Aug two-step floor, which left TP1 and TP2 empty on small fills.
+        var desiredClose = isFinalTarget
+          ? groupRemaining
+          : VolumePlanner.PlanTargetShare(
+              groupRemaining,
+              plan.Targets.Skip(state.NextTargetIndex).Select(t => t.CloseRatio).ToArray(),
+              symbol
+            );
+        var closeVolume = !isFinalTarget && desiredClose <= 0
           ? 0
           : VolumePlanner.PlanPartialCloseVolume(
               groupRemaining,
@@ -3416,7 +3412,7 @@ public sealed partial class TradePlanRuntime(
             $"v8 target partial deferred id={plan.PlanId} "
             + $"target={target.TargetId} remaining={groupRemaining} "
             + $"desired={desiredClose} step={symbol.StepVolume} "
-            + "reason=share_below_minimum_meaningful_close"
+            + "reason=volume_reserved_for_final_target"
           );
           state = AggregateState(
             state with { NextTargetIndex = state.NextTargetIndex + 1 }
