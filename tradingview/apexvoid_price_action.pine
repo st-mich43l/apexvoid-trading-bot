@@ -102,6 +102,9 @@ int sessionBoxTransparency = input.int(93, "Session box fill transparency (highe
 bool showSessionTitles = input.bool(false, "Show session titles (the box colour already names the session)", group = G5)
 
 string colorScheme = input.string("ApexVoid", "Colour scheme", options = ["ApexVoid", "Classic", "Colorblind safe", "Ocean", "Muted", "Custom"], group = G6, tooltip = "Every scheme has a dark-chart and a light-chart variant; each colour is at least 4.5:1 against its chart background (#131722 dark, #FFFFFF light), so captions stay readable in both themes. A colour changed in the inputs below (or the key level / volume profile colours) always overrides the scheme for its category; Custom uses every input as set. Recommended candle colours per scheme: tradingview/COLOR_SCHEMES.md.")
+string candleModeIn = input.string("Scheme", "Candle colours", options = ["Off", "Scheme", "Neutral", "Structure bias"], group = G6, tooltip = "Recolours the chart's candles (body, border and wick) while the indicator is on. Off: the chart's own candle settings. Scheme: the colour scheme's up / down candle colours, quieter than the zones so captions stay readable. Neutral: graphite up, slate down (busiest charts). Structure bias: candles that move with the external bias in the scheme colour, counter-bias candles in quiet grey, every candle grey while there is no bias. Display only.")
+color candleUpIn = input.color(#4FA89B, "Up candle colour", group = G6, tooltip = "Changing it overrides the scheme's up candle colour (Scheme and Structure bias modes). Leave it at the default to follow the scheme.")
+color candleDownIn = input.color(#C96A7C, "Down candle colour", group = G6, tooltip = "Changing it overrides the scheme's down candle colour (Scheme and Structure bias modes). Leave it at the default to follow the scheme.")
 string chartThemeIn = input.string("Auto", "Chart theme", options = ["Auto", "Dark", "Light"], group = G6, tooltip = "Auto reads the chart background colour. Pick Dark or Light if a custom or gradient background is misread.")
 color bullColorIn = input.color(#00C7AE, "Bullish / demand color", group = G6, tooltip = "Changing this colour overrides the colour scheme for this category (dark and light). Leave it at the default to follow the scheme.")
 color bearColorIn = input.color(#F26B85, "Bearish / supply color", group = G6, tooltip = "Changing this colour overrides the colour scheme for this category (dark and light). Leave it at the default to follow the scheme.")
@@ -151,16 +154,17 @@ int vpRowsIn = input.int(32, "Manual: rows", minval = 16, maxval = 40, group = G
 
 
 // ------- COLOUR SCHEMES (v2.27) -------
-// Roles: bull, bear, bull FVG, bear FVG, demand, supply, Asia, London, New York, liquidity, key level, volume profile. Each scheme has a
+// Roles: bull, bear, bull FVG, bear FVG, demand, supply, Asia, London, New York, liquidity, key level, volume profile, up candle, down candle
+// (candles: at least 3:1 against #0F1117 / #FFFFFF). Each scheme has a
 // dark-chart and a light-chart variant; every colour is at least 4.5:1 (WCAG text contrast) against #131722 (dark) or #FFFFFF (light).
 // Values and contrast tables: tradingview/COLOR_SCHEMES.md. ApexVoid dark is exactly the v2.26 default palette.
 f_palette(string scheme, bool light) =>
     switch scheme
-        "Classic" => light ? array.from(#00796B, #C62828, #1565C0, #A04A00, #2E7D32, #AD1457, #7B1FA2, #0B6A9E, #7A6000, #546E7A, #56707C, #56707C) : array.from(#26A69A, #EF5350, #42A5F5, #FFB74D, #66BB6A, #E57373, #BA68C8, #4FC3F7, #FFD54F, #B0BEC5, #90A4AE, #90A4AE)
-        "Colorblind safe" => light ? array.from(#0067A3, #A35A00, #2B6CB0, #6E6400, #00745A, #B34A00, #99446F, #2D6E99, #73661A, #525C6E, #5A6273, #5A6273) : array.from(#56B4E9, #E69F00, #9AD0F5, #F0E442, #2FBF9B, #F08A4B, #CC79A7, #7FB8DE, #D9C25A, #AEB8CC, #8A93A6, #8A93A6)
-        "Ocean" => light ? array.from(#0F766E, #B83280, #2563A8, #A0520B, #25784A, #C53030, #6B46C1, #0E7490, #7A6500, #4A5568, #55657A, #55657A) : array.from(#4FD1C5, #F687B3, #63B3ED, #F6AD55, #68D391, #FC8181, #B794F4, #76E4F7, #F6E05E, #A0AEC0, #8A9BB0, #8A9BB0)
-        "Muted" => light ? array.from(#3E7D6B, #9E4A57, #47669C, #8A6033, #3F7A58, #A24E5C, #62559A, #486F96, #7A6536, #5B6474, #5F6777, #5F6777) : array.from(#6FBFA6, #D98A94, #8EA9D8, #D9B38C, #7FC8A0, #E0A0AA, #A99BD6, #8FB3D9, #D6BE8A, #A3ACBA, #8A93A6, #8A93A6)
-        => light ? array.from(#00796B, #C2294A, #1D5FD1, #A85400, #12784A, #B8245A, #6B3FD4, #1C6AA8, #805E00, #525C6E, #5A6273, #5A6273) : array.from(#00C7AE, #F26B85, #5194FF, #FFA957, #36D399, #FF7892, #B48AFF, #5AA9E6, #E6B84A, #AEB8CC, #8A93A6, #8A93A6)
+        "Classic" => light ? array.from(#00796B, #C62828, #1565C0, #A04A00, #2E7D32, #AD1457, #7B1FA2, #0B6A9E, #7A6000, #546E7A, #56707C, #56707C, #1E8A7D, #C24A4D) : array.from(#26A69A, #EF5350, #42A5F5, #FFB74D, #66BB6A, #E57373, #BA68C8, #4FC3F7, #FFD54F, #B0BEC5, #90A4AE, #90A4AE, #3D9A8F, #D2575A)
+        "Colorblind safe" => light ? array.from(#0067A3, #A35A00, #2B6CB0, #6E6400, #00745A, #B34A00, #99446F, #2D6E99, #73661A, #525C6E, #5A6273, #5A6273, #2B77AB, #B06A10) : array.from(#56B4E9, #E69F00, #9AD0F5, #F0E442, #2FBF9B, #F08A4B, #CC79A7, #7FB8DE, #D9C25A, #AEB8CC, #8A93A6, #8A93A6, #4D9FD1, #D08A1F)
+        "Ocean" => light ? array.from(#0F766E, #B83280, #2563A8, #A0520B, #25784A, #C53030, #6B46C1, #0E7490, #7A6500, #4A5568, #55657A, #55657A, #1E7F77, #B04A7A) : array.from(#4FD1C5, #F687B3, #63B3ED, #F6AD55, #68D391, #FC8181, #B794F4, #76E4F7, #F6E05E, #A0AEC0, #8A9BB0, #8A9BB0, #4BB3AA, #D27C9F)
+        "Muted" => light ? array.from(#3E7D6B, #9E4A57, #47669C, #8A6033, #3F7A58, #A24E5C, #62559A, #486F96, #7A6536, #5B6474, #5F6777, #5F6777, #5E8C7E, #9C6871) : array.from(#6FBFA6, #D98A94, #8EA9D8, #D9B38C, #7FC8A0, #E0A0AA, #A99BD6, #8FB3D9, #D6BE8A, #A3ACBA, #8A93A6, #8A93A6, #7FA99C, #B98790)
+        => light ? array.from(#00796B, #C2294A, #1D5FD1, #A85400, #12784A, #B8245A, #6B3FD4, #1C6AA8, #805E00, #525C6E, #5A6273, #5A6273, #2F8C7F, #B4566A) : array.from(#00C7AE, #F26B85, #5194FF, #FFA957, #36D399, #FF7892, #B48AFF, #5AA9E6, #E6B84A, #AEB8CC, #8A93A6, #8A93A6, #4FA89B, #C96A7C)
 
 float chartBgLuma = (0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)) / 255.0
 bool lightTheme = chartThemeIn == "Light" or (chartThemeIn == "Auto" and chartBgLuma > 0.5)
@@ -181,6 +185,8 @@ color nyColor = f_pickColor(nyColorIn, #E6B84A, 8)
 color liquidityColor = f_pickColor(liquidityColorIn, #AEB8CC, 9)
 color keyColor = f_pickColor(keyColorIn, #8A93A6, 10)
 color vpColor = f_pickColor(vpColorIn, #8A93A6, 11)
+color candleUpColor = f_pickColor(candleUpIn, #4FA89B, 12)
+color candleDownColor = f_pickColor(candleDownIn, #C96A7C, 13)
 // Theme neutrals: caption text, label backgrounds and text outlines follow the chart theme in every scheme (Custom included).
 color uiTextPrimary = lightTheme ? #1E293B : #CBD5E1
 color uiTextSecondary = lightTheme ? #475569 : #94A3B8
@@ -2951,3 +2957,18 @@ alertcondition(bearBase, "ApexVoid Supply Base Zone", "New base-and-impulse supp
 alertcondition(bullOB, "ApexVoid Bullish OB", "New qualified bullish order block on {{ticker}} ({{interval}})")
 alertcondition(bearOB, "ApexVoid Bearish OB", "New qualified bearish order block on {{ticker}} ({{interval}})")
 alertcondition(newAsianRange and showAsia, "ApexVoid Asian Range Complete", "A new Asian session H/L range completed on {{ticker}} ({{interval}})")
+
+// ------- CANDLE COLOURS (v2.27, display only) -------
+// barcolor() recolours the chart's own candles; `behind_chart` does not affect it. Structure bias reads the existing external `bias`
+// (+1 / -1 / 0), which only changes on confirmed breaks; nothing here feeds back into the analysis.
+bool candleUp = close >= open
+color candleNeutralUp = lightTheme ? #7C8799 : #C9CED8
+color candleNeutralDown = lightTheme ? #334155 : #6B7383
+color candleCounterUp = lightTheme ? #8A95A6 : #8A93A6
+color candleCounterDown = lightTheme ? #64748B : #5A6273
+color candleTone = switch candleModeIn
+    "Scheme" => candleUp ? candleUpColor : candleDownColor
+    "Neutral" => candleUp ? candleNeutralUp : candleNeutralDown
+    "Structure bias" => bias == 1 ? (candleUp ? candleUpColor : candleCounterDown) : bias == -1 ? (candleUp ? candleCounterUp : candleDownColor) : (candleUp ? candleCounterUp : candleCounterDown)
+    => na
+barcolor(candleTone, title = "ApexVoid candle colours", editable = false)

@@ -166,6 +166,11 @@ overrides the scheme for that category (both themes); inputs left at their defau
 colours keep them. Palettes, contrast tables and the matching candle /
 background settings for TradingView are in [`COLOR_SCHEMES.md`](COLOR_SCHEMES.md). Rendering only: nothing analytical depends on a colour.
 
+`Candle colours` (Off / **Scheme** default / Neutral / Structure bias) recolours the chart's candles with `barcolor()`: the scheme's
+quieter up / down candle colours, graphite / slate, or the external bias (with-bias candles in colour, counter-bias candles grey).
+`Up candle colour` / `Down candle colour` override the scheme's candle colours once changed. `Off` leaves the chart's own candle
+settings. Display only; details in [`COLOR_SCHEMES.md`](COLOR_SCHEMES.md).
+
 ### Right-edge labels (v2.27)
 
 `06 Visuals & Performance` → `Right-edge labels`: **Smart** (default), **Compact** or **Legacy (v2.26)**. One shared layout; only the
@@ -239,7 +244,7 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), POI
-structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)), `Colour scheme` (ApexVoid / Classic / Colorblind safe / Ocean / Muted / Custom), `Chart theme` (Auto / Dark / Light); `Show session titles` is in 05 Sessions.
+structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)), `Colour scheme` (ApexVoid / Classic / Colorblind safe / Ocean / Muted / Custom), `Chart theme` (Auto / Dark / Light), `Candle colours` (Off / Scheme / Neutral / Structure bias), `Up candle colour`, `Down candle colour`; `Show session titles` is in 05 Sessions.
 
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.

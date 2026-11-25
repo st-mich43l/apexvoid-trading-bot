@@ -155,12 +155,36 @@ Contrast in brackets is against the background above (`#0F1117` dark, `#FFFFFF` 
 
 **Neutral candles** (graphite up, slate down) suit the busiest charts: with every zone, level and caption in colour, grey candles leave the colour to the indicator. Direction stays clear from lightness (and on the light theme from hollow vs filled).
 
+### Candle colours from the indicator
+
+`06 Visuals & Performance` → `Candle colours` recolours the chart's own candles (body, border and wick, via `barcolor()`) while the
+indicator is on, so the chart settings below are optional:
+
+| Mode | Up candle | Down candle |
+| --- | --- | --- |
+| **Scheme** (default) | scheme up colour (table above) | scheme down colour |
+| **Neutral** | `#C9CED8` dark / `#7C8799` light | `#6B7383` dark / `#334155` light |
+| **Structure bias**, bullish bias | scheme up colour | quiet grey `#5A6273` dark / `#64748B` light |
+| **Structure bias**, bearish bias | quiet grey `#8A93A6` dark / `#8A95A6` light | scheme down colour |
+| **Structure bias**, no bias yet | quiet grey | quiet grey |
+| **Off** | the chart's own settings | the chart's own settings |
+
+- **Structure bias** paints candles that move with the indicator's external bias (the one PROT protects) in colour and counter-bias
+  candles in grey, so pullbacks against the bias read as quiet. It only shows the existing bias, which changes on confirmed breaks;
+  it is not a signal.
+- `Up candle colour` / `Down candle colour`: changing either overrides the scheme's candle colour for Scheme and Structure bias (both
+  themes); left at their defaults they follow the scheme. With `Colour scheme` = Custom they are used as set.
+- Every grey above is at least 3:1 against its background (`#0F1117` / white); the scheme candle colours are in the table above.
+- `barcolor()` gives one colour per candle: hollow candles are not possible from the indicator (for the hollow light-theme Neutral
+  look, set `Off` and use the chart settings). If another indicator on the chart also colours bars, the one higher in the
+  indicator list wins (TradingView behaviour as remembered, not checked here). Bar Replay and alerts are unaffected.
+
 ### Applying them in TradingView
 
 1. Right-click the chart → **Settings** (the menu names are from memory of the TradingView UI and were not checked in this repository).
 2. **Symbol**: Body, Borders and Wick: set the up and down colours from the candle table; tick all three.
 3. **Canvas** (older versions: Appearance): Background solid colour, Grid lines, Scale text and lines, Crosshair from the background table.
-4. In the indicator: `Colour scheme` to the matching scheme, `Chart theme` Auto.
+4. In the indicator: `Colour scheme` to the matching scheme, `Chart theme` Auto. With `Candle colours` on (Scheme by default), step 2 is optional.
 5. Optional: save it as a chart template (**Template** → **Save chart template**) so each scheme and theme pair is one click.
 
 ## Contrast method
