@@ -33,6 +33,24 @@ public static class TimeframeCodec
     );
   }
 
+  // PR-FEED1: the calendar span of one historical trendbar request. Spotware documents no per-period span table for
+  // ProtoOAGetTrendbarsReq (only the 5 historical requests/second/connection limit), so this stays deliberately small:
+  // about 3,000 bars, never under 4 days (wider than a weekend or a holiday close, so two empty windows in a row mean
+  // there is no more history) and never over 35 days. The largest window (M1, 4 days) holds at most 5,760 bars.
+  private static readonly TimeSpan MinHistoryWindow = TimeSpan.FromDays(4);
+  private static readonly TimeSpan MaxHistoryWindow = TimeSpan.FromDays(35);
+  private const int HistoryWindowBars = 3000;
+
+  public static TimeSpan HistoryWindow(string code)
+  {
+    var span = TimeSpan.FromSeconds((double)ToSeconds(code) * HistoryWindowBars);
+    if (span < MinHistoryWindow)
+    {
+      return MinHistoryWindow;
+    }
+    return span > MaxHistoryWindow ? MaxHistoryWindow : span;
+  }
+
   public static ProtoOATrendbarPeriod ToProto(string code) =>
     code.ToUpperInvariant() switch
     {

@@ -417,62 +417,47 @@ public sealed class FeedRunner(
     // reconnect catch-up publishes bars:new one-by-one after each ZSET
     // write so Redis consumers wake promptly. Analysis correctness never
     // depends on that pub/sub delivery: it reads the ZSET on every wake-up
-    // and periodically reconciles cursor gaps.
-    var publish = !fullWindow;
-    var now = DateTimeOffset.UtcNow;
+    // and periodically reconciles cursor gaps. PR-FEED1: both paths collect
+    // by bar count, paged window by window (TrendbarBackfill).
     var timeframes = timeframeOverride ?? options.Timeframes;
     foreach (var timeframe in timeframes)
     {
-      var seconds = TimeframeCodec.ToSeconds(timeframe);
-      var latest = fullWindow
-        ? null
-        : await sink.GetLatestTimestampAsync(
-          symbol.RedisSymbol,
-          timeframe,
-          cancellationToken
-        );
-      var from = fullWindow || latest is null
-        ? now.AddSeconds(-seconds * options.BackfillBars)
-        : DateTimeOffset.FromUnixTimeSeconds(latest.Value + seconds);
-      Log(
-        $"backfill {symbol.RedisSymbol} {timeframe} "
-        + $"mode={(fullWindow ? "full-window" : "incremental")} "
-        + $"from={from:O} to={now:O}"
-      );
-      var rawBars = await client.GetTrendbarsAsync(
-        symbol,
-        timeframe,
-        from,
-        now,
-        cancellationToken
-      );
-      var firstRaw = rawBars.FirstOrDefault();
-      if (firstRaw is not null)
+      var logged = false;
+      async Task<IReadOnlyList<RawTrendbar>> Fetch(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        int count,
+        CancellationToken token
+      )
       {
-        LogRawTrendbar("historical", firstRaw);
+        var page = await client.GetTrendbarsAsync(symbol, timeframe, from, to, count, token);
+        if (!logged && page.Count > 0)
+        {
+          logged = true;
+          LogRawTrendbar("historical", page[0]);
+        }
+        return page;
       }
       // Chronological order is mandatory for recovery: each ZSET write and
       // its bars:new notification advance the Redis market-data plane in
-      // causal order.
-      foreach (var raw in rawBars.OrderBy(bar => bar.UtcTimestampInMinutes))
-      {
-        var bar = TrendbarDecoder.Decode(raw, symbol.Digits);
-        if (bar.CloseTimestamp(timeframe) > now.ToUnixTimeSeconds())
-        {
-          continue;
-        }
-        await sink.WriteClosedBarAsync(
-          symbol.RedisSymbol,
-          timeframe,
-          bar,
-          cancellationToken,
-          publish: publish
-        );
-      }
-      Log($"backfill {symbol.RedisSymbol} {timeframe}: wrote {rawBars.Count} raw bars");
+      // causal order (TrendbarBackfill writes oldest to newest).
+      await Backfiller.RunAsync(symbol.RedisSymbol, timeframe, fullWindow, Fetch, cancellationToken);
     }
     healthFile.Touch();
   }
+
+  private TrendbarBackfill? _backfiller;
+
+  private TrendbarBackfill Backfiller => _backfiller ??= new TrendbarBackfill(
+    options.BackfillBars,
+    options.BarsWindowMax,
+    options.MaxBackfillRequestsPerTf,
+    sink,
+    Now,
+    Delay,
+    Log,
+    warningLog ?? Warn
+  );
 
   private static async Task<SymbolInfo> ResolveRuntimeSymbolAsync(
     ICTraderFeedClient client,

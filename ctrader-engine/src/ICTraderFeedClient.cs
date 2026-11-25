@@ -25,6 +25,20 @@ public interface ICTraderFeedClient : IAsyncDisposable
     CancellationToken cancellationToken
   );
 
+  /// <summary>
+  /// Same request with ProtoOAGetTrendbarsReq.count set: the server returns at most <paramref name="count"/> bars,
+  /// counted back from <paramref name="to"/> (the newest ones). cTrader.OpenAPI.Net 1.4.4 has no
+  /// ProtoOAGetTrendbarsRes.hasMore, so callers detect a full page by its size.
+  /// </summary>
+  Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
+    SymbolInfo symbol,
+    string timeframe,
+    DateTimeOffset from,
+    DateTimeOffset to,
+    int count,
+    CancellationToken cancellationToken
+  ) => GetTrendbarsAsync(symbol, timeframe, from, to, cancellationToken);
+
   Task SubscribeAsync(
     SymbolInfo symbol,
     IReadOnlyCollection<string> timeframes,

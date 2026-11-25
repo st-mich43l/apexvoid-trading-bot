@@ -176,6 +176,23 @@ Redis is allowed to lose this data on restart. `ctrader-engine` backfills the
 configured window from cTrader on startup or reconnect. Deep historical
 backtesting storage is a separate future sink, not this Redis contract.
 
+The backfill is by **bar count** (PR-FEED1): on startup the feed collects the
+newest `runtime.feed.backfill_bars` closed bars per symbol and timeframe,
+stepping back window by window across weekends and holidays (at most
+`runtime.feed.max_backfill_requests_per_tf` requests), and writes them silently.
+On reconnect it fetches the gap after the last stored bar and publishes each
+bar; when the series then holds fewer than the window, the missing older bars
+are written silently. The result of each backfill is recorded for monitoring
+only (nothing decides on it):
+
+```text
+HSET feed:backfill:<SYMBOL>:<TF> written <n> target <n> held <n> earliest_ts <s> latest_ts <s>
+     requests <n> mode startup|reconnect-gap|reconnect-topup|reconnect-empty
+     stop target|gap_filled|max_requests|no_history short 0|1 at <s>
+```
+
+A short window also logs `ctrader-feed WARNING backfill_short <SYMBOL> <TF> written=<n> target=<n> ...`.
+
 ## Auto-Trade Inputs
 
 All fields ending in `*_pips` that cross Redis between the Python gate and the
