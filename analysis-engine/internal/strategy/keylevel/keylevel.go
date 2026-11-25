@@ -57,10 +57,22 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v13"
+const Version = "v14"
 
-// ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
+// ReactionSweptEvidence marks a candidate whose reaction traded beyond the level band's far edge (always under require_reaction_sweep; under v14
+// major_sweep_mode optional only when it actually swept).
 const ReactionSweptEvidence = "key_level_reaction_swept"
+
+// ReactionUnsweptEvidence (v14) marks a candidate at a MAJOR level whose confirmed reaction did not sweep the band, published under major_sweep_mode optional.
+const ReactionUnsweptEvidence = "key_level_reaction_unswept"
+
+// major_sweep_mode values (v14, read only with level_model major): required is v13 exactly (require_reaction_sweep applies at major levels); optional and off
+// publish a confirmed reaction at a major level whether or not it swept.
+const (
+	majorSweepRequired = "required"
+	majorSweepOptional = "optional"
+	majorSweepOff      = "off"
+)
 
 const (
 	contractProfitWeek = "profit_week"
@@ -114,6 +126,14 @@ type Config struct {
 	// XAU by instrument override). Absent means swing.
 	LevelModel string
 	Major      MajorConfig
+	// MajorSweepMode (v14, PR-KL15) decides whether require_reaction_sweep applies at MAJOR levels: "required" (default, v13 exactly), "optional" or "off" (a
+	// confirmed reaction at a major level publishes whether or not it swept). Read only under level_model major; the swing model keeps require_reaction_sweep.
+	MajorSweepMode string
+}
+
+// sweepOptional is true when an unswept confirmed reaction may publish at a major level (v14 major_sweep_mode optional or off).
+func (c Config) sweepOptional() bool {
+	return c.LevelModel == levelModelMajor && c.MajorSweepMode != majorSweepRequired
 }
 
 // Refusals of Key Level (v12), by reason (strategy_refused{strategy="key_level", structure_timeframe, reason}).
@@ -250,6 +270,14 @@ func parseConfig(params map[string]any) (Config, error) {
 			return Config{}, fmt.Errorf("level_model must be %q or %q, got %v", levelModelSwing, levelModelMajor, raw)
 		}
 		cfg.LevelModel = model
+	}
+	cfg.MajorSweepMode = majorSweepRequired
+	if raw, present := params["major_sweep_mode"]; present {
+		mode, ok := raw.(string)
+		if !ok || (mode != majorSweepRequired && mode != majorSweepOptional && mode != majorSweepOff) {
+			return Config{}, fmt.Errorf("major_sweep_mode must be %q, %q or %q, got %v", majorSweepRequired, majorSweepOptional, majorSweepOff, raw)
+		}
+		cfg.MajorSweepMode = mode
 	}
 	if raw, present := params["major"]; present {
 		if cfg.Major, err = parseMajorConfig(raw); err != nil {
@@ -610,7 +638,9 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	invalidation, anchored := strategyutil.ReactionAnchoredInvalidation(d.Frame.Bars, a.confirmation, direction, low, high, buffer)
 	// The reaction swept the level exactly when its own extreme lies strictly beyond the band's far edge, which is when the invalidation is anchored to it.
 	// Without a sweep the candidate is refused (counted apart from the stop budget); the edge of Key Level belongs to the reaction that took the liquidity.
-	if s.cfg.RequireReactionSweep && !anchored {
+	// v14 (PR-KL15): at a MAJOR level with major_sweep_mode optional the unswept reaction publishes; its invalidation is the one just computed, beyond the band's
+	// far edge plus invalidation_buffer_atr (the stop the swept path already uses whenever its extreme stays inside the band), and the stop budget below applies.
+	if s.cfg.RequireReactionSweep && !anchored && !s.cfg.sweepOptional() {
 		if !dryRun {
 			s.SweepRefusalCounter.CountUnswept()
 		}
@@ -659,7 +689,12 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	if anchored {
 		evidence = append(evidence, strategyutil.ReactionExtremeEvidence)
 	}
-	if s.cfg.RequireReactionSweep {
+	switch {
+	case s.cfg.sweepOptional() && anchored:
+		evidence = append(evidence, ReactionSweptEvidence)
+	case s.cfg.sweepOptional():
+		evidence = append(evidence, ReactionUnsweptEvidence)
+	case s.cfg.RequireReactionSweep:
 		evidence = append(evidence, ReactionSweptEvidence)
 	}
 	if budgetCode != "" {
@@ -680,6 +715,15 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 		levelKind: a.level.Kind, levelBand: a.level.Band, swings: d.Frame.Swings, coverage: coverage,
 		deepEntryPips: deepEntryPips(s.cfg.StopBudget.PipSize, direction, fullLow, fullHigh, low, high),
 	})
+	if s.cfg.sweepOptional() {
+		if quality.Components == nil {
+			quality.Components = map[string]float64{}
+		}
+		quality.Components["kl_reaction_swept"] = 0
+		if anchored {
+			quality.Components["kl_reaction_swept"] = 1
+		}
+	}
 	candidate, err := strategyutil.Candidate(strategyutil.CandidateSpec{
 		ID: string(ID), Version: Version, SetupKey: setupKey, Symbol: ctx.Symbol, Direction: direction,
 		EntryLow: low, EntryHigh: high, Invalidation: invalidation, InvalidationLabel: "key_level_invalidated",

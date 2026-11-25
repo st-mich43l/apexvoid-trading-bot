@@ -370,7 +370,11 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 	if err != nil {
 		return err
 	}
-	if !hasTouches && !hasExplicit && !hasSweep && !hasModel {
+	majorSweep, hasMajorSweep, err := doc.InstrumentOverride(symbol, "auto_algo", "strategies", "reaction", "key_level", "major_sweep_mode")
+	if err != nil {
+		return err
+	}
+	if !hasTouches && !hasExplicit && !hasSweep && !hasModel && !hasMajorSweep {
 		return nil
 	}
 	if hasTouches {
@@ -420,6 +424,14 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 				return fmt.Errorf("instrument %s: level_model must be a string, got %T", symbol, model)
 			}
 			params["level_model"] = m
+		}
+		// PR-KL15: major_sweep_mode (XAU: optional) decides whether require_reaction_sweep applies at major levels.
+		if hasMajorSweep {
+			m, ok := majorSweep.(string)
+			if !ok {
+				return fmt.Errorf("instrument %s: major_sweep_mode must be a string, got %T", symbol, majorSweep)
+			}
+			params["major_sweep_mode"] = m
 		}
 		settings.Strategies[i].Parameters = params
 	}

@@ -370,6 +370,14 @@ func (w *SymbolWorker) countFeatures(candidate opportunity.Candidate, symbol str
 		}
 		w.telemetry.CountStrategyFeature(symbol, string(candidate.Strategy), structureTimeframe, "prior_sweep", value, 1)
 	}
+	// Key Level v14 (PR-KL15): swept or unswept reaction, published only under major_sweep_mode optional.
+	if swept, ok := candidate.Quality.Components["kl_reaction_swept"]; ok {
+		value := "unswept"
+		if swept >= 0.5 {
+			value = "swept"
+		}
+		w.telemetry.CountStrategyFeature(symbol, string(candidate.Strategy), structureTimeframe, "reaction_sweep", value, 1)
+	}
 	if kind, ok := candidate.Quality.Components["break_kind"]; ok {
 		value := "none"
 		switch {
