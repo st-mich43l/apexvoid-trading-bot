@@ -25,11 +25,12 @@ pool or sweep is an analytical reference, not an entry signal. The indicator tra
 1. Open TradingView's Pine Editor, paste `apexvoid_price_action.pine`, save, and
    add it to a chart.
 2. Suggested start: XAUUSD on M5 or M15, default settings (`Balanced — Recommended`
-   profile). Tune per symbol afterwards.
-3. Set the chart's right margin to at least `Annotation gutter` + 15 bars (default 27): Chart settings → Appearance (older versions: Canvas) → Margins → Right (bars). The gutter is where captions and the label column live; without the margin TradingView clips them. The menu names are from memory of the TradingView UI and were not checked in this repository.
+   profile, `Free plan (fast)` performance, `ApexVoid` colour scheme). Tune per symbol afterwards. For a complete chart look
+   (background, grid, candles and matching indicator settings) pick one of the packs in [`CHART_THEMES.md`](CHART_THEMES.md).
+3. Set the chart's right margin to at least `Annotation gutter` + 15 bars (default 27): Chart settings → Canvas (older versions: Appearance) → Margins → Right (bars). The gutter is where captions and the label column live; without the margin TradingView clips them. The menu names are from memory of the TradingView UI and were not checked in this repository.
 4. TradingView is the only authoritative compiler. After any edit, compile there and
-   check on a long history that object limits (250 boxes, 350 lines, 500 labels) are
-   not hit.
+   check on a long history that object limits (250 boxes, 350 lines, 500 labels, 20 polylines) are
+   not hit. The script calculates only the last 2,000 bars (`calc_bars_count`); see *Performance* below.
 
 **Upgrading from an earlier version.** TradingView keeps the old script's settings on a
 chart that already holds the indicator, including its price-scale pin, so a source change
@@ -58,23 +59,24 @@ the candles when the price axis is dragged or zoomed.
 | `◆ OB+FVG`, `◆ D+OB`, `◆ S+FVG`, `◆ D·RBR` … | thicker border | A zone that passed a named qualification path (below). `◆` plus the border mark a POI; the colour carries the side, so the caption is only the kind: `OB`, `iOB`, `FVG`, `D` (demand), `S` (supply), base patterns `D·RBR` / `S·RBD`, composites joined with `+` (supply/demand, then OB, then FVG). `·T` = tested. Zones of one side that overlap or sit closer than a label height share **one** caption on the best member (`◆ OB+FVG ×3` = three boxes); hover for every member. |
 | `EQ` and the premium / discount gauge | a slim rose / green gauge at the very right edge, just beyond the zone boxes (no text) and a faint dashed 50 % line | Upper half (supply side) and lower half (demand side) of the **dealing range**, and its equilibrium. Since v2.13 the dealing range is the **protected leg** (bear: the protected high down to the lowest low since it; bull: mirror), so price is always inside it; without a bias it is the confirmed swing range extended to the live extreme of the leg. Clipped to the candle-scale window. |
 | `BSL` / `SSL` | cool-grey dotted line, right-edge label | Buy-side liquidity above price / sell-side liquidity below (confirmed pools). |
-| `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. Switch off with `Show nearest unswept internal swing high / low`. |
+| `iBSL` / `iSSL` | cool-grey dashed line, small label | The nearest internal swing high above / low below price that nothing has traded through since and that is not already a pool. A marker only: no state, no alerts. **Off with the default `Performance` = `Free plan (fast)`** (and in `Minimal`); with `Full`, switch it with `Show nearest unswept internal swing high / low`. |
 | `EQH · BSL` / `EQL · SSL` | narrow grey band plus line | Equal highs / lows formed by two or more independent tests. |
 | `PDH · BSL` / `PDL · SSL` | as above | Optional previous-day high / low. |
 | `… · swept` / `… · taken` | faded line that stops at the event bar | A pool that was grabbed / consumed. |
 | Short vertical bar on a wick | 2 px, rose on an upper wick, teal on a lower wick | Liquidity grab: the rejection wick after a sweep. |
 | `Asia H` / `Asia L` (live) | solid purple lines that grow with the session and update every bar; labels in the right-edge column | The Asian range as it forms. Since v2.13 Asia is the engine's session: 07:00 Tokyo (22:00 UTC) until London open, so the range is the one `asia_range` trades. When the session ends it becomes the completed range below. |
-| `KL 3949.12 ×3` (key levels) | faint dotted line (dashed for a round level), neutral grey, fainter with fewer touches | What the engine's `key_level` strategy reads as a level (see Key levels below). Behind everything else; every drawn level shows its price in a muted right-column label that is never folded away. |
+| `KL ×3    3949.12` (key levels) | faint dotted line (dashed for a round level), neutral grey, fainter with fewer touches | The swing levels the engine's `key_level` strategy walks on FX (see Key levels below). Behind everything else; every drawn level shows its price in a right-edge row that is never hidden. |
 | `Asia` / `London` / `New York` boxes | faint fill with a clearer dashed outline and title per session, so the session reads at a glance without tinting the technical zones (purple / blue / amber), titled with the session name | The candle range of each session: from its first bar to its last bar, spanning the session high and low. The box grows while the session runs and freezes when it ends; the last 3 per session are kept. London and New York overlap by design. |
 | `Asia H` / `Asia L` | purple dashed | Last completed Asian-session range (`pAsia H/L` while a session is live). |
 
-Colours are inputs. Liquidity uses a neutral grey on purpose so it cannot be
+Colours named above are the default `ApexVoid` scheme on a dark chart; other schemes and the light variants change the hues, not
+the meaning (see *Colour schemes*). Liquidity, key levels and the volume profile use neutral greys on purpose so they cannot be
 confused with BOS/CHoCH (teal/rose) or Asian levels (purple).
 
 ### Key levels (v2.17)
 
 One code path, two definitions (`Key level definition`). Both read what the engine's `key_level` strategy reads, `LegacyFrame.SwingLevels` (the `profit_week` contract): `legacyread.Stage` -> `techniquezone.FindSwings` -> `techniquezone.KeyLevels`
-(`analysis.legacy_read`: window M5 150 / M15 250 / otherwise 400, `fractal_n` 2, `zigzag_atr_mult` 1.0). They differ only in four parameters:
+(`analysis.legacy_read`: window M5 150 / M15 250 / otherwise 400, `fractal_n` 2, `zigzag_atr_mult` 1.0; with `Performance` = `Free plan (fast)` the indicator caps its window at 150 bars on every timeframe). They differ only in four parameters:
 
 | | `Engine (key_level v6)` (default) | `Selective (v7 preview)` |
 | --- | --- | --- |
@@ -83,18 +85,18 @@ One code path, two definitions (`Key level definition`). Both read what the engi
 | Dedupe of neighbours within the tolerance | average the prices, touches = max | keep the **stronger member's exact price** (touches, then reaction before round, then the newest member) |
 | Origin | display only | the level's kind for flipped / in play: a flipped level is not "in play" |
 
-Engine v6 is what the bot trades today. Selective v7 is a preview of the definition engine PR-K2 is heading to; switch the default to v7 when PR-K2 merges.
+Both definitions draw the swing-level set the engine reads (`LegacyFrame.SwingLevels`, still on the v6 definition: tolerance 0.5 x median ATR, XAU round step 5). The engine's Key Level strategy is now at **v13** and the indicator reproduces only its levels, not its trading rules: on FX (`level_model: swing`) the strategy walks this same set and adds the target (v8), role (v9) and reaction (v10) rules; on XAU (`level_model: major`, KL13) it walks its own major-level book, which the indicator does not draw, so on XAU only some drawn levels are ones the bot trades. `Selective (v7 preview)` is a definition the engine never adopted (the engine's v7 became the deep-entry change); keep it for comparison only.
 
 - **When:** on the last bar, from the last `Key level window` CLOSED bars (the forming bar is left out in real time), so levels do not flicker; only the last bar recomputes and nothing is stored per bar.
 - **ATR:** the window's own series: the mean of the last (up to) 14 true ranges, the first bar's true range being high - low; the tolerance is a fraction of the **median** of that series.
 - **Swings:** fractal candidates (2 bars each side; left strictly lower, right not higher) through the **zigzag filter** (same kind replaces when more extreme; the opposite kind is kept when the move is at least the ATR at its bar).
 - **Levels:** swings sorted by price join a cluster while within the tolerance of the lowest member (equal to "within tolerance of every member", implying the 2 x tolerance span cap); clusters of 2+ are reaction levels (price = mean). Round levels: every multiple of `Round step` with 2+ swings within max(tolerance, 0.25 x the ATR at the swing).
 - **Never hidden for being "broken":** the engine `Role` marks nearly every level price is not touching as broken (a decision-time test), so it is not a display filter. Above price = resistance, below = support. The swings within the tolerance say where the level formed; a level whose origin is opposite to its side is **flipped**: still drawn, at transparency 88, tooltip `flipped (formed as support)` (v7 adds `Break & Retest territory; key_level v7 skips it`).
-- **In play:** the last 2 closes are not both beyond the band, so price is still working the level (v7: a flipped level is skipped by the strategy, so it is never in play). Line transparency 45, caption `KL 3917.18 ×3 ●` (Pine cannot switch a caption to bold at run time, so the marker is the ● only).
+- **In play:** the last 2 closes are not both beyond the band, so price is still working the level (v7: a flipped level is skipped by the strategy, so it is never in play). Line transparency 45, row `KL ×3 ●  3917.18` (Pine cannot switch a caption to bold at run time, so the marker is the ● only).
 - **Sparse by default:** inside the candle-scale window, `Key levels per side` (default 3, up to 10) nearest levels each side, in play counted for its side. Research on the live levels found that nearness to *a* level carries no information, so more lines only add clutter.
-- **Look:** width-1 dotted line (dashed for a round level), `Key level colour`; transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; major round levels (XAU $50 / $100 multiples) 60 in both modes; from the earliest member swing (capped by `Maximum drawn length`) to the end of the gutter. Fainter than pools and zones.
-- **Lines always draw, and every drawn level shows its price:** there is no "near a zone edge: not drawn" rule and no `+n` for a key level. The right-column caption always starts with `KL` and the line's own price: reaction `KL 3949.12 ×3`; round on its step price `KL 3950 ×6`; round where v6 averaging moved the price `KL 3949.12 ×6` (tooltip: `round 3950, engine price merged`); in play adds ` ●`.
-- **Sharing a slot:** several key levels within one label height become one label that lists every price, highest first (`KL 3954.47 ×3 · 3951.42 ×3 · 3949.12 ×6`). A key level within one label height of another category (`PROT`, `BSL` / `SSL` / `EQH` / `EQL`, `EQ`, `MAJOR`, `DEV`, a zone caption, Asia) never replaces that label: the other label keeps its slot, position and colour, and the key-level text is appended visibly (`BSL · KL 3949.12 ×6`) with its tooltip line. Pine labels have one text colour, so the appended text takes the host's colour; the `KL` prefix identifies it. Other categories keep the earlier rule (the lower tier shows as `+n`).
+- **Look:** width-1 dotted line (dashed for a round level), the scheme's key-level colour (or `Key level colour` once changed from its default); transparency 82 / 74 / 66 for 2 / 3 / 4+ touches; major round levels (XAU $50 / $100 multiples) 60 in both modes; from the earliest member swing (capped by `Maximum drawn length`) to the end of the gutter. Fainter than pools and zones.
+- **Lines always draw, and every drawn level shows its price:** there is no "near a zone edge: not drawn" rule, and a key level is never hidden or counted as `+n`. Its right-edge row (v2.27) is `KL`, the touch count, then the line's own price: reaction `KL ×3    3949.12`; round on its step price `KL ×6    3950`; round where v6 averaging moved the price `KL ×6    3949.12` (tooltip: `round 3950, engine price merged`); in play adds ` ●`.
+- **Sharing space:** key levels within about one row of each other, of POC / VAH / VAL, pools or EQ form one multi-row label, one row per level, highest price first. Next to a coloured annotation (`PROT`, `DEV`, a zone caption, Asia) a key level keeps its own neutral label instead of being appended to that one, so neither takes the other's colour (see *Right-edge labels*). `Right-edge labels` = `Legacy (v2.26)` restores the old merged captions (`KL 3954.47 ×3 · 3951.42 ×3`, `BSL · KL 3949.12 ×6`).
 - **Selectivity readout (tooltip only, nothing on the chart):** the share of the window's [low, high] inside any level band, over all levels: `coverage 69 % of the recent range: low selectivity` above 40 %, `selective` at or below 25 %. On the 3 Nov M5 capture: v6 69 %, v7 36 %.
 - **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count).
 
@@ -120,7 +122,7 @@ One quiet histogram of where the **current period** traded, with its point of co
 - **POC** (solid line to the right edge, caption `POC`): the row with the most activity (the higher row on a tie).
 - **VA** (`VAH` / `VAL`, dotted lines; the darker part of the histogram): the rows around the POC that hold `Value area %` (70) of the volume, built the CBOT way: from the POC, compare the next two rows above with the next two below and add the larger pair, until the share is reached.
 
-**Drawing.** The histogram is a filled **polyline** anchored at the period's first bar (its width is 30 % of the period length at the busiest row); the three lines run from the same bar to the right edge so the profile is readable even when the histogram is scrolled out of view. Captions go to the right label column as category `volume profile`.
+**Drawing.** The histogram is a filled **polyline** anchored at the period's first bar (its width is 30 % of the period length at the busiest row); the three lines run from the same bar to the right edge so the profile is readable even when the histogram is scrolled out of view. Captions (`POC      3549.67` …) go to the right-edge rail as neutral rows with their prices; they are never hidden.
 
 ### Display profiles
 
@@ -130,6 +132,22 @@ One quiet histogram of where the **current period** traded, with its point of co
 | Balanced — Recommended | up to 8 (+ OB budget) | up to 8 (nearest BSL above and SSL below first) | 6 external events |
 | Detailed | at least 12 | at least 12 | internal structure available |
 | Debug | up to 20, distance limits off | all retained | OB and pool distance limits off |
+
+### Performance (free plans)
+
+TradingView stops a script that runs longer than its plan allows (`RE10110`; 0.5 s on the free plans), and v2.21 to v2.26 were all
+fixes for that on XAUUSD M15. The current guards:
+
+- **`calc_bars_count = 2000`:** only the last 2,000 chart bars are calculated (about 21 days on M15, 7 on M5). Every window the script
+  uses is at most 800 bars and objects are drawn at most 250 bars back, so nothing visible is lost.
+- **`Performance` (06 Visuals & Performance), default `Free plan (fast)`:** at most 30 retained zones and 12 retained liquidity pools,
+  a key level window of at most 150 bars, and no `iBSL` / `iSSL` markers. `Full` uses every setting as configured and needs a plan with a
+  longer limit.
+- **Last-bar-only work:** key levels, the volume profile (no lower-timeframe request) and the right-edge rail run on the last bar only,
+  with bounded loops and pooled objects.
+
+None of this has been measured with TradingView's profiler in this repository. If `RE10110` appears, set `Display profile` = `Minimal`
+to confirm it is a feature, switch features off one at a time, or use Pine Editor → More → Profiler.
 
 ### Keeping candles readable
 
@@ -147,7 +165,7 @@ hide them, so:
   chart.
 - **Lighter zones:** default `Zone transparency` 92, fainter borders; POI keeps a stronger border.
 - **Right gutter (v2.15):** every object that used to end 5 bars right of the last candle now ends `Annotation gutter` bars (default 12) right of it, and zone captions are right-aligned inside it, so no caption covers a live candle. The premium / discount gauge is 3 bars wide just beyond it, and the label column starts 4 bars beyond the gutter.
-- **Three label tiers:** 1 decision (`PROT`, the nearest active `BSL` / `SSL`, `EQ`, `MAJOR HIGH/LOW`, POI captions), 2 structure (swing `BOS` / `CHoCH`, non-POI captions, `DEV`; swing `BOS` / `CHoCH` at full colour, other tier-2 text at 25 % transparency), 3 context (internal `BOS` / `CHoCH`, `iBSL` / `iSSL`, Asia, other pools, session titles; muted at 20 % transparency). `Global text scale` picks the sizes (v2.15.1, one step up from v2.15): Compact = small / small / tiny, Standard = normal / normal / small, Large = large / normal / normal. Zone captions inside boxes use the tier-1 size (POI) or tier-2 size (non-POI), so Standard prints them at `normal`. Only `MAJOR HIGH/LOW` is bold (see Limits).
+- **Three label tiers:** 1 decision (`PROT`, the nearest active `BSL` / `SSL`, `EQ`, `MAJOR HIGH/LOW`, POI captions), 2 structure (swing `BOS` / `CHoCH`, non-POI captions, `DEV`; swing `BOS` / `CHoCH` at full colour, other tier-2 text at 25 % transparency), 3 context (internal `BOS` / `CHoCH`, `iBSL` / `iSSL`, Asia, other pools, session titles; muted at 20 % transparency). `Global text scale` picks the sizes (v2.15.1, one step up from v2.15): Compact = small / small / tiny, Standard = normal / normal / small, Large = large / normal / normal. Zone captions inside boxes use the tier-1 size (POI) or tier-2 size (non-POI), so Standard prints them at `normal`. The right-edge rail has its own transparencies (see *Right-edge labels*). Only `MAJOR HIGH/LOW` is bold (see Limits).
 - **One label column (the annotation rail, v2.27):** `PROT`, `DEV▲`, `BSL`, `EQ`, `Asia H`, `iBSL`, key levels, `POC` / `VAH` / `VAL` and zone captions that do not fit inside their box are drawn as one column of short rows; see *Right-edge labels* below. `Right-edge labels` = `Legacy (v2.26)` restores the v2.26 merged one-line captions.
 - **No opaque boxes over candles:** BOS / CHoCH captions and event labels are outlined text. Session titles are off by default (`Show session titles`; the box colour already names the session); when on they appear only on the live session and the latest completed one of each kind, in the tier-3 size at the bottom of the box.
 - **Zone captions:** text inside a box needs a box tall enough (zoom-aware, and from v2.27 also scaled by `Global text scale`) and a free slot;
@@ -198,8 +216,9 @@ written.
   in the tooltip of the nearest shown label (`Also near this price`). A key level, POC / VAH / VAL, EQ or any tier-1 annotation is never
   hidden.
 - **Colour and size.** Coloured groups use their category colour (tier 1 full, tier 2 at 10 %, tier 3 at 25 % transparency); neutral
-  groups use neutral text (`#CBD5E1`, tier-3-only groups `#94A3B8`). Matte background `#161923` at 18 % transparency (v2.26: `#090D18`
-  at 60 %), left-aligned monospace text. Sizes follow `Global text scale` and the tier as before; Compact mode uses one step smaller.
+  groups use neutral text that follows `Chart theme`: dark `#CBD5E1` (tier-3-only groups `#94A3B8`) on a matte `#161923` at 18 %
+  transparency, light `#1E293B` (`#475569`) on `#F1F5F9` at 8 %; left-aligned monospace text. The Legacy column keeps its v2.26 look
+  (`#090D18` at 60 %). Sizes follow `Global text scale` and the tier as before; Compact mode uses one step smaller.
 - **Compact** shows one row per group (its highest-priority member) plus every row that carries a price, and counts the rest as `+n`;
   the tooltip lists everything.
 - **Row height is an estimate:** `max(Annotation vertical spacing × ATR, candle range / 36)` × 0.85 / 1.0 / 1.25 for Compact /
@@ -217,40 +236,46 @@ written.
 
 Inputs are grouped as in the indicator's settings dialog.
 
-**01 Market Structure** — `External swing publication` (on displacement / next opposite pivot), `Protected level` (trailing / last confirmed swing), `Swing sensitivity` (Auto/Manual), manual pivot bars,
-`Minimum external leg displacement` (1.50 ATR), `External confirmation threshold`
-(0.15), `BOS/CHOCH close buffer`, extended
-major high/low, internal structure, draw BOS/CHoCH, external event history (6).
+**01 Market Structure** — `Swing sensitivity` (Auto / Manual), `Manual internal pivot bars` (4), `Manual external pivot bars` (18),
+`Minimum external leg displacement` (1.50 ATR), `External confirmation threshold` (0.15 ATR), `BOS/CHOCH close buffer` (0.00 ATR),
+`Protected level` (Trailing (internal BOS) / Last confirmed swing (v2.12)), `Extend current major high / low` (on), `Show internal
+structure` (off), `Draw BOS / CHOCH` (on), `Relevant external BOS/CHoCH history` (6).
 
-**02 Liquidity** — show pools, nearest unswept internal swing marker (`iBSL` / `iSSL`), highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
+**02 Liquidity** — show pools, highlight grabs, `EQH / EQL tolerance` (0.15 ATR),
 `Minimum bars between independent tests` (8), `Minimum pullback between tests`
-(0.5 ATR), `Sweep penetration` (0.01 ATR), `Sweep return rule` / window,
+(0.5 ATR), `Sweep penetration` (0.01 ATR), `Sweep return rule` (Within N bars / Same bar) / window (2),
 `Pool break buffer` (0.10 ATR), `Closes beyond a pool to consume it` (2),
-`Consumed pool policy` and fade window (40), retained (24) / visible (6) pools,
-`Maximum visible pool distance` (30 ATR), pool maximum age, previous-day pools
-(off), `Minimum rejection wick for grab highlight` (0.20 ATR), grab history (10).
+`Consumed pool policy` (Fade, then retire / Retire immediately / Keep faded) and fade window (40), retained (24) / visible (6) pools,
+`Maximum visible pool distance` (30 ATR), pool maximum age (1500 bars), previous-day pools
+(off), `Minimum rejection wick for grab highlight` (0.20 ATR), grab history (10), nearest unswept internal swing marker (`iBSL` / `iSSL`; on, but off in `Free plan (fast)`).
 
-**03 Order Blocks & Zones** — (v2.2) `Show base-and-impulse supply / demand`, pattern filter, base candle limits, departure gates, proximal edge, retained base zones; show OBs, internal OBs, `Origin search window` (40),
+**03 Order Blocks & Zones** — show OBs, internal OBs, `Origin search window` (40),
 `POI: OB-to-break proximity` (12), `Minimum displacement from OB` (1.0 ATR),
 `Minimum impulse candle body` (0.6), `Maximum origin candle range` (2.5),
 `Base tolerance vs leg extreme` (0.5), wicks, `OB mitigation method`
-(Close/Wick/Midpoint), visible bullish / bearish OBs (2 / 2), `Maximum visible OB
-distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and width (1.0).
+(Close / Wick / Midpoint), visible bullish / bearish OBs (2 / 2), `Maximum visible OB
+distance` (25 ATR), midpoint line, swing supply / demand, `Show base-and-impulse supply / demand`, pattern filter (All / Reversal only /
+Continuation only), base candle limits, departure gates, proximal edge (Wick / Body), retained base zones (12), supply / demand
+departure (0.8) and width (1.0).
 
-**04 Fair Value Gaps** — show FVG, `FVG definition` (Engine / Loose), minimum gap (0.10 ATR) and middle-candle body
-(0.5 ATR) for Loose, invalidation method.
+**04 Fair Value Gaps** — show FVG, `FVG definition` (Engine (fvg v9) / Loose (v2.12 keys)), minimum gap (0.10 ATR) and middle-candle body
+(0.5 ATR) for Loose, `FVG invalidation method` (Wick / Close / Midpoint).
 
-**05 Sessions** — Asian show/hours/timezone/retained ranges, `Draw a range box for each session`, London and New York hours and timezones (defined in local time, so daylight saving is handled), retained boxes per session (3), box fill transparency (93; higher is fainter).
+**05 Sessions** — Asian show / hours (07:00-17:00 Tokyo, ends early at London open) / timezone / retained ranges (3), `Draw a range box for each session`, London and New York hours and timezones (defined in local time, so daylight saving is handled), retained boxes per session (3), box fill transparency (93; higher is fainter), `Show session titles` (off).
 
-**06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
-retained zone state (80), visible qualified zones (8), `Maximum visible zone
-distance` (10 ATR, FVG and supply/demand), POI
-structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)), `Colour scheme` (ApexVoid / Classic / Colorblind safe / Ocean / Muted / Custom), `Chart theme` (Auto / Dark / Light), `Candle colours` (Off / Scheme / Neutral / Structure bias), `Up candle colour`, `Down candle colour`; `Show session titles` is in 05 Sessions.
+**06 Visuals & Performance** — in dialog order: `Display profile` (Balanced — Recommended), `Colour scheme` (ApexVoid / Classic /
+Colorblind safe / Ocean / Muted / Custom), `Candle colours` (Off / Scheme / Neutral / Structure bias; Scheme), `Up candle colour`,
+`Down candle colour`, `Chart theme` (Auto / Dark / Light), the per-category colours (bullish, bearish, bullish / bearish FVG, demand,
+supply, Asia, London, New York, liquidity; each overrides the scheme once changed from its default), `Show premium / discount range`,
+`Keep candles readable` toggle, `Candle range reference` (300 bars), `Candle-scale window` (15 ATR), `Maximum drawn length` (250 bars),
+zone transparency (92), retained zone state (80), `Performance` (Free plan (fast) / Full), visible qualified zones (8), `Maximum visible
+zone distance` (10 ATR, FVG and supply/demand), POI structure window (96), `Maximum event labels` (150), `Maximum BOS/CHoCH events` (60),
+zone maximum age (600 bars), `Global text scale` (Compact / Standard / Large), annotation horizontal spacing (6 bars) and vertical
+spacing (0.30 ATR), `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)).
 
+**07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour` (overrides the scheme once changed).
 
-**07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
-
-**08 Volume Profile** — `Volume profile` (Auto / Manual / Off), `Value area %` (70), `Volume profile colour`; Manual only: `Manual: period`, `Manual: rows`.
+**08 Volume Profile** — `Volume profile` (Auto / Manual / Off), `Value area %` (70), `Volume profile colour` (overrides the scheme once changed); Manual only: `Manual: period` (Session / Day / Week / Month), `Manual: rows` (32, 16-40).
 
 ### Alerts
 
@@ -293,12 +318,15 @@ All fire on bar close. Create them from the indicator's alert dialog.
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
 - Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
 - The candle-scale protection works on the last `Candle range reference` bars, not on the visible window. Asia lines and session boxes are not clipped.
+- Right-edge row heights are estimated from ATR and the candle range; Pine exposes no pixel geometry, so heavy zooming can still make rows touch.
+- `Candle colours` uses `barcolor()`: one colour per candle (no hollow candles), and another indicator that also colours bars can take precedence.
+- `Chart theme` = Auto reads the chart's background colour; a gradient or unusual background may pick the wrong variant (set Dark or Light).
 
 ### Version history
 
 | Version | Change |
 | --- | --- |
-| 2.27 | **Smart annotation rail (rendering only; not compiled or run in TradingView).** The right-edge column is rebuilt as collection (structured fields per annotation), layout and rendering: short rows with the price in a monospace column instead of merged sentences such as `PROT · KL 3565.83 ×2 · 3558.42 ×3 · VAH 3560.65`; groups only within one colour family and with a bounded span (no chain merging); multi-row heights in an order-preserving, tier-weighted collision layout; connectors for displaced labels; a 20-label budget that hides only low-priority unpriced context and names it in a tooltip. New input `Right-edge labels` (Smart / Compact / Legacy (v2.26)). Zone-caption fit follows the text scale. Colour schemes (ApexVoid, Classic, Colorblind safe, Ocean, Muted, Custom) with dark and light variants chosen by `Chart theme` (Auto reads the chart background), theme-aware caption text, backgrounds and outlines; see *Colour schemes (v2.27)* and `COLOR_SCHEMES.md`. Structure, zones, liquidity, key levels, volume profile, premium / discount and alerts are unchanged. See *Right-edge labels (v2.27)*. |
+| 2.27 | **Smart annotation rail, colour schemes and candle colours (rendering only).** Run in TradingView by the owner on XAUUSD M15 on 25 Nov 2026 (the rail is visible in the screenshot); the later colour commits were not individually confirmed, and nothing was profiled. Right-edge column rebuilt as collection (structured fields per annotation), layout and rendering: short rows with the price in a monospace column instead of merged sentences such as `PROT · KL 3565.83 ×2 · 3558.42 ×3 · VAH 3560.65`; groups only within one colour family and with a bounded span (no chain merging); multi-row heights in an order-preserving, tier-weighted collision layout; connectors for displaced labels; a 20-label budget that hides only low-priority unpriced context and names it in a tooltip; input `Right-edge labels` (Smart / Compact / Legacy (v2.26)). Zone-caption fit follows the text scale. `Colour scheme` (ApexVoid, Classic, Colorblind safe, Ocean, Muted, Custom) with dark and light variants picked by `Chart theme` (Auto reads the chart background), theme-aware caption text, backgrounds and outlines; per-category colours override the scheme once changed. `Candle colours` (Off / Scheme / Neutral / Structure bias) recolours the candles with `barcolor()`. Docs: `COLOR_SCHEMES.md`, 14 chart packs in `CHART_THEMES.md`. Structure, zones, liquidity, key levels, volume profile, premium / discount and alerts are unchanged. |
 | 2.26 | **One volume profile, built from chart bars on the last bar (not measured in TradingView).** The profile of v2.20 to v2.25 accumulated lower-timeframe intrabars on every bar (`request.security_lower_tf` over the whole history plus per-bar array work), which is where the volume profile's share of `RE10110` came from. v2.26 draws one profile of the current period, computed on the last bar from at most 480 chart bars: no lower-timeframe request, no per-bar accumulation, no stored history. Naked POCs, completed-profile history and the intrabar / profiles-drawn inputs are gone; period rules, rows, POC and value-area rules are unchanged. Approximation: a chart bar's volume is spread evenly over its range. |
 | 2.25 | **The volume profile stays on in every mode, and now costs almost nothing outside the last 900 bars (not measured in TradingView).** v2.23's `Free plan (fast)` switched it off; that is reverted (fast mode keeps it). The profile only needs the developing period plus the completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only (9 days on 15m, 37 days on 1h, 150 days on 4h, 3 days on 5m); older bars do no volume-profile work at all. Periods, intrabar timeframes, rows, POC and value-area rules are unchanged. With v2.24's `calc_bars_count = 2000` the intrabar request covers at most 2,000 chart bars. |
 | 2.24 | **`calc_bars_count = 2000`: the fourth `RE10110` fix, not measured in TradingView.** The error survived v2.21 to v2.23 (all of which only shortened the last bar), so the limit is probably being spent over the whole history, not on one bar: a free plan loads up to 10,000 bars and the script runs its structure, pool, zone and session logic on every one. The script now calculates only the last 2,000 bars (about 21 days on 15m, 7 on 5m, 1.4 on 1m; every window it uses is at most 800 bars, zones age out after 600), which cuts the total work 5x on a 10,000-bar chart. Objects are drawn at most 250 bars back, so nothing visible changes; the first ~800 calculated bars are the warm-up of the structure state. If it still fails, use More, Profiler in the Pine Editor and send the table. |
