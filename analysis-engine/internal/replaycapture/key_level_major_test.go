@@ -22,7 +22,8 @@ import (
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/telemetry"
 )
 
-// replayKL replays Key Level alone with the given level_model ("" keeps the shipped configuration: major on XAU, swing on FX).
+// replayKL replays Key Level alone. model "" keeps the shipped configuration (XAU: level_model major, major_sweep_mode optional since v14; FX: swing),
+// "swing" or "major" sets level_model, and "v13" keeps the shipped levels with major_sweep_mode required, which is v13 exactly (PR-KL15).
 func replayKL(t *testing.T, capture *replaycapture.Capture, model string, rec *telemetry.Recorder, hook func(engine.Evaluation)) []opportunity.Candidate {
 	t.Helper()
 	doc, err := config.ResolveDocument("../../../config/apexvoid.yml")
@@ -36,7 +37,11 @@ func replayKL(t *testing.T, capture *replaycapture.Capture, model string, rec *t
 		}
 	}
 	opts := replaycapture.Options{DisabledStrategies: off, Telemetry: rec, OnEvaluation: hook}
-	if model != "" {
+	switch model {
+	case "":
+	case "v13":
+		opts.StrategyParameters = map[string]map[string]any{"key_level": {"major_sweep_mode": "required"}}
+	default:
 		opts.StrategyParameters = map[string]map[string]any{"key_level": {"level_model": model}}
 	}
 	result, err := replaycapture.Replay(doc, capture, market.M5, opts)
@@ -108,12 +113,12 @@ func ruleSet(c opportunity.Candidate) string {
 
 // v13 publishes only at major levels, with the facts that made them major; the entry, the stop and the structure are those of the v12 steps on the major band.
 func TestKL13PublishesOnlyAtMajorLevels(t *testing.T) {
-	list := replayKL(t, loadFixture(t, majorFixture), "", nil, nil)
+	list := replayKL(t, loadFixture(t, majorFixture), "v13", nil, nil)
 	if len(list) != 2 {
 		t.Fatalf("two major-level setups on these bars, got %d", len(list))
 	}
 	for _, c := range list {
-		if c.StrategyVersion != "v13" || c.Quality.Components["kl_strength_score"] <= 0 || ruleSet(c) == "" || !evidenceHas(c, "kl_level_source_session") {
+		if c.StrategyVersion != keylevel.Version || c.Quality.Components["kl_strength_score"] <= 0 || ruleSet(c) == "" || !evidenceHas(c, "kl_level_source_session") {
 			t.Fatalf("a v13 candidate carries its major rules, source and strength: %s %v %v", c.StrategyVersion, ruleSet(c), c.Quality.Components["kl_strength_score"])
 		}
 		if c.Structure == nil || c.Structure.Timeframe != market.H1 || c.StructureTimeframe != market.H1 {
@@ -155,7 +160,7 @@ func TestKL13RefusesASweptReactionAtAMinorLevel(t *testing.T) {
 		t.Fatalf("v12 published the swept reaction: %+v", swept)
 	}
 	rec := telemetry.NewRecorder()
-	if c := findAt(replayKL(t, loadFixture(t, xauFixture), "", rec, nil), at, market.Buy); c != nil {
+	if c := findAt(replayKL(t, loadFixture(t, xauFixture), "v13", rec, nil), at, market.Buy); c != nil {
 		t.Fatalf("v13 must not publish at a minor level: %+v", c.Entry)
 	}
 	_, counts := rec.Snapshot()
@@ -200,7 +205,7 @@ func TestKL13NamesEveryV12SetupItDrops(t *testing.T) {
 		at[c.CreatedAt] = append(at[c.CreatedAt], c)
 	}
 	seen := 0
-	v13 := replayKL(t, loadFixture(t, xauFixture), "", nil, func(ev engine.Evaluation) {
+	v13 := replayKL(t, loadFixture(t, xauFixture), "v13", nil, func(ev engine.Evaluation) {
 		for _, c := range at[ev.BarTime] {
 			seen++
 			class, rules := "minor", map[string]bool{}
@@ -248,8 +253,8 @@ func TestKL13HasNoLookAhead(t *testing.T) {
 		}
 		cut.Timeframes[tf] = kept
 	}
-	full := replayKL(t, loadFixture(t, majorFixture), "", nil, nil)
-	part := replayKL(t, cut, "", nil, nil)
+	full := replayKL(t, loadFixture(t, majorFixture), "v13", nil, nil)
+	part := replayKL(t, cut, "v13", nil, nil)
 	if findAt(part, majorBuy2, market.Buy) != nil || findAt(full, majorBuy2, market.Buy) == nil {
 		t.Fatal("the setup appears only once its confirming bar has closed")
 	}
@@ -269,8 +274,8 @@ func TestKL13MirroredBuyAndSell(t *testing.T) {
 		}
 		mirrored.Timeframes[tf] = out
 	}
-	orig := replayKL(t, loadFixture(t, majorFixture), "", nil, nil)
-	mir := replayKL(t, mirrored, "", nil, nil)
+	orig := replayKL(t, loadFixture(t, majorFixture), "v13", nil, nil)
+	mir := replayKL(t, mirrored, "v13", nil, nil)
 	for _, at := range []int64{majorBuy1, majorBuy2} {
 		a, b := findAt(orig, at, market.Buy), findAt(mir, at, market.Sell)
 		if a == nil || b == nil {

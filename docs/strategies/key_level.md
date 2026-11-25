@@ -312,6 +312,41 @@ target counts as a stop; M15-replayed trades are coarse; small n, so a variant m
 | GBPJPY | `minimum_key_touches: 3`, `require_explicit_role: true` | 25 Aug 2026: Key Level was 0/4 (-118 pips). Silent until v9 (no level had an explicit role); since v9 it publishes levels whose structure is pure swing lows (BUY) or pure swing highs (SELL), 63 candidates in a 7-day replay. |
 | EURUSD | `minimum_key_touches: 3`, `require_reaction_sweep: true` | 6 Nov 2026 owner decision: 51 live trades, 55% full stops, -6.64 R on the 23 with a net R. Not measured on FX: replay 461 -> 165 setups, stop rate 38% -> 42%, no measured gain. `require_explicit_role` is not used: every EURUSD setup carries `m5_key_level_role_ambiguous`, so it would disable the strategy on the pair. Review after about 100 trades. |
 
+## v14 (XAU): major levels without a mandatory sweep (PR-KL15, owner 25 Nov 2026)
+
+`major_sweep_mode` (read only with `level_model: major`) decides whether `require_reaction_sweep` applies at MAJOR levels:
+
+| value | behaviour |
+|---|---|
+| `required` (default in `analysis.yml`) | v13 exactly: a confirmed M5 reaction publishes only when its own extreme traded beyond the band's far edge |
+| `optional` (XAU override) | at a level the book classifies MAJOR, a confirmed M5 reaction publishes whether or not it swept; a minor level is never traded |
+| `off` | the same as `optional`; not used in configuration |
+
+- **Stop of an unswept reaction**: the existing `ReactionAnchoredInvalidation` result, beyond the band's far edge plus `invalidation_buffer_atr` (the stop the swept path
+  already used whenever its extreme stayed inside the band). The stop budget (50-70 pips, deep-entry fit, refused if still too wide) is unchanged; the stop is never
+  compressed.
+- **Evidence and measures (only under `optional`/`off`)**: exactly one of `key_level_reaction_swept` / `key_level_reaction_unswept`, and the quality measure
+  `kl_reaction_swept` (1 or 0). Under `required` and under the swing model the candidates are exactly as before (`key_level_reaction_swept` whenever
+  `require_reaction_sweep` is on).
+- **Counters**: `strategy_feature{strategy="key_level", feature="reaction_sweep", value="swept"|"unswept", structure_timeframe}` once per created opportunity (next to
+  `strategy_published`; the published counter keeps its labels). `strategy_key_level_unswept_refused` counts only refusals that still happen (`required`, or the swing model).
+- **Why**: v13 almost never published on XAU (KL14: 8 setups in the September week, 2 on 13-25 Nov), and the sweep rule removed most confirmed reactions at major
+  levels (115 / 18 / 40 on three KL14 bar sets). The rule was measured on the old swing levels (28 Oct); live since then swept and unswept trades did the same,
+  -0.13 R (74) against -0.15 R (17) (KL14 A4). On gold the reaction at a visible session or round level often comes before the level, not after a sweep.
+- **Replay (informational; the change ships regardless, judged on its own live trades)**, the four KL14 XAU bar sets, live geometry labels on M5:
+
+| | setups | labelled n | exp R | win | full stop |
+|---|---|---|---|---|---|
+| v13 = v14 swept | 11 | 9 | +0.33 | 0.67 | 0.33 |
+| v14 unswept | 82 | 67 | -0.16 | 0.42 | 0.55 |
+
+  Per set, unswept: September 52 setups (49 labelled, -0.23 R), 13 Nov 0, 17 Nov 10 (5, -0.63 R), production dump 20 (13, +0.31 R). Every stop is 70.0 pips (the
+  deep-entry fit cuts each entry to the cap). Samples are small and no edge is claimed.
+- **Proofs**: `major_sweep_mode: required` replays byte-identical to v13 on all four XAU sets, and FX Key Level (GBPUSD, EURUSD fixtures) is byte-identical to
+  master, apart from the version in the ids and the config fingerprint.
+- **Rollback**: set the XAU `major_sweep_mode: required` in `config/instruments.yml` (v13 behaviour). **Judge** v14 only on its own live trades, net R and the stop rate
+  before 1R, split swept against unswept (`key_level_reaction_swept` / `key_level_reaction_unswept`).
+
 ## KL14 attribution (25 Nov 2026, read-only)
 
 What broke XAU Key Level after 9 Nov and why v13 is near-silent: [key_level-kl14-attribution.md](key_level-kl14-attribution.md). Result R4 (no single

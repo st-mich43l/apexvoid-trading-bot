@@ -216,12 +216,16 @@ analysis:
       # and the rollback); XAU sets level_model: major in its instrument overrides, and Key Level then walks its own major-level book (session levels, $50/$100
       # handles with a reaction, swing levels with repeated large reactions, held flips) instead of every swing cluster. Every value of the major block is a stated
       # hypothesis, not tuned to a result.
-      version: v13
+      # v14 (docs/strategies/key_level.md, PR-KL15): owner 25 Nov 2026, major_sweep_mode decides whether require_reaction_sweep applies at MAJOR levels (read only
+      # with level_model major). required (this default) is v13 exactly; XAU sets optional in its instrument overrides, so a confirmed M5 reaction at a major level
+      # publishes whether or not it swept (stop beyond the band's far edge plus invalidation_buffer_atr, the stop budget unchanged). The swing model is unchanged.
+      version: v14
       enabled: true
       structure_timeframes: [M5, M15, H1]
       require_confirmation: true
       minimum_touches: 2
       level_model: swing
+      major_sweep_mode: required
       major:
         reference_timeframe: H1            # every distance below is in ATRs of this frame (ref ATR), whatever frame a level comes from
         band_atr: 0.25                     # a level's detection and reaction band, in ATRs of the level's OWN frame (v12 used 0.5)

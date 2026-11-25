@@ -557,6 +557,10 @@ instruments:
               # PR-KL13 (owner rule 25 Nov 2026): on XAU Key Level trades only MAJOR levels (its own book: finalized session levels, $50/$100 handles with a
               # reaction, swing levels with repeated large reactions, held flips; analysis.yml key_level.major). Rollback: delete this line (level_model swing = v12).
               level_model: major
+              # PR-KL15 (owner 25 Nov 2026): at a MAJOR level a confirmed M5 reaction publishes whether or not it swept (the sweep rule above was measured on
+              # the old swing levels, 28 Oct; since then swept and unswept trades did the same, -0.13 R (74) vs -0.15 R (17), KL14 A4). require_reaction_sweep
+              # still governs level_model swing. Rollback: major_sweep_mode: required (v13 behaviour).
+              major_sweep_mode: optional
       execution:
         # Owner rule 2026-10-14: no observe-only. Every strategy and structure
         # timeframe trades on XAU, including impulse_pullback (it was observe-only until
