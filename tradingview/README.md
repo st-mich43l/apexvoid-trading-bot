@@ -6,9 +6,9 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.26). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.27). |
 | `apexvoid_price_geometry.pine` | Price Geometry v1.0: major trendlines and parallel price channels (Pine Script v6), a companion to Price Action. |
-| `tests/` | Offline reference model of the Price Geometry rules and its fixtures (`python -m unittest discover -s tradingview/tests`). |
+| `tests/` | Offline reference models and fixtures: the Price Geometry rules and the Price Action v2.27 right-edge label layout (`python -m unittest discover -s tradingview/tests`). |
 
 ## ApexVoid Price Action
 
@@ -146,13 +146,54 @@ hide them, so:
 - **Lighter zones:** default `Zone transparency` 92, fainter borders; POI keeps a stronger border.
 - **Right gutter (v2.15):** every object that used to end 5 bars right of the last candle now ends `Annotation gutter` bars (default 12) right of it, and zone captions are right-aligned inside it, so no caption covers a live candle. The premium / discount gauge is 3 bars wide just beyond it, and the label column starts 4 bars beyond the gutter.
 - **Three label tiers:** 1 decision (`PROT`, the nearest active `BSL` / `SSL`, `EQ`, `MAJOR HIGH/LOW`, POI captions), 2 structure (swing `BOS` / `CHoCH`, non-POI captions, `DEV`; swing `BOS` / `CHoCH` at full colour, other tier-2 text at 25 % transparency), 3 context (internal `BOS` / `CHoCH`, `iBSL` / `iSSL`, Asia, other pools, session titles; muted at 20 % transparency). `Global text scale` picks the sizes (v2.15.1, one step up from v2.15): Compact = small / small / tiny, Standard = normal / normal / small, Large = large / normal / normal. Zone captions inside boxes use the tier-1 size (POI) or tier-2 size (non-POI), so Standard prints them at `normal`. Only `MAJOR HIGH/LOW` is bold (see Limits).
-- **One label column, one category per label:** `PROT`, `DEV▲`, `BSL`, `EQ`, `Asia H`, `iBSL` … are drawn as one column. Labels at nearly the same price merge only within a category (structure, liquidity, session, zone). When categories collide, the higher tier keeps the label and its colour; the others move into its tooltip and show as `+n`. Column labels are 60 % transparent.
+- **One label column (the annotation rail, v2.27):** `PROT`, `DEV▲`, `BSL`, `EQ`, `Asia H`, `iBSL`, key levels, `POC` / `VAH` / `VAL` and zone captions that do not fit inside their box are drawn as one column of short rows; see *Right-edge labels* below. `Right-edge labels` = `Legacy (v2.26)` restores the v2.26 merged one-line captions.
 - **No opaque boxes over candles:** BOS / CHoCH captions and event labels are outlined text. Session titles are off by default (`Show session titles`; the box colour already names the session); when on they appear only on the live session and the latest completed one of each kind, in the tier-3 size at the bottom of the box.
-- **Zone captions:** text inside a box needs a box tall enough (zoom-aware) and a free slot;
-  otherwise the caption joins the label column (zone category).
+- **Zone captions:** text inside a box needs a box tall enough (zoom-aware, and from v2.27 also scaled by `Global text scale`) and a free slot;
+  otherwise the caption joins the label column (zone category). A zone gets one caption, never both.
 
 Not covered: Asian levels and session boxes and the current major/protected lines are not
 limited by the window. If one of them squashes the candles, switch it off in its group.
+
+### Right-edge labels (v2.27)
+
+`06 Visuals & Performance` → `Right-edge labels`: **Smart** (default), **Compact** or **Legacy (v2.26)**. One shared layout; only the
+row content differs. Nothing here changes a price, a zone, a state or an alert: the rail only decides where existing annotations are
+written.
+
+- **Rows, not sentences.** Each annotation is one row: name, badge, then the price for levels that show one, in a monospace column:
+  `KL ×3    3548.04`, `POC      3549.67`, `EQ       3551.45`, `PROT`, `FVG · T`, `◆ D+OB ×2`. Touch counts (`×n`), in play (`●`),
+  tested (`· T`), POI (`◆`), `pAsia` and `DEV▲` / `DEV▼` keep their meaning. Key levels show their own price (the round price for
+  a round level, as before).
+- **Groups only when genuinely close, and only within one colour family.** Key levels, POC / VAH / VAL, pools, iBSL / iSSL and EQ are
+  the neutral family (EQ stays EQ, a dealing-range level, not a volume statistic); every coloured annotation (PROT, DEV, zones, Asia)
+  groups only with the same colour, so a bearish `PROT` stays bearish next to a key level. A member joins a group when it is less than
+  one row below the previous member **and** at most two rows below the group's top member, with at most four rows: a chain of near
+  neighbours no longer grows into one tall cluster (v2.26 merged any chain whose neighbours were close). Rows are in descending price
+  order. Grouping is about space on the chart, not confluence.
+- **Collision handling with real heights.** Each group is centred on its members' prices and moved as little as possible so that no
+  two groups overlap, counting every row of a multi-row group; price order is always kept. Decision levels (tier 1) move least
+  (weights 100 / 10 / 1 by tier). When a group sits more than half a row from its price, a thin connector runs from the price at the
+  gutter to the label (at most 8). Labels never leave the column (`gutter + 4` bars right of the last candle), so they cannot cover a
+  candle or the premium / discount gauge.
+- **Budget.** At most 20 groups (Compact 14). Over it, and when a context group would be pushed more than 3 rows from its price, the
+  lowest-priority tier-3 groups without a price (Asia, secondary pools, iBSL / iSSL, …) are hidden first and listed with their prices
+  in the tooltip of the nearest shown label (`Also near this price`). A key level, POC / VAH / VAL, EQ or any tier-1 annotation is never
+  hidden.
+- **Colour and size.** Coloured groups use their category colour (tier 1 full, tier 2 at 10 %, tier 3 at 25 % transparency); neutral
+  groups use neutral text (`#CBD5E1`, tier-3-only groups `#94A3B8`). Matte background `#161923` at 18 % transparency (v2.26: `#090D18`
+  at 60 %), left-aligned monospace text. Sizes follow `Global text scale` and the tier as before; Compact mode uses one step smaller.
+- **Compact** shows one row per group (its highest-priority member) plus every row that carries a price, and counts the rest as `+n`;
+  the tooltip lists everything.
+- **Row height is an estimate:** `max(Annotation vertical spacing × ATR, candle range / 36)` × 0.85 / 1.0 / 1.25 for Compact /
+  Standard / Large text. Pine exposes no pixel geometry, so on a strongly zoomed chart rows can still touch or leave gaps; there is no
+  pixel-perfect collision avoidance.
+- **Right margin:** unchanged at `Annotation gutter` + 15 bars (27 by default). Rows are about 16 characters wide instead of the v2.26
+  captions of up to ~45, so the column needs less room than before.
+- **Performance and objects:** everything runs once, on the last bar: one price sort, grouping in one pass, a one-pass order-preserving
+  solver (run at most twice), labels and connectors reused from pools (`label.set_*` / `line.set_*`) and surplus objects deleted. No
+  request, no table, no per-bar work, no change to `max_*_count`. Rail objects: at most 20 labels (Compact 14; a chart whose unhideable
+  levels exceed that shows them all) and 8 connector lines, against one label per cluster in v2.26. The offline reference model of the
+  layout and its fixtures are `tests/annotation_rail_ref.py` and `tests/test_annotation_rail.py`.
 
 ### Settings
 
@@ -186,7 +227,7 @@ distance` (25 ATR), midpoint line, supply/demand switch, departure (0.8) and wid
 **06 Visuals & Performance** — display profile, `Show premium / discount range`, `Keep candles readable` toggle, `Candle-scale window` (15 ATR), `Candle range reference` (300 bars), `Maximum drawn length` (250 bars), colours, zone transparency (92),
 retained zone state (80), visible qualified zones (8), `Maximum visible zone
 distance` (10 ATR, FVG and supply/demand), POI
-structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12); `Show session titles` is in 05 Sessions.
+structure window, label and event limits, zone maximum age (600 bars), global text scale, annotation spacing, `Annotation gutter` (12), `Right-edge labels` (Smart / Compact / Legacy (v2.26)); `Show session titles` is in 05 Sessions.
 
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
@@ -229,7 +270,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 ### Limits
 
 - Compile errors, label placement, object limits and alert behaviour are only checked in
-  TradingView; nothing in this repository compiles or tests the Pine file.
+  TradingView; nothing in this repository compiles or runs the Pine file. The offline models in `tests/` check the rules, not the Pine source.
 - The indicator sends no orders and tracks no trades (the v2.8 paper trade plan was removed in v2.18).
 - Defaults were tuned on a week or two of XAUUSD; retune per instrument.
 - Bold text: Pine's `text_formatting` appears to need a constant value, so a tier cannot switch it on at run time; only `MAJOR HIGH/LOW` is bold. Tier 1 stands out by size and full colour instead.
@@ -239,6 +280,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
+| 2.27 | **Smart annotation rail (rendering only; not compiled or run in TradingView).** The right-edge column is rebuilt as collection (structured fields per annotation), layout and rendering: short rows with the price in a monospace column instead of merged sentences such as `PROT · KL 3565.83 ×2 · 3558.42 ×3 · VAH 3560.65`; groups only within one colour family and with a bounded span (no chain merging); multi-row heights in an order-preserving, tier-weighted collision layout; connectors for displaced labels; a 20-label budget that hides only low-priority unpriced context and names it in a tooltip. New input `Right-edge labels` (Smart / Compact / Legacy (v2.26)). Zone-caption fit follows the text scale. Structure, zones, liquidity, key levels, volume profile, premium / discount and alerts are unchanged. See *Right-edge labels (v2.27)*. |
 | 2.26 | **One volume profile, built from chart bars on the last bar (not measured in TradingView).** The profile of v2.20 to v2.25 accumulated lower-timeframe intrabars on every bar (`request.security_lower_tf` over the whole history plus per-bar array work), which is where the volume profile's share of `RE10110` came from. v2.26 draws one profile of the current period, computed on the last bar from at most 480 chart bars: no lower-timeframe request, no per-bar accumulation, no stored history. Naked POCs, completed-profile history and the intrabar / profiles-drawn inputs are gone; period rules, rows, POC and value-area rules are unchanged. Approximation: a chart bar's volume is spread evenly over its range. |
 | 2.25 | **The volume profile stays on in every mode, and now costs almost nothing outside the last 900 bars (not measured in TradingView).** v2.23's `Free plan (fast)` switched it off; that is reverted (fast mode keeps it). The profile only needs the developing period plus the completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only (9 days on 15m, 37 days on 1h, 150 days on 4h, 3 days on 5m); older bars do no volume-profile work at all. Periods, intrabar timeframes, rows, POC and value-area rules are unchanged. With v2.24's `calc_bars_count = 2000` the intrabar request covers at most 2,000 chart bars. |
 | 2.24 | **`calc_bars_count = 2000`: the fourth `RE10110` fix, not measured in TradingView.** The error survived v2.21 to v2.23 (all of which only shortened the last bar), so the limit is probably being spent over the whole history, not on one bar: a free plan loads up to 10,000 bars and the script runs its structure, pool, zone and session logic on every one. The script now calculates only the last 2,000 bars (about 21 days on 15m, 7 on 5m, 1.4 on 1m; every window it uses is at most 800 bars, zones age out after 600), which cuts the total work 5x on a 10,000-bar chart. Objects are drawn at most 250 bars back, so nothing visible changes; the first ~800 calculated bars are the warm-up of the structure state. If it still fails, use More, Profiler in the Pine Editor and send the table. |

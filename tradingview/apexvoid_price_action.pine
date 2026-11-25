@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.26", "AV PA v2.26", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.27", "AV PA v2.27", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -131,6 +131,7 @@ string textScaleInput = input.string("Standard", "Global text scale", options = 
 int annotationBarSpacing = input.int(6, "Annotation horizontal spacing (bars)", minval = 2, maxval = 20, group = G6)
 float annotationATRSpacing = input.float(0.30, "Annotation vertical spacing (ATR)", minval = 0.10, maxval = 1.0, step = 0.02, group = G6)
 int gutter = input.int(12, "Annotation gutter (bars right of the last candle)", minval = 4, maxval = 40, group = G6)
+string railModeInput = input.string("Smart", "Right-edge labels", options = ["Smart", "Compact", "Legacy (v2.26)"], group = G6, tooltip = "Smart: short rows (name, then price where the level has one) grouped only when genuinely close, coloured by category, moved apart so they do not overlap. Compact: one row per group plus every key-level / volume-profile / EQ price; the rest is counted as +n and listed in the tooltip. Legacy: the v2.26 one-line merged captions.")
 
 bool showKeyLevels = input.bool(true, "Show key levels", group = G7)
 string keyDefinition = input.string("Engine (key_level v6)", "Key level definition", options = ["Engine (key_level v6)", "Selective (v7 preview)"], group = G7)
@@ -194,6 +195,10 @@ string tier2Size = compactText ? size.small : size.normal
 string tier3Size = compactText ? size.tiny : largeText ? size.normal : size.small
 float primaryLabelOffsetATR = compactText ? 0.16 : largeText ? 0.30 : 0.22
 float structureLabelOffsetATR = compactText ? 0.14 : largeText ? 0.26 : 0.19
+bool railLegacy = railModeInput == "Legacy (v2.26)"
+bool railCompact = railModeInput == "Compact"
+// Approximate height of one caption row relative to the v2.26 spacing (Pine exposes no pixel geometry). Legacy keeps the v2.26 spacing exactly.
+float railTextFactor = railLegacy ? 1.0 : compactText ? 0.85 : largeText ? 1.25 : 1.0
 
 // ------- BOUNDED HISTORICAL DRAWINGS -------
 var label[] eventLabels = array.new_label()
@@ -949,23 +954,28 @@ else
         protectedLine := na
 
 // ------- RIGHT-EDGE LABEL COLLECTOR -------
-// Every right-edge level label (PROTECTED, DEV, BSL/SSL, EQ, Asia, iBSL/iSSL, premium /
-// discount) is registered here instead of being drawn on its own. One pass at the end
-// sorts them by price and merges labels closer than the spacing into a single label
-// ("PROTECTED · BSL"), so right-edge text can never overlap. Priority decides which
-// member sets the position and colour; the tooltip lists every member with its price.
+// Every right-edge level label (PROT, DEV, BSL/SSL, EQ, Asia, iBSL/iSSL, zone captions that do not fit inside their box, key levels,
+// volume profile) is registered here instead of being drawn on its own, as structured fields: price, short name, badge (touches,
+// state), the price text it shows (empty when the label shows no price), colour, priority, tooltip, category and tier. The rail at
+// the end of the script lays them out (v2.27); `rlText` keeps the v2.26 caption for the Legacy mode only.
 float[] rlY = array.new_float()
 string[] rlText = array.new_string()
+string[] rlName = array.new_string()
+string[] rlBadge = array.new_string()
+string[] rlPx = array.new_string()
 color[] rlTone = array.new_color()
 int[] rlPriority = array.new_int()
 string[] rlTip = array.new_string()
 int[] rlCat = array.new_int()    // 0 structure, 1 liquidity, 2 session, 3 zone, 4 key level, 5 volume profile
 int[] rlTier = array.new_int()   // 1 decision, 2 structure, 3 context
 
-f_regLabel(float y, string caption, color tone, int priority, string tip, int cat, int tier) =>
+f_reg(float y, string name, string badge, string px, string legacyCaption, color tone, int priority, string tip, int cat, int tier) =>
     if not na(y)
         array.push(rlY, y)
-        array.push(rlText, caption)
+        array.push(rlText, legacyCaption)
+        array.push(rlName, name)
+        array.push(rlBadge, badge)
+        array.push(rlPx, px)
         array.push(rlTone, tone)
         array.push(rlPriority, priority)
         array.push(rlTip, tip)
@@ -1396,7 +1406,7 @@ f_renderPools() =>
                     box emptyPoolBox = na
                     array.set(poolBoxes, i, emptyPoolBox)
                 if pActive
-                    f_regLabel(pEdge, labelText, liquidityColor, pKind == "EQ" ? 62 : 60, poolTip, 1, i == nearBsl or i == nearSsl ? 1 : 3)
+                    f_reg(pEdge, shortName, pState == 1 ? "swept" : pState == 2 ? "taken" : "", "", labelText, liquidityColor, pKind == "EQ" ? 62 : 60, poolTip, 1, i == nearBsl or i == nearSsl ? 1 : 3)
                     if not na(poolLabel)
                         label.delete(poolLabel)
                         label emptyActiveLabel = na
@@ -1780,11 +1790,11 @@ f_renderZones() =>
                         sdCode := (array.get(zoneSides, j) == 1 ? "+D" : "+S") + (array.get(zoneClasses, j) == 1 ? "·" + array.get(zoneEvents, j) : "")
                     tips += (members > 1 ? "\n──\n" : "") + f_zoneTip(j)
             string caption = (poi ? "◆ " : "") + str.substring(sdCode + obCode + fvgCode, 1) + (touched ? "·T" : "") + (members > 1 ? " ×" + str.tostring(members) : "")
-            bool tallEnough = top - bottom >= labelGap * 1.4
+            bool tallEnough = top - bottom >= labelGap * 1.4 * railTextFactor
             bool textFree = true
             if array.size(placedText) > 0
                 for t = 0 to array.size(placedText) - 1
-                    textFree := textFree and math.abs(zoneMid - array.get(placedText, t)) >= labelGap
+                    textFree := textFree and math.abs(zoneMid - array.get(placedText, t)) >= labelGap * railTextFactor
             bool showInside = lead and tallEnough and textFree
             if showInside
                 array.push(placedText, zoneMid)
@@ -1823,7 +1833,7 @@ f_renderZones() =>
                 line emptyMidLine = na
                 array.set(zoneMidLines, i, emptyMidLine)
             if lead and not showInside
-                f_regLabel(zoneMid, caption, tone, 45, tips, 3, poi ? 1 : 2)
+                f_reg(zoneMid, (poi ? "◆ " : "") + str.substring(sdCode + obCode + fvgCode, 1), (touched ? "· T" : "") + (members > 1 ? (touched ? " " : "") + "×" + str.tostring(members) : ""), "", caption, tone, 45, tips, 3, poi ? 1 : 2)
         else
             if not na(zoneBox)
                 box.delete(zoneBox)
@@ -2103,11 +2113,11 @@ if showAsia and array.size(asiaHighLines) > 0
     line.set_x2(array.get(asiaHighLines, array.size(asiaHighLines) - 1), currentEnd)
     line.set_x2(array.get(asiaLowLines, array.size(asiaLowLines) - 1), currentEnd)
     if barstate.islast
-        f_regLabel(asiaHigh, liveAsiaOn ? "pAsia H" : "Asia H", asiaColor, 50, "Asian high " + f_px(asiaHigh) + " (last completed session)", 2, 3)
-        f_regLabel(asiaLow, liveAsiaOn ? "pAsia L" : "Asia L", asiaColor, 50, "Asian low " + f_px(asiaLow) + " (last completed session)", 2, 3)
+        f_reg(asiaHigh, liveAsiaOn ? "pAsia H" : "Asia H", "", "", liveAsiaOn ? "pAsia H" : "Asia H", asiaColor, 50, "Asian high " + f_px(asiaHigh) + " (last completed session)", 2, 3)
+        f_reg(asiaLow, liveAsiaOn ? "pAsia L" : "Asia L", "", "", liveAsiaOn ? "pAsia L" : "Asia L", asiaColor, 50, "Asian low " + f_px(asiaLow) + " (last completed session)", 2, 3)
 if barstate.islast and liveAsiaOn
-    f_regLabel(asiaLiveHigh, "Asia H", asiaColor, 52, "Asian high so far " + f_px(asiaLiveHigh) + " (session in progress)", 2, 3)
-    f_regLabel(asiaLiveLow, "Asia L", asiaColor, 52, "Asian low so far " + f_px(asiaLiveLow) + " (session in progress)", 2, 3)
+    f_reg(asiaLiveHigh, "Asia H", "", "", "Asia H", asiaColor, 52, "Asian high so far " + f_px(asiaLiveHigh) + " (session in progress)", 2, 3)
+    f_reg(asiaLiveLow, "Asia L", "", "", "Asia L", asiaColor, 52, "Asian low so far " + f_px(asiaLiveLow) + " (session in progress)", 2, 3)
 
 // ------- SESSION RANGE BOXES (ASIA, LONDON, NEW YORK) -------
 // One box per session from its first to its last bar, spanning the session's high and low. It grows
@@ -2275,11 +2285,11 @@ if vpOn and barstate.islast
     array.push(vpLines, f_vpLine(first, bar_index + gutter, valP, 60, line.style_dotted))
     string vpTip = f_vpTip(vpName + " " + str.format_time(time, "MM-dd", "UTC"), pocP, valP, vahP, rows, bars)
     if f_scaleOk(pocP)
-        f_regLabel(pocP, "POC " + f_px(pocP), vpColor, 20, vpTip, 5, 2)
+        f_reg(pocP, "POC", "", f_px(pocP), "POC " + f_px(pocP), vpColor, 20, vpTip, 5, 2)
     if f_scaleOk(vahP)
-        f_regLabel(vahP, "VAH " + f_px(vahP), vpColor, 19, vpTip, 5, 2)
+        f_reg(vahP, "VAH", "", f_px(vahP), "VAH " + f_px(vahP), vpColor, 19, vpTip, 5, 2)
     if f_scaleOk(valP)
-        f_regLabel(valP, "VAL " + f_px(valP), vpColor, 19, vpTip, 5, 2)
+        f_reg(valP, "VAL", "", f_px(valP), "VAL " + f_px(valP), vpColor, 19, vpTip, 5, 2)
 
 
 // ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------
@@ -2328,7 +2338,7 @@ if barstate.islast
         else
             line.set_xy1(nearIntBslLine, bslLeft, bslPrice)
             line.set_xy2(nearIntBslLine, bar_index + gutter, bslPrice)
-        f_regLabel(bslPrice, "iBSL", liquidityColor, 40, "iBSL " + f_px(bslPrice) + " · nearest unswept internal swing high above price (" + str.tostring(gapBsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.", 1, 3)
+        f_reg(bslPrice, "iBSL", "", "", "iBSL", liquidityColor, 40, "iBSL " + f_px(bslPrice) + " · nearest unswept internal swing high above price (" + str.tostring(gapBsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.", 1, 3)
     else if not na(nearIntBslLine)
         line.delete(nearIntBslLine)
         nearIntBslLine := na
@@ -2340,7 +2350,7 @@ if barstate.islast
         else
             line.set_xy1(nearIntSslLine, sslLeft, sslPrice)
             line.set_xy2(nearIntSslLine, bar_index + gutter, sslPrice)
-        f_regLabel(sslPrice, "iSSL", liquidityColor, 40, "iSSL " + f_px(sslPrice) + " · nearest unswept internal swing low below price (" + str.tostring(gapSsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.", 1, 3)
+        f_reg(sslPrice, "iSSL", "", "", "iSSL", liquidityColor, 40, "iSSL " + f_px(sslPrice) + " · nearest unswept internal swing low below price (" + str.tostring(gapSsl / safeAtr, "0.0") + " ATR). A marker, not a confirmed pool.", 1, 3)
     else if not na(nearIntSslLine)
         line.delete(nearIntSslLine)
         nearIntSslLine := na
@@ -2390,12 +2400,12 @@ if barstate.islast
         else
             line.set_xy1(pdEqLine, pdLeft, pdMid)
             line.set_xy2(pdEqLine, bar_index + gutter, pdMid)
-        f_regLabel(pdMid, "EQ " + f_px(pdMid), liquidityColor, 35, "Equilibrium: 50% of the dealing range", 0, 1)
+        f_reg(pdMid, "EQ", "", f_px(pdMid), "EQ " + f_px(pdMid), liquidityColor, 35, "Equilibrium: 50% of the dealing range", 0, 1)
     else if not na(pdEqLine)
         line.delete(pdEqLine)
         pdEqLine := na
 
-// ------- RIGHT-EDGE LABEL COLUMN (ONE LABEL PER PRICE CLUSTER) -------
+// ------- RIGHT-EDGE LABEL COLUMN: LEGACY v2.26 MERGED CAPTIONS (label pool shared with the v2.27 rail) -------
 var label[] colLabels = array.new_label()
 
 // Merge the registered labels of one cluster into a single label in column slot `slot`. The best member that is not a key level (lowest tier, then priority) sets the
@@ -2451,6 +2461,232 @@ f_emitCluster(int[] members, int slot) =>
         label.set_size(existing, labelSize)
         label.set_tooltip(existing, tip)
     slot + 1
+
+// ------- RIGHT-EDGE ANNOTATION RAIL (v2.27: Smart / Compact) -------
+// Collection (f_reg), layout and rendering are separate; all of it runs on the last bar only.
+// 1. One sort of the registered annotations by price, highest first.
+// 2. Items: consecutive annotations of one colour family (key levels, volume profile, pools, iBSL/iSSL and EQ are one neutral family;
+//    a coloured annotation joins only the same colour) that are less than one row below the previous member, at most 2 rows below the
+//    item's top member (bounded span: a chain of near neighbours cannot grow into one tall cluster) and at most 4 rows.
+// 3. Budget: at most 20 items (Compact 14). Over it, the lowest-priority tier-3 items without a price are hidden first and named in the
+//    tooltip of the nearest shown item; an item with a price (key level, POC/VAH/VAL, EQ) or a tier-1 member is never hidden.
+// 4. Layout: each item is centred on its members' price midpoint and moved as little as possible, weighted by tier (1: 100, 2: 10,
+//    3: 1), so that no two items overlap and price order is kept (pool-adjacent-violators, one pass). A hideable item pushed more
+//    than 3 rows from its price is hidden and the layout solved once more.
+// 5. Render: one pooled label per item, a row per member (name, badge, then the price in a monospace column); a short connector
+//    from the price at the gutter to the label only when the label sits more than half a row from its price (at most 8).
+// Row height is an estimate, not pixel geometry: max(spacing x ATR, candle range / 36) x the text-scale factor.
+var line[] railLinks = array.new_line()
+int railMaxItems = railCompact ? 14 : 20
+int railMaxLinks = 8
+float railRowH = columnGap * railTextFactor
+
+f_railNeutral(int idx) =>
+    int c = array.get(rlCat, idx)
+    c == 4 or c == 5 or array.get(rlTone, idx) == liquidityColor
+
+f_railSameFamily(int a, int b) =>
+    bool neutralA = f_railNeutral(a)
+    bool neutralB = f_railNeutral(b)
+    (neutralA and neutralB) or (not neutralA and not neutralB and array.get(rlTone, a) == array.get(rlTone, b))
+
+f_railScore(int idx) =>
+    (4 - array.get(rlTier, idx)) * 1000 + array.get(rlPriority, idx)
+
+// "KL ×3    3548.04", "POC      3549.67", "PROT", "FVG · T": the price starts in column 10 when the level shows one (monospace).
+f_railRow(int idx) =>
+    string badge = array.get(rlBadge, idx)
+    string left = array.get(rlName, idx) + (badge != "" ? " " + badge : "")
+    string px = array.get(rlPx, idx)
+    if px != ""
+        left += " "
+        while str.length(left) < 9
+            left += " "
+        left += px
+    left
+
+// Weighted least-squares placement with a minimum separation and the input order kept: z = target + cumulative separation must not
+// increase (top to bottom), solved by pool-adjacent-violators; returns the label centres in input order.
+f_railSolve(float[] tgt, float[] h, float[] w) =>
+    int n = array.size(tgt)
+    float[] off = array.new_float(n, 0.0)
+    if n > 1
+        for k = 1 to n - 1
+            array.set(off, k, array.get(off, k - 1) + (array.get(h, k - 1) + array.get(h, k)) / 2.0 + 0.15 * railRowH)
+    float[] bSum = array.new_float()
+    float[] bW = array.new_float()
+    int[] bEnd = array.new_int()
+    if n > 0
+        for k = 0 to n - 1
+            array.push(bSum, (array.get(tgt, k) + array.get(off, k)) * array.get(w, k))
+            array.push(bW, array.get(w, k))
+            array.push(bEnd, k)
+            while array.size(bW) >= 2 and array.get(bSum, array.size(bSum) - 2) / array.get(bW, array.size(bW) - 2) < array.last(bSum) / array.last(bW)
+                float sumTop = array.pop(bSum)
+                float wTop = array.pop(bW)
+                int endTop = array.pop(bEnd)
+                int last = array.size(bSum) - 1
+                array.set(bSum, last, array.get(bSum, last) + sumTop)
+                array.set(bW, last, array.get(bW, last) + wTop)
+                array.set(bEnd, last, endTop)
+    float[] ys = array.new_float(n, na)
+    int start = 0
+    if array.size(bW) > 0
+        for b = 0 to array.size(bW) - 1
+            float z = array.get(bSum, b) / array.get(bW, b)
+            for k = start to array.get(bEnd, b)
+                array.set(ys, k, z - array.get(off, k))
+            start := array.get(bEnd, b) + 1
+    ys
+
+// Lays out and draws every registered annotation; returns the number of label slots used.
+f_rail() =>
+    int n = array.size(rlY)
+    int used = 0
+    int linksUsed = 0
+    if n > 0
+        int[] byPrice = array.sort_indices(rlY, order.descending)
+        int[] itStart = array.new_int()
+        int[] itLen = array.new_int()
+        float itemTop = na
+        float prevY = na
+        for r = 0 to n - 1
+            int idx = array.get(byPrice, r)
+            float y = array.get(rlY, idx)
+            bool join = array.size(itStart) > 0 and prevY - y < railRowH and itemTop - y <= 2.0 * railRowH and array.last(itLen) < 4 and f_railSameFamily(array.get(byPrice, r - 1), idx)
+            if join
+                array.set(itLen, array.size(itLen) - 1, array.last(itLen) + 1)
+            else
+                array.push(itStart, r)
+                array.push(itLen, 1)
+                itemTop := y
+            prevY := y
+        int m = array.size(itStart)
+        float[] itTgt = array.new_float(m, 0.0)
+        float[] itH = array.new_float(m, 0.0)
+        float[] itW = array.new_float(m, 1.0)
+        int[] itScore = array.new_int(m, 0)
+        int[] itTier = array.new_int(m, 3)
+        int[] itLead = array.new_int(m, 0)
+        bool[] itHideable = array.new_bool(m, false)
+        bool[] itAlive = array.new_bool(m, true)
+        for i = 0 to m - 1
+            int s0 = array.get(itStart, i)
+            int len = array.get(itLen, i)
+            int tier = 3
+            int lead = array.get(byPrice, s0)
+            int leadScore = -1
+            int priced = 0
+            for q = s0 to s0 + len - 1
+                int idx = array.get(byPrice, q)
+                tier := math.min(tier, array.get(rlTier, idx))
+                int sc = f_railScore(idx)
+                if sc > leadScore
+                    leadScore := sc
+                    lead := idx
+                priced += array.get(rlPx, idx) != "" ? 1 : 0
+            int rows = railCompact ? priced + (array.get(rlPx, lead) != "" ? 0 : 1) : len
+            array.set(itTgt, i, (array.get(rlY, array.get(byPrice, s0)) + array.get(rlY, array.get(byPrice, s0 + len - 1))) / 2.0)
+            array.set(itH, i, railRowH * rows)
+            array.set(itW, i, tier == 1 ? 100.0 : tier == 2 ? 10.0 : 1.0)
+            array.set(itScore, i, leadScore)
+            array.set(itTier, i, tier)
+            array.set(itLead, i, lead)
+            array.set(itHideable, i, tier == 3 and priced == 0)
+        int alive = m
+        while alive > railMaxItems
+            int victim = -1
+            for i = 0 to m - 1
+                if array.get(itAlive, i) and array.get(itHideable, i) and (victim < 0 or array.get(itScore, i) < array.get(itScore, victim))
+                    victim := i
+            if victim < 0
+                break
+            array.set(itAlive, victim, false)
+            alive -= 1
+        float[] ys = array.new_float(m, na)
+        for solvePass = 0 to 1
+            int[] act = array.new_int()
+            float[] tgt = array.new_float()
+            float[] hh = array.new_float()
+            float[] ww = array.new_float()
+            for i = 0 to m - 1
+                if array.get(itAlive, i)
+                    array.push(act, i)
+                    array.push(tgt, array.get(itTgt, i))
+                    array.push(hh, array.get(itH, i))
+                    array.push(ww, array.get(itW, i))
+            float[] solved = f_railSolve(tgt, hh, ww)
+            bool again = false
+            if array.size(act) > 0
+                for k = 0 to array.size(act) - 1
+                    int i = array.get(act, k)
+                    array.set(ys, i, array.get(solved, k))
+                    if solvePass == 0 and array.get(itHideable, i) and math.abs(array.get(solved, k) - array.get(itTgt, i)) > 3.0 * railRowH
+                        array.set(itAlive, i, false)
+                        again := true
+            if not again
+                break
+        string[] hidden = array.new_string(m, "")
+        for i = 0 to m - 1
+            if not array.get(itAlive, i)
+                int host = -1
+                for j = 0 to m - 1
+                    if array.get(itAlive, j) and (host < 0 or math.abs(array.get(itTgt, j) - array.get(itTgt, i)) < math.abs(array.get(itTgt, host) - array.get(itTgt, i)))
+                        host := j
+                if host >= 0
+                    int s0 = array.get(itStart, i)
+                    for q = s0 to s0 + array.get(itLen, i) - 1
+                        int idx = array.get(byPrice, q)
+                        array.set(hidden, host, array.get(hidden, host) + "\n· " + array.get(rlName, idx) + " " + f_px(array.get(rlY, idx)))
+        for i = 0 to m - 1
+            if array.get(itAlive, i)
+                int s0 = array.get(itStart, i)
+                int lead = array.get(itLead, i)
+                int tier = array.get(itTier, i)
+                string body = ""
+                string tip = ""
+                int folded = 0
+                for q = s0 to s0 + array.get(itLen, i) - 1
+                    int idx = array.get(byPrice, q)
+                    if not railCompact or idx == lead or array.get(rlPx, idx) != ""
+                        body += (body == "" ? "" : "\n") + f_railRow(idx)
+                    else
+                        folded += 1
+                    tip += (q > s0 ? "\n" : "") + array.get(rlTip, idx)
+                if folded > 0
+                    body += " +" + str.tostring(folded)
+                if array.get(hidden, i) != ""
+                    tip += "\nAlso near this price (hidden for space):" + array.get(hidden, i)
+                color txt = f_railNeutral(lead) ? (tier <= 2 ? #CBD5E1 : #94A3B8) : color.new(array.get(rlTone, lead), tier == 1 ? 0 : tier == 2 ? 10 : 25)
+                string sz = railCompact ? (tier == 1 ? tier2Size : tier3Size) : tier == 1 ? tier1Size : tier == 2 ? tier2Size : tier3Size
+                float y = array.get(ys, i)
+                if used >= array.size(colLabels)
+                    array.push(colLabels, label.new(bar_index + gutter + 4, y, body, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_label_left, color = color.new(#161923, 18), textcolor = txt, size = sz, tooltip = tip, textalign = text.align_left, text_font_family = font.family_monospace))
+                else
+                    label existing = array.get(colLabels, used)
+                    label.set_xy(existing, bar_index + gutter + 4, y)
+                    label.set_text(existing, body)
+                    label.set_textcolor(existing, txt)
+                    label.set_size(existing, sz)
+                    label.set_tooltip(existing, tip)
+                    label.set_color(existing, color.new(#161923, 18))
+                    label.set_textalign(existing, text.align_left)
+                    label.set_text_font_family(existing, font.family_monospace)
+                used += 1
+                float tg = array.get(itTgt, i)
+                if math.abs(y - tg) > 0.5 * railRowH and linksUsed < railMaxLinks
+                    color linkTone = color.new(f_railNeutral(lead) ? #94A3B8 : array.get(rlTone, lead), 45)
+                    if linksUsed >= array.size(railLinks)
+                        array.push(railLinks, line.new(bar_index + gutter, tg, bar_index + gutter + 4, y, xloc = xloc.bar_index, color = linkTone, style = line.style_solid, width = 1))
+                    else
+                        line existingLink = array.get(railLinks, linksUsed)
+                        line.set_xy1(existingLink, bar_index + gutter, tg)
+                        line.set_xy2(existingLink, bar_index + gutter + 4, y)
+                        line.set_color(existingLink, linkTone)
+                    linksUsed += 1
+    while array.size(railLinks) > linksUsed
+        line.delete(array.pop(railLinks))
+    used
 
 // ------- KEY LEVELS (one code path, two definitions; dimmed) -------
 // Computed on the last bar from the last keyWindow CLOSED bars: the window's own ATR series (mean of up to 14 true ranges), fractal candidates (2 bars each side) through the
@@ -2570,7 +2806,7 @@ f_keyLevels() =>
                     edge := b
             cov := wHi > wLo ? cov / (wHi - wLo) : 0.0
         // Every level gets its flags first (side, origin, flipped, in play), then the nearest keyPerSide per side inside the candle-scale window are drawn: no level is hidden
-        // for being broken, and every drawn level shows its price in a label that is never folded (see f_emitCluster).
+        // for being broken, and every drawn level shows its price in a label that is never folded or hidden (see f_emitCluster / f_rail).
         string covTxt = "coverage " + str.tostring(math.round(cov * 100)) + " % of the recent range" + (cov > 0.4 ? ": low selectivity" : cov <= 0.25 ? ": selective" : "")
         int nl = int(array.size(fin) / 4)
         float[] fl = array.new_float()
@@ -2618,35 +2854,39 @@ f_keyLevels() =>
                     array.push(keyLines, line.new(leftBar, p, bar_index + gutter, p, xloc = xloc.bar_index, color = color.new(keyColor, inPlay ? 45 : flipped ? 88 : major ? 60 : touches >= 4 ? 66 : touches == 3 ? 74 : 82), style = isRound ? line.style_dashed : line.style_dotted, width = 1))
                     if showKeyBand
                         array.push(keyBoxes, box.new(leftBar, p + tol, bar_index + gutter, p - tol, xloc = xloc.bar_index, border_color = na, bgcolor = color.new(keyColor, 95)))
-                    f_regLabel(p, (math.abs(p - capP) < 0.005 and isRound ? str.tostring(capP, "#.##") : f_px(p)) + " ×" + str.tostring(touches, "0") + (inPlay ? " ●" : ""), keyColor, 30, array.get(tips, j), 4, inPlay ? 2 : 3)
+                    string keyPx = math.abs(p - capP) < 0.005 and isRound ? str.tostring(capP, "#.##") : f_px(p)
+                    f_reg(p, "KL", "×" + str.tostring(touches, "0") + (inPlay ? " ●" : ""), keyPx, keyPx + " ×" + str.tostring(touches, "0") + (inPlay ? " ●" : ""), keyColor, 30, array.get(tips, j), 4, inPlay ? 2 : 3)
     0
 
 if barstate.islast
     // Levels that are not owned by another block are registered here.
     if showMajorLevels and not na(activeProtected)
-        f_regLabel(activeProtected, "PROT", protectedTone, 80, "Protected level " + f_px(activeProtected) + ": the external level whose break flips the bias", 0, 1)
+        f_reg(activeProtected, "PROT", "", "", "PROT", protectedTone, 80, "Protected level " + f_px(activeProtected) + ": the external level whose break flips the bias", 0, 1)
     if showMajorLevels and developingDirection != 0
         float devPrice = developingDirection == 1 ? developingHigh : developingLow
-        f_regLabel(devPrice, developingDirection == 1 ? "DEV▲" : "DEV▼", developingDirection == 1 ? bullColor : bearColor, 70, "Live extreme of the current directional leg " + f_px(devPrice) + "; not yet a confirmed major swing", 0, 2)
+        f_reg(devPrice, developingDirection == 1 ? "DEV▲" : "DEV▼", "", "", developingDirection == 1 ? "DEV▲" : "DEV▼", developingDirection == 1 ? bullColor : bearColor, 70, "Live extreme of the current directional leg " + f_px(devPrice) + "; not yet a confirmed major swing", 0, 2)
     f_keyLevels()
     int slotsUsed = 0
-    int regCount = array.size(rlY)
-    if regCount > 0
-        int[] byPrice = array.sort_indices(rlY, order.descending)
-        // Labels closer than this merge: at least the annotation spacing, and about one label
-        // height (~1/36 of the candle range the chart already shows) so the merge rule follows the zoom.
-        int[] members = array.new_int()
-        float previousY = na
-        for r = 0 to regCount - 1
-            int idx = array.get(byPrice, r)
-            float y = array.get(rlY, idx)
-            if array.size(members) > 0 and previousY - y >= columnGap
+    if railLegacy
+        int regCount = array.size(rlY)
+        if regCount > 0
+            int[] byPrice = array.sort_indices(rlY, order.descending)
+            // Labels closer than this merge: at least the annotation spacing, and about one label
+            // height (~1/36 of the candle range the chart already shows) so the merge rule follows the zoom.
+            int[] members = array.new_int()
+            float previousY = na
+            for r = 0 to regCount - 1
+                int idx = array.get(byPrice, r)
+                float y = array.get(rlY, idx)
+                if array.size(members) > 0 and previousY - y >= columnGap
+                    slotsUsed := f_emitCluster(members, slotsUsed)
+                    array.clear(members)
+                array.push(members, idx)
+                previousY := y
+            if array.size(members) > 0
                 slotsUsed := f_emitCluster(members, slotsUsed)
-                array.clear(members)
-            array.push(members, idx)
-            previousY := y
-        if array.size(members) > 0
-            slotsUsed := f_emitCluster(members, slotsUsed)
+    else
+        slotsUsed := f_rail()
     while array.size(colLabels) > slotsUsed
         label.delete(array.pop(colLabels))
 
