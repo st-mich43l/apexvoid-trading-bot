@@ -158,11 +158,12 @@ limited by the window. If one of them squashes the candles, switch it off in its
 ### Colour schemes (v2.27)
 
 `06 Visuals & Performance` → `Colour scheme`: **ApexVoid** (default; on a dark chart exactly the v2.26 colours), **Classic**,
-**Colorblind safe** (blue / orange, Okabe-Ito), **Ocean**, **Muted**, or **Custom** (the per-category colour inputs, as before).
+**Colorblind safe** (blue / orange, Okabe-Ito), **Ocean**, **Muted**, or **Custom** (every per-category colour input as set).
 `Chart theme` (Auto / Dark / Light; Auto reads the chart background) picks each scheme's dark or light variant. Every scheme colour is
 at least 4.5:1 against its chart background (`#131722` dark, white light), and caption text, label backgrounds and text outlines
-follow the theme, so the indicator reads on both black and white charts. The colour inputs only apply with `Custom`: a chart that
-used customised colours needs `Colour scheme` = Custom after the update. Palettes, contrast tables and the matching candle /
+follow the theme, so the indicator reads on both black and white charts. A per-category colour changed in the inputs always
+overrides the scheme for that category (both themes); inputs left at their defaults follow the scheme, so charts with customised
+colours keep them. Palettes, contrast tables and the matching candle /
 background settings for TradingView are in [`COLOR_SCHEMES.md`](COLOR_SCHEMES.md). Rendering only: nothing analytical depends on a colour.
 
 ### Right-edge labels (v2.27)

@@ -6,7 +6,7 @@ Colour guide for `apexvoid_price_action.pine` (v2.27): the indicator's built-in 
 
 `06 Visuals & Performance`:
 
-- **Colour scheme**: ApexVoid (default), Classic, Colorblind safe, Ocean, Muted, or Custom. Custom uses the per-category colour inputs (bullish, bearish, FVG, demand, supply, sessions, liquidity, key level, volume profile) exactly as set. Those inputs do nothing with any other scheme, so a chart that used customised colours before v2.27 needs `Custom` to keep them.
+- **Colour scheme**: ApexVoid (default), Classic, Colorblind safe, Ocean, Muted, or Custom. The per-category colour inputs (bullish, bearish, FVG, demand, supply, sessions, liquidity, key level, volume profile) work with every scheme: a colour changed from its default replaces the scheme's colour for that category on both themes, and inputs left at their defaults follow the scheme. To hand a category back to the scheme, reset that input to its default (or the indicator's Defaults → Reset settings). Custom uses every input as set, defaults included (the v2.26 colours). A picked colour is not contrast-checked.
 - **Chart theme**: Auto (default) reads the chart background and picks the dark or light variant of the scheme; Dark / Light force one (use it when a gradient or unusual background is misread).
 
 Every scheme has a **dark-chart** and a **light-chart** variant. Each colour is at least **4.5:1** (WCAG AA for normal text) against `#131722` (TradingView dark) or `#FFFFFF` (white), because these colours are also used as caption text. Contrast against pure black is listed too. Caption backgrounds, outlines and neutral text follow the theme in every scheme, Custom included:
