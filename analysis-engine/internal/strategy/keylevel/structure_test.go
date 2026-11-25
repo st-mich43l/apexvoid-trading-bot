@@ -71,7 +71,7 @@ func TestKeyLevelPublishesTheFullReactionBandAsItsStructure(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(string(dir)+": "+tc.name, func(t *testing.T) {
 				s, a, d := fixture(t, dir, tc.bandLow, nil)
-				c, ok := s.candidate(&context.MarketContext{Symbol: "XAUUSD"}, d, a, 1)
+				c, ok := s.candidate(&context.MarketContext{Symbol: "XAUUSD"}, d, a, 1, false)
 				if !ok {
 					t.Fatal("the fixture reaction must publish")
 				}
@@ -111,7 +111,7 @@ func TestKeyLevelPublishesTheFullReactionBandAsItsStructure(t *testing.T) {
 // Shortening expiry_hours moves ExpiresAt with it: the entry window is the key, not a constant.
 func TestKeyLevelExpiryFollowsExpiryHours(t *testing.T) {
 	s, a, d := fixture(t, market.Buy, 3999, func(c *Config) { c.ExpiryHours = 1 })
-	c, ok := s.candidate(&context.MarketContext{Symbol: "XAUUSD"}, d, a, 1)
+	c, ok := s.candidate(&context.MarketContext{Symbol: "XAUUSD"}, d, a, 1, false)
 	if !ok {
 		t.Fatal("must publish")
 	}

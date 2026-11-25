@@ -350,6 +350,7 @@ func applyTechniqueGeometry(settings *Settings, doc *config.Document, symbol str
 // skip levels whose support/resistance role is still ambiguous
 // (overrides.auto_algo.strategies.reaction.key_level.require_explicit_role).
 // require_reaction_sweep (XAU, docs/strategies/keylevel-sweep-first.md) publishes a confirmed reaction only when it swept the level.
+// level_model (XAU: major, PR-KL13) makes Key Level walk its own major-level book instead of every swing cluster.
 // The override tree's key_level.min_grade is not carried: nothing in the
 // Python runtime ever read it.
 func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol string) error {
@@ -365,7 +366,11 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 	if err != nil {
 		return err
 	}
-	if !hasTouches && !hasExplicit && !hasSweep {
+	model, hasModel, err := doc.InstrumentOverride(symbol, "auto_algo", "strategies", "reaction", "key_level", "level_model")
+	if err != nil {
+		return err
+	}
+	if !hasTouches && !hasExplicit && !hasSweep && !hasModel {
 		return nil
 	}
 	if hasTouches {
@@ -407,6 +412,14 @@ func applyKeyLevelOverrides(settings *Settings, doc *config.Document, symbol str
 				return fmt.Errorf("instrument %s: require_reaction_sweep must be a boolean, got %T", symbol, sweep)
 			}
 			params["require_reaction_sweep"] = b
+		}
+		// PR-KL13: level_model (XAU: major) selects the levels Key Level walks.
+		if hasModel {
+			m, ok := model.(string)
+			if !ok {
+				return fmt.Errorf("instrument %s: level_model must be a string, got %T", symbol, model)
+			}
+			params["level_model"] = m
 		}
 		settings.Strategies[i].Parameters = params
 	}

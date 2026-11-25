@@ -212,11 +212,29 @@ analysis:
       # require_confirmation: true makes a confirming M5 reaction necessary (a bare touch no longer publishes), overriding the global analysis.require_candle_confirmation.
       # One candidate per level thesis across frames (higher timeframe, then more stars, then the nearer entry); a published structure is withdrawn by a close of ITS frame
       # beyond the band's far edge (structure_close_buffer_atr in ATRs of that frame).
-      version: v12
+      # v13 (docs/strategies/key_level.md, PR-KL13): owner rule 25 Nov 2026, Key Level trades only strong or MAJOR levels on XAU. level_model: swing is v12 exactly (FX,
+      # and the rollback); XAU sets level_model: major in its instrument overrides, and Key Level then walks its own major-level book (session levels, $50/$100
+      # handles with a reaction, swing levels with repeated large reactions, held flips) instead of every swing cluster. Every value of the major block is a stated
+      # hypothesis, not tuned to a result.
+      version: v13
       enabled: true
       structure_timeframes: [M5, M15, H1]
       require_confirmation: true
       minimum_touches: 2
+      level_model: swing
+      major:
+        reference_timeframe: H1            # every distance below is in ATRs of this frame (ref ATR), whatever frame a level comes from
+        band_atr: 0.25                     # a level's detection and reaction band, in ATRs of the level's OWN frame (v12 used 0.5)
+        departure_ref_atr: 1.0             # a reaction counts only if price then moved this far from the band before closing through it
+        reaction_window_bars: 12           # bars of the level's own frame in which that departure must happen
+        swing_min_reactions: 2
+        swing_min_span_hours: 8            # first to last counted reaction
+        swing_min_max_departure_ref_atr: 1.5
+        session_levels: [PDH, PDL, PWH, PWL, ASIA_H, ASIA_L, LONDON_H, LONDON_L]
+        major_round_steps: [50.0, 100.0]   # price units (XAU dollars)
+        minor_round_step: 10.0             # a fact for the score only, never major by itself
+        round_min_reactions: 1
+        flip_min_reactions: 1              # held reactions on the new side after an accepted role flip
       # The structure Key Level reads: profit_week is the detector contract of
       # 14–18 Sep 2026 (levels counted from fractal swings; order blocks caused
       # by a BOS), the contract of the profitable XAU week. current is the one

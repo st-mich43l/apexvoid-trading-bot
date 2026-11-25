@@ -45,6 +45,8 @@ type Evaluation struct {
 	// Zones is, per strategy that reports its zones' lifecycle (ZoneReporter), the verdict of this evaluation on the zones of the frames it read. The engine
 	// retires the opportunities resting on a zone the verdict calls terminal (nil when no strategy reported).
 	Zones map[StrategyID]opportunity.ZoneLiveness
+	// Features counts, per strategy, the features it reported in this evaluation (nil when none).
+	Features map[StrategyID]map[Feature]int64
 }
 
 // Refusal is one reason a strategy refused a structure, and the timeframe the structure lives on.
@@ -70,6 +72,18 @@ type ZoneReporter interface {
 // each evaluation so the engine can record it; a strategy that does not implement it reports nothing.
 type StopBudgetReporter interface {
 	TakeStopBudgetRefusals() int64
+}
+
+// Feature is one measured feature a strategy counts per evaluation (Key Level v13: kl_major_levels_in_book by source), and the frame it was read on.
+type Feature struct {
+	Name, Value string
+	Timeframe   market.Timeframe
+}
+
+// FeatureReporter is implemented by a strategy that counts features of its own evaluation. The registry drains the counts after every Evaluate; a reporter never
+// influences an evaluation.
+type FeatureReporter interface {
+	TakeFeatures() map[Feature]int64
 }
 
 // UnsweptReporter is implemented by a strategy that refuses a confirmed reaction that did not sweep its level (Key Level, require_reaction_sweep). The
@@ -248,6 +262,14 @@ func (r *Registry) Evaluate(ctx *analysiscontext.MarketContext, closed market.Ti
 					result.StopBudgetRefused = make(map[StrategyID]int)
 				}
 				result.StopBudgetRefused[registered.config.ID] += int(n)
+			}
+		}
+		if reporter, ok := registered.strategy.(FeatureReporter); ok {
+			if taken := reporter.TakeFeatures(); len(taken) > 0 {
+				if result.Features == nil {
+					result.Features = make(map[StrategyID]map[Feature]int64)
+				}
+				result.Features[registered.config.ID] = taken
 			}
 		}
 		if reporter, ok := registered.strategy.(UnsweptReporter); ok {

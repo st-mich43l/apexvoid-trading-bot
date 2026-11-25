@@ -48,9 +48,12 @@ func replayKeyLevel(t *testing.T, capture *replaycapture.Capture, params map[str
 		}
 	}
 	opts := replaycapture.Options{DisabledStrategies: off}
-	if params != nil {
-		opts.StrategyParameters = map[string]map[string]any{"key_level": params}
+	// These are the v12 (level_model swing) tests; XAU runs level_model major since v13 (key_level_major_test.go), so the swing model is asked for explicitly.
+	merged := map[string]any{"level_model": "swing"}
+	for k, v := range params {
+		merged[k] = v
 	}
+	opts.StrategyParameters = map[string]map[string]any{"key_level": merged}
 	result, err := replaycapture.Replay(doc, capture, market.M5, opts)
 	if err != nil {
 		t.Fatal(err)

@@ -57,7 +57,7 @@ import (
 )
 
 const ID strategy.StrategyID = "key_level"
-const Version = "v12"
+const Version = "v13"
 
 // ReactionSweptEvidence marks a candidate published under require_reaction_sweep: the reaction traded beyond the level band's far edge.
 const ReactionSweptEvidence = "key_level_reaction_swept"
@@ -110,6 +110,10 @@ type Config struct {
 	// RequireConfirmation is whether a confirming M5 reaction is needed: the strategy's own require_confirmation, else the global
 	// analysis.require_candle_confirmation. A bare touch is published only when it is false.
 	RequireConfirmation bool
+	// LevelModel selects the levels Key Level walks (v13): "swing" is v12 exactly (each frame's SwingLevels), "major" the strategy's own major-level book (major.go,
+	// XAU by instrument override). Absent means swing.
+	LevelModel string
+	Major      MajorConfig
 }
 
 // Refusals of Key Level (v12), by reason (strategy_refused{strategy="key_level", structure_timeframe, reason}).
@@ -133,6 +137,7 @@ type Strategy struct {
 	strategyutil.SweepRefusalCounter
 	mu          sync.Mutex
 	refusals    map[strategy.Refusal]int64
+	features    map[strategy.Feature]int64
 	cfg         Config
 	timeframe   market.Timeframe
 	fingerprint string
@@ -238,6 +243,21 @@ func parseConfig(params map[string]any) (Config, error) {
 	}
 	// The detector's own switch follows the strategy's: a bare touch publishes only when this strategy does not require a confirming candle.
 	cfg.Detector.CandleConfirmationOptional = !cfg.RequireConfirmation
+	cfg.LevelModel = levelModelSwing
+	if raw, present := params["level_model"]; present {
+		model, ok := raw.(string)
+		if !ok || (model != levelModelSwing && model != levelModelMajor) {
+			return Config{}, fmt.Errorf("level_model must be %q or %q, got %v", levelModelSwing, levelModelMajor, raw)
+		}
+		cfg.LevelModel = model
+	}
+	if raw, present := params["major"]; present {
+		if cfg.Major, err = parseMajorConfig(raw); err != nil {
+			return Config{}, err
+		}
+	} else if cfg.LevelModel == levelModelMajor {
+		return Config{}, fmt.Errorf("level_model major needs the major block")
+	}
 	switch {
 	case cfg.MinimumTouches < 1:
 		return Config{}, fmt.Errorf("minimum_touches must be >= 1")
@@ -290,6 +310,7 @@ type published struct {
 	levelBand  float64
 	distance   float64 // |level price - the latest M5 close|, the "nearest level" of the selection across levels
 	entryGap   float64 // |entry reference - the latest M5 close|, the "nearer entry" of the duplicate-thesis order
+	score      int     // v13 major: the level's strength score, first in the selection across levels (0 under level_model swing)
 }
 
 func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate {
@@ -297,6 +318,9 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 	m5, ok := strategyutil.NewLegacyDetectorForFrame(ctx, market.M5, s.cfg.Detector)
 	if !ok {
 		return nil
+	}
+	if s.cfg.LevelModel == levelModelMajor {
+		return s.evaluateMajor(ctx, m5)
 	}
 	var found []published
 	for _, tf := range s.cfg.StructureTimeframes {
@@ -324,7 +348,6 @@ func (s *Strategy) Evaluate(ctx *context.MarketContext) []opportunity.Candidate 
 // attempt by stars first and refused it afterwards, dropping the rest.)
 func (s *Strategy) evaluateFrame(ctx *context.MarketContext, m5, frameDetector *strategyutil.LegacyDetector, tf market.Timeframe) []published {
 	frame, atr := frameDetector.Frame, frameDetector.ATR
-	price := m5.Price
 	closes := make([]float64, len(frame.Bars))
 	for i, bar := range frame.Bars {
 		closes[i] = bar.Close
@@ -339,23 +362,61 @@ func (s *Strategy) evaluateFrame(ctx *context.MarketContext, m5, frameDetector *
 		if level.Touches < maxInt(1, s.cfg.MinimumTouches) {
 			continue
 		}
-		band := math.Max(level.Band, zoneBandFloor)
+		opts := levelOpts{
+			band: math.Max(level.Band, zoneBandFloor), roleTouches: s.cfg.MinimumTouches, bandFloor: zoneBandFloor,
+			knownFrom: reactionKnownFrom(m5.Frame.Bars, frame, tf, level, s.cfg.MinimumTouches),
+		}
+		if p, ok := s.evaluateLevel(ctx, m5, frameDetector, tf, level, zones, closes, coverage, opts); ok {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// levelOpts is how one level is read: v12 reads a swing level of one frame; v13 (level_model: major) reads a level of the major book.
+type levelOpts struct {
+	// band is the half-width of the level's reaction band; bandFloor the floor the published quality reads it against (see attempt.bandFloor).
+	band, bandFloor float64
+	// roleTouches is the minimum_touches StructuralRole needs for a support or resistance role; roleLows/roleHighs add a session level's own side (a high is a
+	// resistance, a low a support) to the confirmed swings in the band.
+	roleTouches         int
+	roleLows, roleHighs int
+	// knownFrom is the first M5 bar the touch and the reaction may be on.
+	knownFrom int
+	// dryRun evaluates the level without counting a refusal or a stop-budget/sweep refusal: a minor level that would have published is counted minor_level instead.
+	dryRun bool
+}
+
+// evaluateLevel is every per-level step of Key Level for one level: role and directions, the opposing-zone widening, the M5 touch and reaction, the sweep rule, the
+// stop, the stop budget and the target. It returns the candidate the level would publish.
+func (s *Strategy) evaluateLevel(ctx *context.MarketContext, m5, frameDetector *strategyutil.LegacyDetector, tf market.Timeframe, level techniquezone.Level,
+	zones []techniquezone.Zone, closes []float64, coverage float64, opts levelOpts) (published, bool) {
+	frame := frameDetector.Frame
+	price := m5.Price
+	refuse := func(reason string) {
+		if !opts.dryRun {
+			s.refuse(tf, reason)
+		}
+	}
+	{
+		band := opts.band
 		bandLow, bandHigh := level.Price-band, level.Price+band
 		// The role is read from the confirmed swings that formed the level and from the closed bars since (keylevel.StructuralRole), never from its kind label.
 		lows, highs := confirmedSwingsInBand(frame, level.Price, level.Band)
-		role, acceptedBeyond := keylevel.StructuralRole(lows, highs, s.cfg.MinimumTouches, market.Price(bandLow), market.Price(bandHigh), closes, s.cfg.BreakoutAcceptBars)
+		lows, highs = lows+opts.roleLows, highs+opts.roleHighs
+		role, acceptedBeyond := keylevel.StructuralRole(lows, highs, opts.roleTouches, market.Price(bandLow), market.Price(bandHigh), closes, s.cfg.BreakoutAcceptBars)
 		// An accepted role flip belongs to Break & Retest; Key Level never
 		// reinterprets it in the opposite direction.
 		if role == keylevel.RoleBrokenSupport || role == keylevel.RoleBrokenResistance {
-			continue
+			return published{}, false
 		}
 		// A level of mixed or insufficient structure has no side to break; price that has accepted beyond it is no longer reacting off it (the rule every level
 		// followed before v9, when none had a role).
 		if role == keylevel.RoleAmbiguous && acceptedBeyond {
-			continue
+			return published{}, false
 		}
 		if role == keylevel.RoleAmbiguous && s.cfg.RequireExplicitRole {
-			continue
+			return published{}, false
 		}
 
 		reactLow, reactHigh := bandLow, bandHigh
@@ -392,7 +453,7 @@ func (s *Strategy) evaluateFrame(ctx *context.MarketContext, m5, frameDetector *
 
 		var confirmed []attempt
 		// The reaction can only be at a level that already exists: the touch and the confirmation are M5 bars at or after the moment the level became known on its frame.
-		knownFrom := reactionKnownFrom(m5.Frame.Bars, frame, tf, level, s.cfg.MinimumTouches)
+		knownFrom := opts.knownFrom
 		for _, direction := range directions {
 			if direction == market.Sell && s.cfg.MinimumSellZoneScore > 0 {
 				score, found := nearestSameSideZoneScore(zones, price, "supply")
@@ -422,34 +483,33 @@ func (s *Strategy) evaluateFrame(ctx *context.MarketContext, m5, frameDetector *
 			confirmed = append(confirmed, attempt{
 				direction: direction, levelPrice: levelPrice, reactLow: reactLow, reactHigh: reactHigh,
 				confirmation: conf, result: result, detector: d, level: level, role: role, widened: widened,
-				structureTF: tf, bandFloor: zoneBandFloor,
+				structureTF: tf, bandFloor: opts.bandFloor,
 			})
 		}
 		switch len(confirmed) {
 		case 0:
-			s.refuse(tf, RefusedNoM5Reaction)
-			continue
+			refuse(RefusedNoM5Reaction)
+			return published{}, false
 		case 1:
 		default:
 			// Two (both sides confirmed off the same level in one evaluation): a contradiction, not a coin flip.
-			s.refuse(tf, RefusedBothSides)
-			continue
+			refuse(RefusedBothSides)
+			return published{}, false
 		}
 		chosen := confirmed[0]
-		candidate, ok := s.candidate(ctx, m5, &chosen, coverage)
+		candidate, ok := s.candidate(ctx, m5, &chosen, coverage, opts.dryRun)
 		if !ok {
-			continue
+			return published{}, false
 		}
 		entryReference := candidate.Entry.High
 		if chosen.direction == market.Sell {
 			entryReference = candidate.Entry.Low
 		}
-		out = append(out, published{
+		return published{
 			candidate: candidate, stars: chosen.result.Stars, tf: tf, direction: chosen.direction, levelPrice: level.Price, levelBand: band,
 			distance: math.Abs(level.Price - price), entryGap: math.Abs(entryReference - price),
-		})
+		}, true
 	}
-	return out
 }
 
 // reactionKnownFrom is the M5 bar on which a level found on frame (tf) became known, the earliest M5 bar the touch and the reaction may be. On M5 it is the bar index
@@ -507,9 +567,10 @@ func (s *Strategy) selectOne(found []published) *published {
 		winners = append(winners, found[best])
 	}
 	sort.SliceStable(winners, func(i, j int) bool { return winners[i].distance < winners[j].distance })
+	// Across levels: the strength score (v13 major; always 0 under swing), then the highest stars, the nearest level winning ties.
 	best := &winners[0]
 	for i := 1; i < len(winners); i++ {
-		if winners[i].stars > best.stars {
+		if winners[i].score > best.score || winners[i].score == best.score && winners[i].stars > best.stars {
 			best = &winners[i]
 		}
 	}
@@ -540,7 +601,7 @@ func reactionFactors(confirmationType string, htfAligned bool, touches int, sess
 	return strategyutil.ReactionFactors(confirmationType, htfAligned, touches, sessionSweep)
 }
 
-func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt, coverage float64) (opportunity.Candidate, bool) {
+func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyDetector, a *attempt, coverage float64, dryRun bool) (opportunity.Candidate, bool) {
 	atr := d.ATR
 	direction := a.direction
 	buffer := s.cfg.InvalidationBufferATR * atr
@@ -550,13 +611,19 @@ func (s *Strategy) candidate(ctx *context.MarketContext, d *strategyutil.LegacyD
 	// The reaction swept the level exactly when its own extreme lies strictly beyond the band's far edge, which is when the invalidation is anchored to it.
 	// Without a sweep the candidate is refused (counted apart from the stop budget); the edge of Key Level belongs to the reaction that took the liquidity.
 	if s.cfg.RequireReactionSweep && !anchored {
-		s.SweepRefusalCounter.CountUnswept()
+		if !dryRun {
+			s.SweepRefusalCounter.CountUnswept()
+		}
 		return opportunity.Candidate{}, false
 	}
 	// The instrument stop budget never moves the invalidation. A stop wider than the cap from the proximal edge of the reaction band is fitted by cutting the
 	// band to the part within the cap (a deeper entry, stop_budget_deep_entry); a band whose far edge is still beyond the cap is refused.
 	fullLow, fullHigh := low, high
-	low, high, budgetCode, publish := s.cfg.StopBudget.Fit(direction, fullLow, fullHigh, invalidation)
+	budget := s.cfg.StopBudget
+	if dryRun {
+		budget.Refusals = nil // a dry run (a minor level) counts no stop-budget refusal
+	}
+	low, high, budgetCode, publish := budget.Fit(direction, fullLow, fullHigh, invalidation)
 	if !publish {
 		return opportunity.Candidate{}, false
 	}
