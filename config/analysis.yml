@@ -683,12 +683,21 @@ analysis:
           expiry_hours: 12.0
           reaction_lookback_bars: 3
     break_retest:
-      version: v3
+      version: v4
       enabled: true
-      # Break & Retest v3 technical contract (docs/strategies/break_retest.md).
+      # Break & Retest v4 technical contract (docs/strategies/break_retest.md).
       # Every value is a tunable default validated against captures, not a claimed
       # constant. Distances are max(pips x pip size, ATR multiple); ATR is the
-      # Wilder ATR(14) over a fixed trailing window of M5 candles.
+      # Wilder ATR(14) over a fixed trailing window of the frame's candles.
+      # Q4, owner rule 23 Nov 2026: setups are found on M5, M15 and H1 and M1 is execution only. The broken level or trendline, the break and its acceptance and the
+      # protected structure are read on each frame of structure_timeframes (every "_bars" value that describes the structure counts that frame's bars); the retest, its
+      # rejection, the stop and the entry are read on M5. retest_max_bars and confirmation_max_age_bars are counted in structure-frame bars and converted to time;
+      # confirmation_window_bars (touch to rejection) counts M5 bars. require_confirmation: true needs a confirming M5 rejection (a bare retest touch no longer
+      # publishes), overriding the global analysis.require_candle_confirmation. One candidate per thesis across frames (higher frame, then stars, then the nearer entry);
+      # a published setup is withdrawn by a close of ITS frame beyond the far edge of its retest band by more than structure_close_buffer_atr ATRs of that frame.
+      structure_timeframes: [M5, M15, H1]
+      require_confirmation: true
+      structure_close_buffer_atr: 0.1
       atr_length: 14
       atr_window_bars: 140
       # Reference structures: fractal pivots, key levels (>= 2 same-side touches

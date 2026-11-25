@@ -34,25 +34,35 @@ func DetectAsOf(cfg Config, bars []market.Candle, e int) Analysis {
 
 // analyseWindow is the decision as of the LAST candle of window, reading only
 // window. DetectAsOf hands it exactly the trailing requiredHistory candles;
-// tests hand it more to prove that is enough.
+// tests hand it more to prove that is enough. The structure frame is M5 here.
 func analyseWindow(cfg Config, window []market.Candle) Analysis {
-	return resolve(detectRaw(cfg, window), nil)
+	return resolve(detectRaw(cfg, window, m5Seconds, window), nil)
 }
 
-// detectRaw is every episode of the window as of its last candle, with every
-// CANDIDATE still a candidate: nothing is yet chosen between references broken in
-// the same move.
-func detectRaw(cfg Config, window []market.Candle) []Episode {
-	if len(window) == 0 || !validSeries(window) {
+// detectRaw is every episode as of the last candle, with every CANDIDATE still a
+// candidate: nothing is yet chosen between references broken in the same move.
+// The reference, its break and acceptance and the protected structure are read on
+// structure (candles of period seconds, closed bars only); the retest, its
+// rejection, the stop and the entry are read on fine (M5). When the structure
+// frame is M5, structure and fine are the same series.
+func detectRaw(cfg Config, structure []market.Candle, period int64, fine []market.Candle) []Episode {
+	if len(structure) == 0 || len(fine) == 0 || !validSeries(structure) || !validSeries(fine) {
 		return nil
 	}
+	same := period == m5Seconds && len(structure) == len(fine) && &structure[0] == &fine[0]
 	var episodes []Episode
 	for _, side := range []market.Direction{market.Buy, market.Sell} {
-		oriented := window
+		oriented, orientedFine := structure, fine
 		if side == market.Sell {
-			oriented = mirror(window)
+			oriented = mirror(structure)
+			orientedFine = oriented
+			if !same {
+				orientedFine = mirror(fine)
+			}
+		} else if same {
+			orientedFine = oriented
 		}
-		d := newDetector(cfg, oriented)
+		d := newDetector(cfg, oriented, period, orientedFine)
 		for _, ep := range d.run() {
 			episodes = append(episodes, toOriginal(ep, side))
 		}
@@ -148,31 +158,49 @@ func toOriginal(ep Episode, side market.Direction) Episode {
 // was below and that this episode's break is a close above.
 type ref struct {
 	Reference
+	// value is the reference at structure-frame bar i; at is the same line at a time (the retest reads it on M5 bars).
 	value func(i int) float64
+	at    func(t int64) float64
 }
 
 type detector struct {
 	cfg  Config
-	bars []market.Candle
+	bars []market.Candle // the structure frame (closed bars of period seconds)
 	atr  *indicator.WilderWindow
 	ph   []pivot // pivot highs (resistance touches and opposing structure)
 	pl   []pivot // pivot lows (protected structure)
 	e    int
 	pip  float64
+	// period is the structure frame's bar length in seconds; fine is the M5 series the retest and its rejection are read on, fineATR its ATR. When the structure
+	// frame is M5, fine is bars.
+	period  int64
+	fine    []market.Candle
+	fineATR *indicator.WilderWindow
 }
 
-func newDetector(cfg Config, bars []market.Candle) *detector {
-	return &detector{
+func newDetector(cfg Config, bars []market.Candle, period int64, fine []market.Candle) *detector {
+	d := &detector{
 		cfg: cfg, bars: bars, atr: newATRWindow(bars, cfg.ATRLength, cfg.ATRWindowBars),
 		ph: pivotHighs(bars, cfg.PivotBars), pl: pivotLows(bars, cfg.PivotBars), e: len(bars) - 1, pip: cfg.PipSize,
+		period: period, fine: fine,
 	}
+	d.fineATR = d.atr
+	if period != m5Seconds || len(fine) != len(bars) || (len(bars) > 0 && &fine[0] != &bars[0]) {
+		d.fineATR = newATRWindow(fine, cfg.ATRLength, cfg.ATRWindowBars)
+	}
+	return d
 }
 
-// barsBetween is the whole number of M5 periods between two candles' open
-// times. Every age and window is measured in time, never in slice positions, so
-// a gap in the feed ages a confirmation instead of hiding it.
+// barsBetween is the whole number of structure-frame periods between two
+// structure candles' open times. Every age and window is measured in time, never
+// in slice positions, so a gap in the feed ages a confirmation instead of hiding it.
 func (d *detector) barsBetween(from, to int) int {
-	return int((d.bars[to].Time - d.bars[from].Time) / m5Seconds)
+	return int((d.bars[to].Time - d.bars[from].Time) / d.period)
+}
+
+// fineFrom is the first M5 candle that opens at or after t: the earliest bar that can know a structure-frame bar that closed at t.
+func (d *detector) fineFrom(t int64) int {
+	return sort.Search(len(d.fine), func(i int) bool { return d.fine[i].Time >= t })
 }
 
 // run returns one episode per break attempt that started within the episode
@@ -243,6 +271,7 @@ func (d *detector) referencesBrokenAt(b int, atr float64) []ref {
 				Touches: len(cluster), PriceAtBreak: price,
 			},
 			value: func(int) float64 { return price },
+			at:    func(int64) float64 { return price },
 		})
 	}
 
@@ -253,18 +282,20 @@ func (d *detector) referencesBrokenAt(b int, atr float64) []ref {
 		if span < d.cfg.LineMinSpanBars {
 			continue
 		}
-		if d.bars[c.index].Time-d.bars[a.index].Time > int64(math.Round(float64(span)*float64(m5Seconds)*d.cfg.LineMaxGapRatio)) {
+		if d.bars[c.index].Time-d.bars[a.index].Time > int64(math.Round(float64(span)*float64(d.period)*d.cfg.LineMaxGapRatio)) {
 			continue // a market-closure gap inside the anchor span distorts a per-candle slope
 		}
 		slope := (c.price - a.price) / float64(span)
 		if s := math.Abs(slope) / atr; s < d.cfg.LineMinSlopeATR || s > d.cfg.LineMaxSlopeATR {
 			continue
 		}
-		if d.bars[b].Time-d.bars[c.index].Time > int64(math.Round(float64(b-c.index)*float64(m5Seconds)*d.cfg.LineMaxGapRatio)) {
+		if d.bars[b].Time-d.bars[c.index].Time > int64(math.Round(float64(b-c.index)*float64(d.period)*d.cfg.LineMaxGapRatio)) {
 			continue // a gap between the second anchor and the break distorts the per-candle value
 		}
 		anchor, second := a, c
 		value := func(i int) float64 { return second.price + slope*float64(i-second.index) }
+		secondTime, period := d.bars[second.index].Time, float64(d.period)
+		at := func(t int64) float64 { return second.price + slope*float64(t-secondTime)/period }
 		if !d.breaksAt(b, buf, value, d.cfg.LineWickATR*atr, second.index+1) {
 			continue
 		}
@@ -280,7 +311,7 @@ func (d *detector) referencesBrokenAt(b int, atr float64) []ref {
 				AnchorTime: d.bars[anchor.index].Time, FormedAt: d.bars[second.conf].Time,
 				Touches: touches, PriceAtBreak: value(b), Slope: slope,
 			},
-			value: value,
+			value: value, at: at,
 		})
 	}
 	return out
@@ -359,7 +390,7 @@ func (d *detector) episode(r ref, b int, atrB, atrPre float64) (Episode, bool) {
 		}
 		// k CONSECUTIVE closes: every candle of the run follows the previous one
 		// by exactly one period, so a feed gap inside the run is not acceptance.
-		if i > b && (bars[i].Close <= r.value(i)+buf || bars[i].Time-bars[i-1].Time != m5Seconds) {
+		if i > b && (bars[i].Close <= r.value(i)+buf || bars[i].Time-bars[i-1].Time != d.period) {
 			return terminal(StateFalseBreakout, ReasonBreakNotAccepted, i)
 		}
 	}
@@ -387,37 +418,51 @@ func (d *detector) episode(r ref, b int, atrB, atrPre float64) (Episode, bool) {
 	}
 
 	failBuf := math.Max(cfg.BreakFailPips*d.pip, cfg.BreakFailATR*atrB)
-	touchTol := math.Max(cfg.RetestTouchPips*d.pip, cfg.RetestTouchATR*atrB)
+	// The retest and its rejection are read on M5, from the first M5 bar that opens once the acceptance bar has closed: a bar still forming on the structure frame
+	// is never seen. The retest window is counted in structure-frame bars, converted to time; the touch-to-rejection window is M5 bars (the rejection is an M5 reading).
+	fine := d.fine
+	retestFrom := d.fineFrom(bars[a].Time + d.period)
+	fineTerminal := func(state State, reason string, j int) (Episode, bool) {
+		ep.State, ep.Reason, ep.EndedAt = state, reason, fine[j].Time
+		return ep, true
+	}
 	touch, confirm := -1, -1
-	for i := a + 1; i <= e; i++ {
-		c := bars[i]
+	for j := retestFrom; j < len(fine); j++ {
+		c := fine[j]
+		atrJ, okJ := d.fineATR.At(j)
+		if !okJ {
+			continue
+		}
+		level := r.at(c.Time)
 		if ep.State == StateBreakAccepted {
 			ep.State = StateRetestWaiting
 		}
 		switch {
 		case confirm < 0 && c.Low < protected:
-			return terminal(StateStructureInvalided, ReasonProtectedLost, i)
-		case confirm < 0 && c.Close < r.value(i)-failBuf:
+			return fineTerminal(StateStructureInvalided, ReasonProtectedLost, j)
+		case confirm < 0 && c.Close < level-failBuf:
 			if touch < 0 {
-				return terminal(StateFalseBreakout, ReasonReclaimedBeforeRetst, i)
+				return fineTerminal(StateFalseBreakout, ReasonReclaimedBeforeRetst, j)
 			}
-			return terminal(StateRetestFailed, ReasonRetestClosedThrough, i)
-		case confirm < 0 && touch < 0 && d.barsBetween(a, i) > cfg.RetestMaxBars:
-			return terminal(StateExpired, ReasonRetestWindowExpired, i)
-		case confirm < 0 && touch >= 0 && d.barsBetween(touch, i) >= cfg.ConfirmationWindowBars:
-			return terminal(StateExpired, ReasonConfirmWindowExpired, i)
+			return fineTerminal(StateRetestFailed, ReasonRetestClosedThrough, j)
+		case confirm < 0 && touch < 0 && int((c.Time-bars[a].Time)/d.period) > cfg.RetestMaxBars:
+			return fineTerminal(StateExpired, ReasonRetestWindowExpired, j)
+		case confirm < 0 && touch >= 0 && int((c.Time-fine[touch].Time)/m5Seconds) >= cfg.ConfirmationWindowBars:
+			return fineTerminal(StateExpired, ReasonConfirmWindowExpired, j)
 		}
 		if confirm >= 0 {
 			break
 		}
-		if touch < 0 && c.Low <= r.value(i)+touchTol {
-			touch = i
+		touchTol := math.Max(cfg.RetestTouchPips*d.pip, cfg.RetestTouchATR*atrJ)
+		if touch < 0 && c.Low <= level+touchTol {
+			touch = j
 			ep.State, ep.EndedAt = StateRetestTouched, c.Time
 		}
 		// Optional confirmation: the first touch of the broken reference is the
-		// trigger; the rejecting candle is still measured (Setup.Rejected).
-		if touch >= 0 && (d.rejects(c, r.value(i)) || cfg.CandleConfirmationOptional && i == touch) {
-			confirm = i
+		// trigger; the rejecting candle is still measured (Setup.Rejected) but
+		// no longer required.
+		if touch >= 0 && (d.rejects(c, level) || cfg.CandleConfirmationOptional && j == touch) {
+			confirm = j
 			ep.State, ep.EndedAt = StateRetestConfirmed, c.Time
 		}
 	}
@@ -464,22 +509,29 @@ func (d *detector) protectedStructure(b, a int, level float64) (price float64, a
 }
 
 // finish turns a confirmed retest into a candidate, or records exactly why the
-// confirmed retest is not published.
+// confirmed retest is not published. touch and confirm are M5 indexes; b and a
+// are structure-frame indexes.
 func (d *detector) finish(ep Episode, r ref, brk Break, protected float64, b, a, touch, confirm int, atrB, failBuf float64) Episode {
-	cfg, bars, e := d.cfg, d.bars, d.e
+	cfg, bars, fine := d.cfg, d.bars, d.fine
+	last := len(fine) - 1
 	reject := func(reason string) Episode {
 		ep.State, ep.Reason = StateRetestConfirmed, reason
 		return ep
 	}
-	atrC, ok := d.atr.At(confirm)
+	atrC, ok := d.fineATR.At(confirm)
 	if !ok {
 		return reject(ReasonATRUnavailable)
 	}
-	level := r.value(confirm)
+	atrS, ok := d.atr.At(a)
+	if !ok {
+		return reject(ReasonATRUnavailable)
+	}
+	level := r.at(fine[confirm].Time)
 	retestLow := math.Inf(1)
 	for i := touch; i <= confirm; i++ {
-		retestLow = math.Min(retestLow, bars[i].Low)
+		retestLow = math.Min(retestLow, fine[i].Low)
 	}
+	// The entry tolerance and the stop buffer are M5 quantities: the stop sits beyond the M5 retest extreme and the protected structure.
 	tolE := math.Max(cfg.EntryTolerancePips*d.pip, cfg.EntryToleranceATR*atrC)
 	entryLow, entryHigh := level-tolE, level+tolE
 	stop := math.Min(retestLow, protected) - math.Max(d.pip, cfg.InvalidationBufferATR*atrC)
@@ -489,7 +541,7 @@ func (d *detector) finish(ep Episode, r ref, brk Break, protected float64, b, a,
 	risk := entryHigh - stop
 	riskPips := risk / d.pip
 
-	target, found, anyAbove := d.target(b, confirm, entryHigh, level, atrC, atrB)
+	target, found, anyAbove := d.target(b, a, confirm, entryHigh, level, atrS, atrB)
 	switch {
 	case !found && !anyAbove:
 		return reject(ReasonNoOpposingStructure)
@@ -504,39 +556,41 @@ func (d *detector) finish(ep Episode, r ref, brk Break, protected float64, b, a,
 		return reject(ReasonRewardRisk)
 	}
 
-	for i := confirm + 1; i <= e; i++ {
-		c := bars[i]
+	for i := confirm + 1; i <= last; i++ {
+		c := fine[i]
 		switch {
-		case c.Low <= stop || c.Close < r.value(i)-failBuf:
+		case c.Low <= stop || c.Close < r.at(c.Time)-failBuf:
 			ep.State, ep.Reason, ep.EndedAt = StateRetestFailed, ReasonInvalidatedAfter, c.Time
 			return ep
 		case c.High >= target:
 			return reject(ReasonTargetReached)
 		}
 	}
-	if d.barsBetween(confirm, e) > cfg.ConfirmationMaxAgeBars {
+	// A confirmation is fresh for confirmation_max_age_bars structure-frame bars, converted to time.
+	if int((fine[last].Time-fine[confirm].Time)/d.period) > cfg.ConfirmationMaxAgeBars {
 		return reject(ReasonConfirmationStale)
 	}
-	last := bars[e]
-	if last.Close < entryLow {
+	lastBar := fine[last]
+	if lastBar.Close < entryLow {
 		return reject(ReasonPriceThroughEntry)
 	}
-	if last.Close-entryHigh > cfg.MaximumEntryDistanceATR*atrC {
+	if lastBar.Close-entryHigh > cfg.MaximumEntryDistanceATR*atrC {
 		return reject(ReasonEntryTooFar)
 	}
 
-	cb := bars[confirm]
+	cb := fine[confirm]
 	setup := Setup{
 		Reference: ep.Reference, Break: brk,
 		Retest: Retest{
-			TouchTime: bars[touch].Time, ConfirmedAt: cb.Time, Low: retestLow,
+			TouchTime: fine[touch].Time, ConfirmedAt: cb.Time, Low: retestLow,
 			DepthATR:  math.Max(0, level-retestLow) / atrC,
-			WickRatio: lowerWickRatio(cb), CloseStrength: closeStrength(cb), BarsAfterAcceptance: d.barsBetween(a, confirm),
+			WickRatio: lowerWickRatio(cb), CloseStrength: closeStrength(cb), BarsAfterAcceptance: int((cb.Time - bars[a].Time) / d.period),
 		},
 		EntryLow: entryLow, EntryHigh: entryHigh, Stop: stop, Target: target, ProtectedStructure: protected,
-		ATR: atrC, RiskPips: riskPips, RewardRisk: reward / risk, TargetRoomATR: reward / atrC,
-		Rejected:      d.rejects(cb, r.value(confirm)),
-		WickRejection: lowerWickRatio(cb) >= cfg.RejectionWickRatio && d.rejects(cb, r.value(confirm)), ConfirmedAt: cb.Time,
+		ATR: atrC, StructureATR: atrS, ThesisBand: math.Max(cfg.LevelClusterPips*d.pip, cfg.LevelClusterATR*atrB),
+		RiskPips: riskPips, RewardRisk: reward / risk, TargetRoomATR: reward / atrC,
+		Rejected:      d.rejects(cb, r.at(cb.Time)),
+		WickRejection: lowerWickRatio(cb) >= cfg.RejectionWickRatio && d.rejects(cb, r.at(cb.Time)), ConfirmedAt: cb.Time,
 	}
 	setup.Reference.PriceAtBreak = r.Reference.PriceAtBreak
 	ep.State, ep.Reason, ep.Setup = StateCandidate, "", &setup
@@ -544,24 +598,31 @@ func (d *detector) finish(ep Episode, r ref, brk Break, protected float64, b, a,
 }
 
 // target is the nearest credible opposing structure above the entry: a
-// confirmed pivot high that already existed BEFORE the break began (a high made
-// by the breakout itself is the move, not a barrier), above everything price has
-// traded since the break began and outside the broken zone, heading a swing of at least target_swing_atr. found is false when the nearest
-// credible structure leaves less than the required room; anyAbove tells "nothing
-// there" from "blocked too close". The nearest decides: a closer credible
-// blocker is never skipped in favour of a farther one.
-func (d *detector) target(b, confirm int, entryHigh, level, atrC, atrB float64) (price float64, found, anyAbove bool) {
+// confirmed pivot high of the structure frame that already existed BEFORE the
+// break began (a high made by the breakout itself is the move, not a barrier),
+// above everything price has traded since the break began and outside the broken
+// zone, heading a swing of at least target_swing_atr structure-frame ATRs. found
+// is false when the nearest credible structure leaves less than the required
+// room (in structure-frame ATRs); anyAbove tells "nothing there" from "blocked
+// too close". The nearest decides: a closer credible blocker is never skipped in
+// favour of a farther one.
+func (d *detector) target(b, a, confirm int, entryHigh, level, atrS, atrB float64) (price float64, found, anyAbove bool) {
 	cfg := d.cfg
 	zone := math.Max(cfg.LevelClusterPips*d.pip, cfg.LevelClusterATR*atrB)
 	// A swing high price has already traded through since the break began is
-	// behind it, not a barrier ahead.
+	// behind it, not a barrier ahead: the structure bars of the break and the M5
+	// bars since the acceptance closed.
 	floor := math.Max(entryHigh, level+zone)
-	for j := b; j <= confirm; j++ {
+	for j := b; j <= a; j++ {
 		floor = math.Max(floor, d.bars[j].High)
 	}
+	for j := d.fineFrom(d.bars[a].Time + d.period); j <= confirm; j++ {
+		floor = math.Max(floor, d.fine[j].High)
+	}
+	confirmTime := d.fine[confirm].Time
 	closest := math.Inf(1)
 	for _, p := range d.ph {
-		if p.index >= b || d.barsBetween(p.index, confirm) > cfg.TargetLookbackBars || p.price <= floor {
+		if p.index >= b || int((confirmTime-d.bars[p.index].Time)/d.period) > cfg.TargetLookbackBars || p.price <= floor {
 			continue
 		}
 		low := math.Inf(1)
@@ -570,14 +631,14 @@ func (d *detector) target(b, confirm int, entryHigh, level, atrC, atrB float64) 
 				low = math.Min(low, d.bars[j].Low)
 			}
 		}
-		if p.price-low >= cfg.TargetSwingATR*atrC && p.price < closest {
+		if p.price-low >= cfg.TargetSwingATR*atrS && p.price < closest {
 			closest = p.price
 		}
 	}
 	if math.IsInf(closest, 1) {
 		return 0, false, false
 	}
-	if closest-entryHigh < cfg.MinimumTargetRoomATR*atrC {
+	if closest-entryHigh < cfg.MinimumTargetRoomATR*atrS {
 		return 0, false, true
 	}
 	return closest, true, true
