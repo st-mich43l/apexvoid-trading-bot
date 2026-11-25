@@ -41,6 +41,18 @@ public static class NativeRuntimeFactory
     var broker = RequiredString(instrument, "broker_symbol", first);
     var canonical = RequiredString(instrument, "canonical_symbol", first);
     var timeframes = RequiredStrings(instrument, "timeframes", first);
+    // PR-FEED1: backfill_bars is a closed-bar COUNT per timeframe; max_backfill_requests_per_tf bounds the paged walk.
+    // The second key is optional (default 20) so a host config written before PR-FEED1 still starts.
+    var backfillBars = document.RequiredInt("runtime.feed.backfill_bars");
+    if (backfillBars < 1)
+    {
+      throw new ConfigurationV3Error("runtime.feed.backfill_bars must be at least 1");
+    }
+    var maxBackfillRequests = document.OptionalInt("runtime.feed.max_backfill_requests_per_tf", 20);
+    if (maxBackfillRequests is < 1 or > 200)
+    {
+      throw new ConfigurationV3Error("runtime.feed.max_backfill_requests_per_tf must be between 1 and 200");
+    }
     return new FeedOptions(
       ClientId: account.ClientId,
       ClientSecret: account.ClientSecret,
@@ -52,7 +64,7 @@ public static class NativeRuntimeFactory
       CTraderSymbol: broker,
       RedisSymbol: canonical,
       Timeframes: timeframes,
-      BackfillBars: document.RequiredInt("runtime.feed.backfill_bars"),
+      BackfillBars: backfillBars,
       RedisUrl: account.RedisUrl,
       BarsWindowMax: document.RequiredInt("runtime.feed.bars_window_max"),
       BarsChannel: document.RequiredString("runtime.feed.bars_channel"),
@@ -64,7 +76,8 @@ public static class NativeRuntimeFactory
       RequestTimeout: account.RequestTimeout,
       TokenRefreshLead: account.TokenRefreshLead,
       TokenCheckInterval: account.TokenCheckInterval,
-      ExpectedBroker: document.RequiredString("runtime.broker.expected_broker")
+      ExpectedBroker: document.RequiredString("runtime.broker.expected_broker"),
+      MaxBackfillRequestsPerTf: maxBackfillRequests
     );
   }
 

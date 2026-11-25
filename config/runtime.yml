@@ -33,7 +33,11 @@ runtime:
   # instrument-owned in instruments.yml; these are the connection-wide
   # retention/quality settings used by ctrader-engine.
   feed:
+    # Closed bars per timeframe collected on startup, and the size a short window is topped up to after a reconnect.
+    # A bar COUNT, not a time span (PR-FEED1): the feed steps back across weekends and holidays until it has this many.
     backfill_bars: 2000
+    # Upper bound on historical trendbar requests per symbol and timeframe in one backfill (PR-FEED1).
+    max_backfill_requests_per_tf: 20
     bars_window_max: 2000
     bar_quality_lookback: 6
     bars_channel: bars:new

@@ -29,6 +29,10 @@ public interface IBarSink
   );
 
   Task WriteSpotAsync(SpotPrice spot, CancellationToken cancellationToken);
+
+  // PR-FEED1 health record of the last backfill per symbol/timeframe. Observability only: nothing decides on it.
+  Task WriteBackfillStatusAsync(BackfillReport report, CancellationToken cancellationToken) =>
+    Task.CompletedTask;
 }
 
 public interface IRedisSeriesCommands
@@ -43,6 +47,11 @@ public interface IRedisSeriesCommands
     int count,
     CancellationToken cancellationToken
   );
+  Task SetHashAsync(
+    string key,
+    IReadOnlyList<KeyValuePair<string, string>> fields,
+    CancellationToken cancellationToken
+  ) => Task.CompletedTask;
 }
 
 public interface IAutoTradeStore
@@ -198,6 +207,27 @@ public sealed class RedisBarSink(
     );
   }
 
+  public Task WriteBackfillStatusAsync(BackfillReport report, CancellationToken cancellationToken) =>
+    redis.SetHashAsync(
+      BackfillKey(report.Symbol, report.Timeframe),
+      [
+        new("written", report.Written.ToString(CultureInfo.InvariantCulture)),
+        new("target", report.Target.ToString(CultureInfo.InvariantCulture)),
+        new("held", report.Held.ToString(CultureInfo.InvariantCulture)),
+        new("earliest_ts", report.EarliestTs?.ToString(CultureInfo.InvariantCulture) ?? ""),
+        new("latest_ts", report.LatestTs?.ToString(CultureInfo.InvariantCulture) ?? ""),
+        new("requests", report.Requests.ToString(CultureInfo.InvariantCulture)),
+        new("mode", report.Mode),
+        new("stop", report.Stop),
+        new("short", report.Short ? "1" : "0"),
+        new("at", report.At.ToString(CultureInfo.InvariantCulture)),
+      ],
+      cancellationToken
+    );
+
+  public static string BackfillKey(string symbol, string timeframe) =>
+    $"feed:backfill:{symbol.ToUpperInvariant()}:{timeframe.ToUpperInvariant()}";
+
   public static string Key(string symbol, string timeframe) =>
     $"bars:{symbol.ToUpperInvariant()}:{timeframe.ToUpperInvariant()}";
 
@@ -285,6 +315,15 @@ public sealed class StackExchangeRedisSeriesCommands :
       ))
       .ToArray();
   }
+
+  public Task SetHashAsync(
+    string key,
+    IReadOnlyList<KeyValuePair<string, string>> fields,
+    CancellationToken cancellationToken
+  ) => _db.HashSetAsync(
+    key,
+    fields.Select(field => new HashEntry(field.Key, field.Value)).ToArray()
+  );
 
   public async Task<IReadOnlyList<OhlcBar>> ReadRecentBarsAsync(
     string symbol,

@@ -879,23 +879,38 @@ public sealed class CTraderOpenApiFeedClient : ICTraderFeedClient, ICTraderTrade
     return (fromTimestamp, toTimestamp);
   }
 
-  public async Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
+  public Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
     SymbolInfo symbol,
     string timeframe,
     DateTimeOffset from,
     DateTimeOffset to,
     CancellationToken cancellationToken
+  ) => GetTrendbarsAsync(symbol, timeframe, from, to, 0, cancellationToken);
+
+  public async Task<IReadOnlyList<RawTrendbar>> GetTrendbarsAsync(
+    SymbolInfo symbol,
+    string timeframe,
+    DateTimeOffset from,
+    DateTimeOffset to,
+    int count,
+    CancellationToken cancellationToken
   )
   {
+    var request = new ProtoOAGetTrendbarsReq
+    {
+      CtidTraderAccountId = options.AccountId,
+      SymbolId = symbol.SymbolId,
+      Period = TimeframeCodec.ToProto(timeframe),
+      FromTimestamp = from.ToUnixTimeMilliseconds(),
+      ToTimestamp = to.ToUnixTimeMilliseconds(),
+    };
+    if (count > 0)
+    {
+      // "Limit number of trend bars in response back from toTimestamp" (Spotware Open API messages reference).
+      request.Count = (uint)count;
+    }
     var response = await SendAndWaitAsync<ProtoOAGetTrendbarsRes>(
-      new ProtoOAGetTrendbarsReq
-      {
-        CtidTraderAccountId = options.AccountId,
-        SymbolId = symbol.SymbolId,
-        Period = TimeframeCodec.ToProto(timeframe),
-        FromTimestamp = from.ToUnixTimeMilliseconds(),
-        ToTimestamp = to.ToUnixTimeMilliseconds(),
-      },
+      request,
       res => res.SymbolId == symbol.SymbolId && res.Period == TimeframeCodec.ToProto(timeframe),
       cancellationToken
     );

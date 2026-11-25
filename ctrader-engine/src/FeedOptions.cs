@@ -23,5 +23,6 @@ public sealed record FeedOptions(
   TimeSpan RequestTimeout,
   TimeSpan TokenRefreshLead,
   TimeSpan TokenCheckInterval,
-  string ExpectedBroker = "fpmarkets"
+  string ExpectedBroker = "fpmarkets",
+  int MaxBackfillRequestsPerTf = 20
 );

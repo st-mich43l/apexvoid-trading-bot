@@ -220,6 +220,9 @@ public sealed class ConfigDocument
 
   public int RequiredInt(string dottedPath) => ConvertValue<int>(dottedPath);
 
+  public int OptionalInt(string dottedPath, int fallback) =>
+    Get(dottedPath) is null ? fallback : ConvertValue<int>(dottedPath);
+
   public decimal RequiredDecimal(string dottedPath) => ConvertValue<decimal>(dottedPath);
 
   public IReadOnlyList<string> RequiredStrings(string dottedPath)
