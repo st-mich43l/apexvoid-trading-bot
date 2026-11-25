@@ -1,5 +1,5 @@
 //@version=6
-indicator("ApexVoid | Price Action v2.25", "AV PA v2.25", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
+indicator("ApexVoid | Price Action v2.26", "AV PA v2.26", overlay = true, behind_chart = true, max_bars_back = 800, calc_bars_count = 2000, max_lines_count = 350, max_boxes_count = 250, max_polylines_count = 20, max_labels_count = 500)
 
 // APEXVOID PRICE ACTION SUITE
 // Repository: apexvoid-trading-bot/tradingview/apexvoid_price_action.pine
@@ -142,12 +142,9 @@ color keyColor = input.color(#8A93A6, "Key level colour", group = G7)
 
 string vpMode = input.string("Auto", "Volume profile", options = ["Auto", "Manual", "Off"], group = G8)
 float vpVaPct = input.float(70.0, "Value area %", minval = 50, maxval = 95, step = 1, group = G8)
-bool vpNaked = input.bool(true, "Show naked POCs", group = G8)
 color vpColor = input.color(#8A93A6, "Volume profile colour", group = G8)
 string vpPerIn = input.string("Session", "Manual: period", options = ["Session", "Day", "Week", "Month"], group = G8)
-string vpIbIn = input.string("1", "Manual: intrabar timeframe (minutes)", options = ["1", "3", "5", "15", "60"], group = G8)
 int vpRowsIn = input.int(32, "Manual: rows", minval = 16, maxval = 40, group = G8)
-int vpKeepIn = input.int(1, "Manual: profiles drawn (completed, besides the developing one)", minval = 0, maxval = 3, group = G8)
 
 
 int chartSecs = nz(timeframe.in_seconds(), 900)
@@ -2173,10 +2170,12 @@ if showSessionBoxes
     f_updateSessionBox(sessionBoxesNy, nyIn == 1, nyStart, nyHigh, nyLow, sessionBoxEnd, nyColor, "New York")
 
 
-// ------- VOLUME PROFILE (TICK VOLUME, DISPLAY ONLY) -------
-// One profile per period (Auto: session on <=5m, day on 10-30m, week on 1-2h, month on 3-4h, quarter on 1D and above), built from the period's intrabars
-// (request.security_lower_tf of the plain high / low / volume, never a structure series). Volume is tick volume: activity, not contracts. A completed profile
-// never changes; the developing one is recomputed on the last bar. Histograms are polylines (boxes are spent), captions go through the right label column (category 5).
+// ------- VOLUME PROFILE (ONE PROFILE, TICK VOLUME, DISPLAY ONLY) -------
+// v2.26: ONE profile, of the current period (Auto: session on <=5m, day on 10-30m, week on 1-2h, month on 3-4h, quarter on 1D and above), built on the last bar
+// from the period's own CHART bars (at most 480): each bar's tick volume is spread evenly over the price rows its high-low range spans. There is no lower-timeframe
+// request, no per-bar accumulation and no stored history, so the cost is one bounded loop on the last bar (about 480 bars x 40 rows at most), whatever the chart length.
+// Volume is tick volume: activity, not contracts. The histogram is a polyline anchored at the period start; POC, VAH and VAL are lines to the right edge and captions
+// go through the right label column (category 5).
 f_vp(float[] hs, float[] ls, float[] vs, float lo, float st, int rows, float pct) =>
     float[] bins = array.new_float(rows, 0.0)
     int n = array.size(hs)
@@ -2208,40 +2207,6 @@ f_vp(float[] hs, float[] ls, float[] vs, float lo, float st, int rows, float pct
             bl := math.max(0, bl - 2)
     [bins, poc, bl, bh]
 
-f_vpAdd(float[] hs, float[] ls, float[] vs, float[] ih, float[] il, float[] iv, bool cap) =>
-    int n = na(ih) ? 0 : array.size(ih)
-    int added = n
-    if n > 0
-        for k = 0 to n - 1
-            array.push(hs, array.get(ih, k))
-            array.push(ls, array.get(il, k))
-            array.push(vs, array.get(iv, k))
-    else
-        array.push(hs, high)
-        array.push(ls, low)
-        array.push(vs, volume)
-    if cap and array.size(hs) > 800
-        // Halve the resolution of the whole period: neighbouring intrabars are merged pairwise (high of the highs, low of the lows, summed volume) and the tail is
-        // popped, so a profile never holds more than 800 rows of input and the last-bar recompute stays cheap.
-        int total = array.size(hs)
-        int half = int(total / 2)
-        for k = 0 to half - 1
-            array.set(hs, k, math.max(array.get(hs, 2 * k), array.get(hs, 2 * k + 1)))
-            array.set(ls, k, math.min(array.get(ls, 2 * k), array.get(ls, 2 * k + 1)))
-            array.set(vs, k, nz(array.get(vs, 2 * k)) + nz(array.get(vs, 2 * k + 1)))
-        int keep = half
-        if total % 2 == 1
-            array.set(hs, half, array.get(hs, total - 1))
-            array.set(ls, half, array.get(ls, total - 1))
-            array.set(vs, half, array.get(vs, total - 1))
-            keep := half + 1
-        while array.size(hs) > keep
-            array.pop(hs)
-            array.pop(ls)
-            array.pop(vs)
-        added := -1
-    added
-
 f_vpShape(float[] bins, float lo, float st, int x0, float ws, int i0, int i1, int fillTr, int lineTr) =>
     chart.point[] pts = array.new<chart.point>()
     array.push(pts, chart.point.from_index(x0, lo + i0 * st))
@@ -2257,135 +2222,64 @@ f_vpLine(int x1, int x2, float y, int tr, string sty) =>
 
 string vpPer = vpMode == "Manual" ? vpPerIn : chartSecs <= 300 ? "Session" : chartSecs <= 1800 ? "Day" : chartSecs <= 7200 ? "Week" : chartSecs <= 14400 ? "Month" : "Quarter"
 bool vpOn = vpMode != "Off" and not minimalMode
-// v2.25: the profile only needs the developing period plus the few completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only; older bars do no volume profile work at all.
-bool vpLive = vpOn and bar_index > last_bar_index - 900
-string vpIb = vpMode == "Manual" ? vpIbIn : chartSecs <= 300 ? "1" : chartSecs <= 900 ? "3" : chartSecs <= 1800 ? "5" : chartSecs <= 7200 ? "15" : "60"
-int vpKeep = vpMode == "Manual" ? vpKeepIn : chartSecs <= 300 ? 2 : chartSecs <= 7200 ? 1 : 0
 float vpExp = (vpPer == "Session" ? 28800.0 : vpPer == "Day" ? 82800.0 : vpPer == "Week" ? 414000.0 : vpPer == "Month" ? 1738800.0 : 5216400.0) / chartSecs
 bool vpChg = timeframe.change(vpPer == "Day" ? "D" : vpPer == "Week" ? "W" : vpPer == "Month" ? "M" : "3M")
 bool vpAs = not na(asiaLiveStart) and nz(asiaLiveStart[1]) != asiaLiveStart
 bool vpLd = not na(ldnStart) and nz(ldnStart[1]) != ldnStart
 bool vpNy = not na(nyStart) and nz(nyStart[1]) != nyStart
 bool vpOpen = vpPer == "Session" ? vpAs or vpLd or vpNy : vpChg
-[ibH, ibL, ibV] = request.security_lower_tf(syminfo.tickerid, vpOn ? vpIb : timeframe.period, [high, low, volume], ignore_invalid_timeframe = true)
 
-f_vpTip(string nm, float poc, float vl, float vah, int rows, bool approx, bool dev) =>
-    "Volume profile (tick volume) · " + nm + " · POC " + f_px(poc) + " · VA " + str.tostring(vpVaPct, "0") + " % " + f_px(vl) + "–" + f_px(vah) + " · rows " + str.tostring(rows) + " · intrabar " + (vpIb == "60" ? "1h" : vpIb + "m") + (approx ? " · approx (chart bars)" : "") + (dev ? " · developing" : "")
+f_vpTip(string nm, float poc, float vl, float vah, int rows, int bars) =>
+    "Volume profile (tick volume, chart bars) · " + nm + " · POC " + f_px(poc) + " · VA " + str.tostring(vpVaPct, "0") + " % " + f_px(vl) + "–" + f_px(vah) + " · rows " + str.tostring(rows) + " · " + str.tostring(bars) + " bars"
 
-var float[] vpH = array.new_float()
-var float[] vpL = array.new_float()
-var float[] vpV = array.new_float()
-var bool vpApprox = false
 var int vpStart = 0
 var string vpName = ""
 var polyline[] vpPoly = array.new<polyline>()
-var polyline[] vpDevPoly = array.new<polyline>()
 var line[] vpLines = array.new_line()
-var line[] vpDevLines = array.new_line()
-var float[] vpLast = array.new_float()
-var string vpLastTip = ""
-var float[] nkP = array.new_float()
-var int[] nkB = array.new_int()
-var string[] nkT = array.new_string()
-var line[] nkLines = array.new_line()
 
-if vpLive and barstate.isconfirmed
-    if vpOpen and array.size(vpH) > 0
-        float lo = array.min(vpL)
-        float hi = math.max(array.max(vpH), lo + syminfo.mintick)
-        int rows = vpMode == "Manual" ? vpRowsIn : math.max(16, math.min(40, math.round((hi - lo) / (0.25 * nz(atr, (hi - lo) / 32.0)))))
-        float st = (hi - lo) / rows
-        [bins, poc, bl, bh] = f_vp(vpH, vpL, vpV, lo, st, rows, vpVaPct)
-        float pocP = lo + (poc + 0.5) * st
-        float vahP = lo + (bh + 1) * st
-        float valP = lo + bl * st
-        float ws = array.get(bins, poc) > 0 ? 0.30 * vpExp / array.get(bins, poc) : 0.0
-        string nm = vpName + " " + str.format_time(time[1], "MM-dd", "UTC")
-        string tip = f_vpTip(nm, pocP, valP, vahP, rows, vpApprox, false)
-        if vpKeep > 0
-            array.push(vpPoly, f_vpShape(bins, lo, st, vpStart, ws, 0, rows - 1, 88, 70))
-            array.push(vpPoly, f_vpShape(bins, lo, st, vpStart, ws, bl, bh, 80, 62))
-            array.push(vpLines, f_vpLine(vpStart, bar_index - 1, pocP, 35, line.style_solid))
-            array.push(vpLines, f_vpLine(vpStart, bar_index - 1, vahP, 60, line.style_dotted))
-            array.push(vpLines, f_vpLine(vpStart, bar_index - 1, valP, 60, line.style_dotted))
-            while array.size(vpPoly) > 2 * vpKeep
-                polyline.delete(array.shift(vpPoly))
-            while array.size(vpLines) > 3 * vpKeep
-                line.delete(array.shift(vpLines))
-        array.clear(vpLast)
-        array.push(vpLast, pocP)
-        array.push(vpLast, vahP)
-        array.push(vpLast, valP)
-        vpLastTip := tip
-        if vpNaked
-            array.push(nkP, pocP)
-            array.push(nkB, bar_index - 1)
-            array.push(nkT, tip)
-            if array.size(nkP) > 6
-                array.shift(nkP)
-                array.shift(nkB)
-                array.shift(nkT)
-    if vpOpen or barstate.isfirst
-        array.clear(vpH)
-        array.clear(vpL)
-        array.clear(vpV)
-        vpApprox := false
-        vpStart := bar_index
-        vpName := vpPer == "Session" ? (vpLd ? "London" : vpNy ? "New York" : "Asia") : vpPer
-    int added = f_vpAdd(vpH, vpL, vpV, ibH, ibL, ibV, true)
-    vpApprox := vpApprox or added <= 0
-    if array.size(nkP) > 0
-        for k = array.size(nkP) - 1 to 0
-            if low <= array.get(nkP, k) and high >= array.get(nkP, k)
-                array.remove(nkP, k)
-                array.remove(nkB, k)
-                array.remove(nkT, k)
+// Only the period's start bar is tracked per bar (one comparison); everything else happens on the last bar.
+if vpOn and (vpOpen or barstate.isfirst)
+    vpStart := bar_index
+    vpName := vpPer == "Session" ? (vpLd ? "London" : vpNy ? "New York" : "Asia") : vpPer
 
-if vpOn and barstate.islast and array.size(vpH) > 0
-    int before = array.size(vpH)
-    if not barstate.isconfirmed
-        f_vpAdd(vpH, vpL, vpV, ibH, ibL, ibV, false)
-    float lo = array.min(vpL)
-    float hi = math.max(array.max(vpH), lo + syminfo.mintick)
+if vpOn and barstate.islast
+    int first = math.max(0, math.max(vpStart, bar_index - 479))
+    int bars = bar_index - first + 1
+    float[] hs = array.new_float()
+    float[] ls = array.new_float()
+    float[] vs = array.new_float()
+    float lo = low
+    float hi = high
+    for k = 0 to bars - 1
+        array.push(hs, high[k])
+        array.push(ls, low[k])
+        array.push(vs, nz(volume[k]))
+        lo := math.min(lo, low[k])
+        hi := math.max(hi, high[k])
+    hi := math.max(hi, lo + syminfo.mintick)
     int rows = vpMode == "Manual" ? vpRowsIn : math.max(16, math.min(40, math.round((hi - lo) / (0.25 * nz(atr, (hi - lo) / 32.0)))))
     float st = (hi - lo) / rows
-    [bins, poc, bl, bh] = f_vp(vpH, vpL, vpV, lo, st, rows, vpVaPct)
-    while array.size(vpH) > before
-        array.pop(vpH)
-        array.pop(vpL)
-        array.pop(vpV)
+    [bins, poc, bl, bh] = f_vp(hs, ls, vs, lo, st, rows, vpVaPct)
     float pocP = lo + (poc + 0.5) * st
     float vahP = lo + (bh + 1) * st
     float valP = lo + bl * st
     float ws = array.get(bins, poc) > 0 ? 0.30 * vpExp / array.get(bins, poc) : 0.0
-    while array.size(vpDevPoly) > 0
-        polyline.delete(array.pop(vpDevPoly))
-    while array.size(vpDevLines) > 0
-        line.delete(array.pop(vpDevLines))
-    array.push(vpDevPoly, f_vpShape(bins, lo, st, vpStart, ws, 0, rows - 1, 83, 65))
-    array.push(vpDevPoly, f_vpShape(bins, lo, st, vpStart, ws, bl, bh, 75, 57))
-    array.push(vpDevLines, f_vpLine(vpStart, bar_index, pocP, 35, line.style_solid))
-    array.push(vpDevLines, f_vpLine(vpStart, bar_index, vahP, 60, line.style_dotted))
-    array.push(vpDevLines, f_vpLine(vpStart, bar_index, valP, 60, line.style_dotted))
-    string devTip = f_vpTip(vpName + " " + str.format_time(time, "MM-dd", "UTC"), pocP, valP, vahP, rows, vpApprox, true)
+    while array.size(vpPoly) > 0
+        polyline.delete(array.pop(vpPoly))
+    while array.size(vpLines) > 0
+        line.delete(array.pop(vpLines))
+    array.push(vpPoly, f_vpShape(bins, lo, st, first, ws, 0, rows - 1, 83, 65))
+    array.push(vpPoly, f_vpShape(bins, lo, st, first, ws, bl, bh, 75, 57))
+    array.push(vpLines, f_vpLine(first, bar_index + gutter, pocP, 35, line.style_solid))
+    array.push(vpLines, f_vpLine(first, bar_index + gutter, vahP, 60, line.style_dotted))
+    array.push(vpLines, f_vpLine(first, bar_index + gutter, valP, 60, line.style_dotted))
+    string vpTip = f_vpTip(vpName + " " + str.format_time(time, "MM-dd", "UTC"), pocP, valP, vahP, rows, bars)
     if f_scaleOk(pocP)
-        f_regLabel(pocP, "dPOC " + f_px(pocP), vpColor, 20, devTip, 5, 2)
+        f_regLabel(pocP, "POC " + f_px(pocP), vpColor, 20, vpTip, 5, 2)
     if f_scaleOk(vahP)
-        f_regLabel(vahP, "dVAH " + f_px(vahP), vpColor, 19, devTip, 5, 2)
+        f_regLabel(vahP, "VAH " + f_px(vahP), vpColor, 19, vpTip, 5, 2)
     if f_scaleOk(valP)
-        f_regLabel(valP, "dVAL " + f_px(valP), vpColor, 19, devTip, 5, 2)
-    if array.size(vpLast) == 3
-        for k = 0 to 2
-            if f_scaleOk(array.get(vpLast, k))
-                f_regLabel(array.get(vpLast, k), (k == 0 ? "POC " : k == 1 ? "VAH " : "VAL ") + f_px(array.get(vpLast, k)), vpColor, 18, vpLastTip, 5, 3)
-    // A naked POC far from price gets no line at all: a transparent line still counts for the price auto-scale and stretches the chart.
-    while array.size(nkLines) > 0
-        line.delete(array.pop(nkLines))
-    if array.size(nkP) > 0
-        for k = 0 to array.size(nkP) - 1
-            if f_scaleOk(array.get(nkP, k))
-                array.push(nkLines, f_vpLine(array.get(nkB, k), bar_index + gutter, array.get(nkP, k), 55, line.style_dashed))
-                f_regLabel(array.get(nkP, k), "nPOC " + f_px(array.get(nkP, k)), vpColor, 17, array.get(nkT, k) + " · naked until a later bar trades through it", 5, 3)
+        f_regLabel(valP, "VAL " + f_px(valP), vpColor, 19, vpTip, 5, 2)
 
 
 // ------- NEAREST UNSWEPT INTERNAL SWING HIGH / LOW (iBSL / iSSL) -------

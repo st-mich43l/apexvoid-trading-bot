@@ -38,7 +38,7 @@ func TestTheShippedConfigurationDeclaresTheStructureCloseRuleOnlyWhereTheStrateg
 			on[cfg.ID] = true
 		}
 	}
-	if len(on) != 3 || !on["order_block"] || !on["key_level"] || !on["flip_zone"] {
-		t.Fatalf("only order_block, key_level and flip_zone (Q3) carry a structure-close rule today, got %v", on)
+	if len(on) != 4 || !on["order_block"] || !on["key_level"] || !on["flip_zone"] || !on["break_retest"] {
+		t.Fatalf("only order_block, key_level, flip_zone (Q3) and break_retest (Q4) carry a structure-close rule today, got %v", on)
 	}
 }

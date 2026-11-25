@@ -6,7 +6,7 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 
 | Path | Purpose |
 | --- | --- |
-| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.25). |
+| `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.26). |
 
 ## ApexVoid Price Action
 
@@ -94,31 +94,29 @@ Engine v6 is what the bot trades today. Selective v7 is a preview of the definit
 - **Selectivity readout (tooltip only, nothing on the chart):** the share of the window's [low, high] inside any level band, over all levels: `coverage 69 % of the recent range: low selectivity` above 40 %, `selective` at or below 25 %. On the 3 Nov M5 capture: v6 69 %, v7 36 %.
 - **Not shown:** the engine's `current` contract (`frame.Levels`: wick re-count).
 
-### Volume profile (v2.20, intrabar timeframes changed in v2.21)
+### Volume profile (v2.26: one profile)
 
-A quiet histogram of where the period traded, with its point of control (POC) and value area (VA). **The volume is tick volume**: on XAUUSD (OANDA, FXCM, cTrader) it counts price updates, a measure of activity, not contracts. Read the profile as "where price spent its time and activity", not as traded size. It is a display tool with **no measured edge**; nothing here trades it.
+One quiet histogram of where the **current period** traded, with its point of control (POC) and value area (VA). **The volume is tick volume**: on XAUUSD (OANDA, FXCM, cTrader) it counts price updates, a measure of activity, not contracts. Read it as "where price spent its time and activity", not as traded size. It is a display tool with **no measured edge**; nothing here trades it.
 
-`Volume profile` = `Auto` (default) needs no setting: everything follows the chart timeframe.
+`Volume profile` = `Auto` (default) needs no setting; the period follows the chart timeframe:
 
-| Chart timeframe | Profile period | Intrabar timeframe | Profiles drawn |
-|---|---|---|---|
-| 5m and below | engine session: Asia start, London start, New York start, next Asia start (contiguous) | 1m (1m charts: the chart bars) | developing + last 2 |
-| 10m to 15m | trading day (XAU rolls 17:00 New York) | 3m | developing + last 1 |
-| 30m | trading day | 5m | developing + last 1 |
-| 1h to 2h | week | 15m | developing + last 1 |
-| 3h to 4h | month | 60m | developing |
-| 1D and above | quarter | 60m | developing |
+| Chart timeframe | Profile period |
+|---|---|
+| 5m and below | engine session (Asia start, London start, New York start) |
+| 10m to 30m | trading day |
+| 1h to 2h | week |
+| 3h to 4h | month |
+| 1D and above | quarter |
 
-`Manual` shows the period (Session, Day, Week, Month), the intrabar timeframe, the rows and how many completed profiles to draw. `Off` (and the `Minimal` display profile) draws nothing.
+`Manual` lets you pick the period (Session, Day, Week, Month) and the rows. `Off` (and the `Minimal` display profile) draws nothing.
 
-**How it is built.** Each closed chart bar contributes its intrabars (the plain high, low and volume of the lower timeframe, never a structure series). The period's range is split into 16 to 40 equal rows (`range / (0.25 x ATR)`, fixed when the period completes), and each intrabar's volume is spread over the rows its high-low range overlaps, in proportion to the overlap (a doji goes entirely into its row). Where TradingView has no intrabars (older history) the chart bar's own high, low and volume are used and the profile tooltip says `approx (chart bars)`; a profile is "intrabar" only if every bar had intrabars. A completed profile never changes; the developing one is recomputed on the last bar (and includes the forming bar on the realtime bar, tooltip `developing`).
+**How it is built (and why it cannot hit `RE10110`).** On the last bar only, from the period's own **chart bars** (at most the last 480): each bar's tick volume is spread evenly over the price rows its high-low range spans. The range is split into 16 to 40 rows (`range / (0.25 x ATR)`). There is **no lower-timeframe request, no per-bar accumulation and no stored history**: the cost is one bounded loop (about 480 bars x 40 rows at most) whatever the chart length. The only per-bar work is remembering where the period started. The trade-off is resolution: a chart bar's volume is spread evenly over its range instead of following its intrabars, so the shape is an approximation of the intrabar profile (the v2.20 to v2.25 builds).
 
 **How to read it.**
-- **POC** (solid line, `dPOC` developing / `POC` last completed): the row with the most activity (the higher row on a tie).
+- **POC** (solid line to the right edge, caption `POC`): the row with the most activity (the higher row on a tie).
 - **VA** (`VAH` / `VAL`, dotted lines; the darker part of the histogram): the rows around the POC that hold `Value area %` (70) of the volume, built the CBOT way: from the POC, compare the next two rows above with the next two below and add the larger pair, until the share is reached.
-- **nPOC** (`Show naked POCs`): a completed POC that no later bar has traded through yet (a bar with `low <= POC <= high` ends it). Dashed line from the period's end to the right edge; at most 6 are kept, the oldest dropped.
 
-**Drawing.** The histograms are filled **polylines** (not boxes, which the zones, pools and sessions already use); each profile stays inside its own period, anchored at the period's first bar, and its width does not change as the period grows. Captions go to the right label column as category `volume`: when several share a slot they are listed in one label (never `+n`), and next to another label they are appended visibly (`BSL · nPOC 3938.40`). Captions and nPOC lines follow the candle-scale protection: a naked POC outside the candle-scale window gets neither a caption nor a line (a hidden line would still stretch the price auto-scale), and it appears again when price comes back within the window.
+**Drawing.** The histogram is a filled **polyline** anchored at the period's first bar (its width is 30 % of the period length at the busiest row); the three lines run from the same bar to the right edge so the profile is readable even when the histogram is scrolled out of view. Captions go to the right label column as category `volume profile`.
 
 ### Display profiles
 
@@ -191,7 +189,7 @@ structure window, label and event limits, zone maximum age (600 bars), global te
 
 **07 Key Levels** — `Show key levels` (on), `Key level definition` (Engine v6 / Selective v7), `Key levels per side` (3), `Key level window (0 = auto)`, `Round step (0 = by definition: XAU 5 / 10)`, `Show key level band` (off), `Key level colour`.
 
-**08 Volume Profile** — `Volume profile` (Auto / Manual / Off), `Value area %` (70), `Show naked POCs` (on), `Volume profile colour`; Manual only: `Manual: period`, `Manual: intrabar timeframe (minutes)`, `Manual: rows`, `Manual: profiles drawn`.
+**08 Volume Profile** — `Volume profile` (Auto / Manual / Off), `Value area %` (70), `Volume profile colour`; Manual only: `Manual: period`, `Manual: rows`.
 
 ### Alerts
 
@@ -239,6 +237,7 @@ All fire on bar close. Create them from the indicator's alert dialog.
 
 | Version | Change |
 | --- | --- |
+| 2.26 | **One volume profile, built from chart bars on the last bar (not measured in TradingView).** The profile of v2.20 to v2.25 accumulated lower-timeframe intrabars on every bar (`request.security_lower_tf` over the whole history plus per-bar array work), which is where the volume profile's share of `RE10110` came from. v2.26 draws one profile of the current period, computed on the last bar from at most 480 chart bars: no lower-timeframe request, no per-bar accumulation, no stored history. Naked POCs, completed-profile history and the intrabar / profiles-drawn inputs are gone; period rules, rows, POC and value-area rules are unchanged. Approximation: a chart bar's volume is spread evenly over its range. |
 | 2.25 | **The volume profile stays on in every mode, and now costs almost nothing outside the last 900 bars (not measured in TradingView).** v2.23's `Free plan (fast)` switched it off; that is reverted (fast mode keeps it). The profile only needs the developing period plus the completed periods that are drawn or kept as naked POCs, so it is accumulated on the last 900 bars only (9 days on 15m, 37 days on 1h, 150 days on 4h, 3 days on 5m); older bars do no volume-profile work at all. Periods, intrabar timeframes, rows, POC and value-area rules are unchanged. With v2.24's `calc_bars_count = 2000` the intrabar request covers at most 2,000 chart bars. |
 | 2.24 | **`calc_bars_count = 2000`: the fourth `RE10110` fix, not measured in TradingView.** The error survived v2.21 to v2.23 (all of which only shortened the last bar), so the limit is probably being spent over the whole history, not on one bar: a free plan loads up to 10,000 bars and the script runs its structure, pool, zone and session logic on every one. The script now calculates only the last 2,000 bars (about 21 days on 15m, 7 on 5m, 1.4 on 1m; every window it uses is at most 800 bars, zones age out after 600), which cuts the total work 5x on a 10,000-bar chart. Objects are drawn at most 250 bars back, so nothing visible changes; the first ~800 calculated bars are the warm-up of the structure state. If it still fails, use More, Profiler in the Pine Editor and send the table. |
 | 2.23 | **`Performance` input (06 Visuals & Performance), default `Free plan (fast)`: the third `RE10110` fix, not measured in TradingView.** v2.21 and v2.22 reduced individual blocks and the error persisted, so the last bar is now bounded by configuration rather than by guesses: in `Free plan (fast)` the nearest-internal-swing markers (iBSL / iSSL) are off (v2.23 also switched the volume profile off; v2.25 restored it), at most 30 zones and 12 liquidity pools are retained (the pairwise zone passes shrink about 7x) and the key level window is at most 150 bars. `Full` restores every setting as configured and needs a plan whose limit is longer than 0.5 s. Everything else (structure, BOS / CHoCH, pools, zones, alerts) is unchanged in both modes. |
