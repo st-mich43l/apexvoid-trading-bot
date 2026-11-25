@@ -9,11 +9,12 @@ rules, expired or were invalidated; those reasons live only in the Algo Bot file
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from html import escape
-import time
 
-DEFAULT_DAYS = 7
 MAX_DAYS = 60
+DEFAULT_PERIOD = "week"
+PERIODS = ("week", "month", "last week", "last month")
 
 # Engine strategy keys (analysis_opportunities.strategy) -> short labels that fit a phone-width table.
 STRATEGY_LABELS: dict[str, str] = {
@@ -40,7 +41,7 @@ STRATEGY_LABELS: dict[str, str] = {
 FUNNEL_SQL = """
 WITH opp AS (
   SELECT opportunity_id, strategy FROM analysis_opportunities
-  WHERE created_at >= $1 AND ($2::text IS NULL OR symbol = $2)
+  WHERE created_at >= $1 AND created_at < $3 AND ($2::text IS NULL OR symbol = $2)
 ),
 plan AS (
   SELECT DISTINCT ON (opportunity_id) opportunity_id, plan_id FROM auto_trade_plan_snapshots
@@ -87,28 +88,91 @@ class StrategyFunnelRow:
     return max(0, self.published - self.trades - self.not_tradable)
 
 
-def parse_args(raw: str) -> tuple[int, str] | None:
-  """Return ``(days, remainder)`` from ``"[N|Nd] ..."``; None when the day count is out of range."""
-  parts = raw.split()
-  days = DEFAULT_DAYS
+@dataclass(frozen=True)
+class Window:
+  """Half-open ``[start, end)`` in epoch seconds, with a human label and the window just before it."""
+  start: int
+  end: int
+  label: str
+  previous: "Window | None" = None
+
+
+def parse_args(raw: str) -> tuple[str | int, str] | None:
+  """Return ``(period, remainder)``. Period is ``week``, ``month``, ``last week``, ``last month`` or a day count.
+
+  ``this week`` / ``this month`` mean ``week`` / ``month``; ``N`` or ``Nd`` is a rolling window of N days. None when the
+  day count is out of range.
+  """
+  words = raw.split()
+  period: str | int = DEFAULT_PERIOD
   rest: list[str] = []
-  for part in parts:
-    token = part.lower().removesuffix("d")
-    if token.isdigit():
-      days = int(token)
+  i = 0
+  while i < len(words):
+    word = words[i].lower()
+    nxt = words[i + 1].lower() if i + 1 < len(words) else ""
+    if word in {"last", "this"} and nxt in {"week", "month"}:
+      period = nxt if word == "this" else f"last {nxt}"
+      i += 2
+      continue
+    if word in {"week", "month"}:
+      period = word
+    elif word.removesuffix("d").isdigit():
+      days = int(word.removesuffix("d"))
       if not 1 <= days <= MAX_DAYS:
         return None
+      period = days
     else:
-      rest.append(part)
-  return days, " ".join(rest)
+      rest.append(words[i])
+    i += 1
+  return period, " ".join(rest)
 
 
-async def fetch_strategy_funnel(days: int, symbol: str | None, *, now: float | None = None) -> list[StrategyFunnelRow]:
+def _day(ts: datetime) -> str:
+  return f"{ts.day} {ts:%b}"
+
+
+def _span(start: datetime, end: datetime) -> str:
+  """Inclusive calendar span for a half-open window ending at local midnight or at ``now``."""
+  last = end - timedelta(seconds=1)
+  return _day(start) if start.date() == last.date() else f"{_day(start)} – {_day(last)}"
+
+
+def period_window(period: str | int, now: datetime, *, with_previous: bool = True) -> Window:
+  """Calendar weeks start Monday 00:00 and months on the 1st, in ``now``'s timezone (the bot's ``/trade_stats`` rule)."""
+  today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+  if isinstance(period, int):
+    start, end = now - timedelta(days=period), now
+    label = f"last {period} day{'s' if period != 1 else ''}"
+    prev = Window(int((start - timedelta(days=period)).timestamp()), int(start.timestamp()), f"previous {period} days")
+    return Window(int(start.timestamp()), int(end.timestamp()), label, prev if with_previous else None)
+  if period in {"week", "last week"}:
+    monday = today - timedelta(days=today.weekday())
+    if period == "week":
+      start, end, name = monday, now, "this week"
+    else:
+      start, end, name = monday - timedelta(weeks=1), monday, "last week"
+    prev_start = start - timedelta(weeks=1)
+    prev = Window(int(prev_start.timestamp()), int(start.timestamp()), f"week of {_day(prev_start)}")
+  elif period in {"month", "last month"}:
+    first = today.replace(day=1)
+    if period == "month":
+      start, end, name = first, now, "this month"
+    else:
+      start = (first - timedelta(days=1)).replace(day=1)
+      end, name = first, "last month"
+    prev_start = (start - timedelta(days=1)).replace(day=1)
+    prev = Window(int(prev_start.timestamp()), int(start.timestamp()), f"{prev_start:%B}")
+  else:
+    raise ValueError(f"unknown period {period!r}")
+  label = f"{name} ({_span(start, end)})"
+  return Window(int(start.timestamp()), int(end.timestamp()), label, prev if with_previous else None)
+
+
+async def fetch_strategy_funnel(start: int, end: int, symbol: str | None) -> list[StrategyFunnelRow]:
   from app.persistence.store import _connect
 
-  since = int((now if now is not None else time.time()) - days * 86400)
   async with _connect() as db:
-    records = await db.fetch(FUNNEL_SQL, since, symbol.upper() if symbol else None)
+    records = await db.fetch(FUNNEL_SQL, start, symbol.upper() if symbol else None, end)
   return [
     StrategyFunnelRow(
       strategy=str(r["strategy"]),
@@ -131,9 +195,20 @@ def _label(strategy: str) -> str:
   return STRATEGY_LABELS.get(strategy, strategy.replace("_", " ").title())[:11]
 
 
-def format_strategy_funnel(rows: list[StrategyFunnelRow], days: int, symbol: str | None) -> str:
+def _totals(rows: list[StrategyFunnelRow]) -> dict[str, float]:
+  t = {k: sum(getattr(r, k) for r in rows) for k in ("published", "trades", "closed", "wins", "net_r", "not_tradable", "no_trade")}
+  t["rate"] = 100 * t["trades"] / t["published"] if t["published"] else 0.0
+  return t
+
+
+def format_strategy_funnel(
+  rows: list[StrategyFunnelRow],
+  window: Window,
+  symbol: str | None,
+  previous_rows: list[StrategyFunnelRow] | None = None,
+) -> str:
   scope = escape(symbol) if symbol else "All symbols"
-  head = f"📈 <b>Strategy funnel — {scope} · last {days} day{'s' if days != 1 else ''}</b>"
+  head = f"📈 <b>Strategy funnel — {scope} · {escape(window.label)}</b>"
   if not rows:
     return f"{head}\n\nNo setups were published in this window."
   rows = sorted(rows, key=lambda r: (-r.published, r.strategy))
@@ -150,20 +225,24 @@ def format_strategy_funnel(rows: list[StrategyFunnelRow], days: int, symbol: str
     # Pad before escaping: "&" becomes "&amp;" but still shows as one character.
     lines.append(f"{escape(f'{_label(r.strategy):<11}')} {r.published:>5} {r.trades:>4} {r.closed:>4} {win:>4} {net:>6}")
   lines.append("</pre>")
-  published = sum(r.published for r in rows)
-  trades = sum(r.trades for r in rows)
-  closed = sum(r.closed for r in rows)
-  wins = sum(r.wins for r in rows)
-  net = sum(r.net_r for r in rows)
-  not_tradable = sum(r.not_tradable for r in rows)
-  no_trade = sum(r.no_trade for r in rows)
-  rate = 100 * trades / published if published else 0.0
-  win_rate = f"{100 * wins / closed:.0f}%" if closed else "-"
+  t = _totals(rows)
+  win_rate = f"{100 * t['wins'] / t['closed']:.0f}%" if t["closed"] else "-"
   lines.extend([
-    f"Published <b>{published:,}</b> → trades <b>{trades:,}</b> ({rate:.1f}%) → closed <b>{closed:,}</b>",
-    f"Net <b>{_signed(net)} R</b> · win rate {win_rate}",
-    f"No trade: {no_trade:,} refused by rules or expired · {not_tradable:,} not tradable",
+    f"Published <b>{t['published']:,}</b> → trades <b>{t['trades']:,}</b> ({t['rate']:.1f}%) → closed <b>{t['closed']:,}</b>",
+    f"Net <b>{_signed(t['net_r'])} R</b> · win rate {win_rate}",
+    f"No trade: {t['no_trade']:,} refused by rules or expired · {t['not_tradable']:,} not tradable",
+  ])
+  if previous_rows is not None and window.previous is not None:
+    p = _totals(previous_rows)
+    if p["published"]:
+      lines.append(
+        f"{escape(window.previous.label[:1].upper() + window.previous.label[1:])}: published {p['published']:,} → "
+        f"trades {p['trades']:,} ({p['rate']:.1f}%) · net {_signed(p['net_r'])} R"
+      )
+    else:
+      lines.append(f"{escape(window.previous.label[:1].upper() + window.previous.label[1:])}: no setups")
+  lines.extend([
     "",
-    "Net R is volume-weighted, auto algo only. Refusal reasons: /algo_funnel.",
+    "Net R is volume-weighted, auto algo only; trades still open count once closed.",
   ])
   return "\n".join(lines)

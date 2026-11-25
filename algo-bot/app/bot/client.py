@@ -69,7 +69,7 @@ OWNER_COMMANDS = [
   BotCommand(command="algo_pause", description="Pause Algo bot entries"),
   BotCommand(command="algo_resume", description="Resume Algo bot entries"),
   BotCommand(command="algo_close_all", description="Flatten all Algo bot positions"),
-  BotCommand(command="strategy_funnel", description="[SYMBOL] [days] — setups → trades → R per strategy"),
+  BotCommand(command="strategy_funnel", description="[SYMBOL] week|month|last week|last month — per strategy"),
   BotCommand(command="trade_stats", description="[SYMBOL] today|week|month · auto vs manual"),
   BotCommand(command="trade_pips", description="[SYMBOL] [period]"),
   BotCommand(command="help", description="Trade command reference"),
