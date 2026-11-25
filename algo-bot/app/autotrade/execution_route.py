@@ -624,6 +624,25 @@ def resolve_execution_route_plan(
       scaled = _market_with_limit_scale_plan()
       if scaled is not None:
         return scaled
+    # Owner 25 Nov 2026 (XAU FVG SELL 3535.24-3538.33 confirmed with the bid already at 3536.67: the ladder rested 3537.00 / 3538.00 limits above the market and
+    # waited): once price is inside the zone the analysis engine published, an XAU zone entry goes in at once. L1 is a market order at the live quote and the
+    # deeper legs rest as limits one price step apart toward the far edge of the same zone (the 60/20/20 split, spacing and risk leg unchanged). Outside the zone
+    # nothing changes: the ladder still rests at the zone's own edge. Rollback: execution.entry.inside_zone_market_entry_enabled false.
+    if manual_xau_ladder and split_ok and geometry == "inside" and inside_zone_market_entry_enabled and not scalp:
+      inside_ladder = _xau_price_ladder(side=side, start=quote, low=low, high=high, digits=digits, pip_size=ladder_pip, settings=ladder, auto_ratios=True)
+      if inside_ladder is None and ladder_required:
+        return _ladder_unavailable("the untraded part of the zone beyond the live quote is too shallow")
+      if inside_ladder is not None:
+        inside_prices, inside_ratios = inside_ladder
+        return ExecutionRoutePlan(
+          ROUTE_MARKET_WITH_LIMIT_SCALE,
+          inside_prices[0],
+          inside_prices,
+          geometry,
+          "execution policy: XAU in-zone market entry (L1 market now, deeper legs as limits)",
+          True,
+          planned_leg_volume_ratios=inside_ratios,
+        )
     if distribution in {"zone_split", "zone_scale"} or (
       distribution == "either" and split_ok
     ):

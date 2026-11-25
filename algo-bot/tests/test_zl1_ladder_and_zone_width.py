@@ -139,6 +139,29 @@ class RouteTests(unittest.TestCase):
     self.assertEqual(plan.planned_leg_entry_prices, (4302.0, 4301.0, 4300.0))
     self.assertTrue(all(price <= 4302.0 for price in plan.planned_leg_entry_prices), "no leg above the live quote: it would fill at once")
 
+  def test_price_inside_the_zone_enters_l1_at_market_at_once(self):
+    # Owner 25 Nov 2026: production XAU FVG SELL 3535.24-3538.33 confirmed with the bid at 3536.67. The ladder used to rest 3537.00 / 3538.00 limits above
+    # the market; now L1 is a market order at the quote and the deeper leg rests one price step further into the same zone.
+    plan = self.route("SELL", 3536.67, 3535.24, 3538.33, strategy="FVG", distribution="zone_split")
+    self.assertTrue(plan.valid)
+    self.assertEqual(plan.route, "market_with_limit_scale")
+    self.assertEqual(plan.planned_leg_entry_prices, (3536.67, 3537.67))
+    self.assertEqual(plan.planned_leg_volume_ratios, (0.6, 0.4))
+    self.assertTrue(all(3535.24 <= price <= 3538.33 for price in plan.planned_leg_entry_prices), "every leg stays inside the analysis engine's zone")
+
+  def test_price_outside_the_zone_still_rests_the_ladder_at_the_zone_edge(self):
+    plan = self.route("SELL", 3533.00, 3535.24, 3538.33, strategy="FVG", distribution="zone_split")
+    self.assertEqual(plan.route, "zone_split")
+    self.assertEqual(plan.planned_leg_entry_prices, (3535.24, 3536.24, 3537.24))
+
+  def test_the_in_zone_market_entry_can_be_switched_off(self):
+    plan = resolve_execution_route_plan(
+      direction="SELL", order_type_preference="limit", entry_distribution="zone_split", executable_quote=3536.67, zone_low=3535.24, zone_high=3538.33,
+      atr=7.0, zone_fill_enabled=True, zone_fill_min_atr=0.5, digits=2, pip_size=0.1, strategy="FVG", manual_xau_ladder=True, ladder_settings=LADDER,
+      inside_zone_market_entry_enabled=False,
+    )
+    self.assertEqual(plan.route, "zone_split")
+
   def test_a_sell_zone_mirrors_it(self):
     plan = self.route("SELL", 4301.0, 4300.0, 4303.0)
     self.assertEqual(plan.planned_leg_entry_prices, (4301.0, 4302.0, 4303.0))
