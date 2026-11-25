@@ -28,6 +28,9 @@
 // rate before 1R is the share of trades that ended at a full stop with no target booked (TP1 is 1R on XAU).
 //
 //	go run ./cmd/klstudy -capture xau.json -trades kl_trades.jsonl -config ../config/apexvoid.yml [-out per_trade.jsonl]
+//
+// PR-KL14 adds two read-only modes: "klstudy attribution" (the same captures through several pinned builds, setups added and removed per step:
+// attribution.go) and "klstudy funnel" (v13's refusal funnel and the v13 class of every v12 setup: funnel.go).
 package main
 
 import (
@@ -83,6 +86,22 @@ type verdict struct {
 }
 
 func main() {
+	if len(os.Args) > 1 {
+		var run func([]string) error
+		switch os.Args[1] {
+		case "attribution":
+			run = runAttribution
+		case "funnel":
+			run = runFunnel
+		}
+		if run != nil {
+			if err := run(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, "klstudy "+os.Args[1]+":", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
 	capturePath := flag.String("capture", "", "XAU bar capture (tools.capture_bars)")
 	tradesPath := flag.String("trades", "", "trades jsonl (see the command's documentation for the query)")
 	configPath := flag.String("config", "../config/apexvoid.yml", "config")

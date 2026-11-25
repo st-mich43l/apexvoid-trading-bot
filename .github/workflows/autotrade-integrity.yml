@@ -46,6 +46,10 @@ jobs:
         working-directory: algo-bot
         run: python scripts/xau_review_replay.py --selftest
 
+      - name: KL14 Key Level attribution script self-test
+        working-directory: algo-bot
+        run: python scripts/kl_attribution.py --selftest
+
   go-analysis:
     name: Go analysis engine builds
     runs-on: ubuntu-latest

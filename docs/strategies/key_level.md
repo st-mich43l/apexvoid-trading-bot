@@ -311,3 +311,8 @@ target counts as a stop; M15-replayed trades are coarse; small n, so a variant m
 | XAU | `require_reaction_sweep: true` | 28 Oct 2026 owner report: swept setups held their edge in every period, unswept ones lost it (measured on XAU only). |
 | GBPJPY | `minimum_key_touches: 3`, `require_explicit_role: true` | 25 Aug 2026: Key Level was 0/4 (-118 pips). Silent until v9 (no level had an explicit role); since v9 it publishes levels whose structure is pure swing lows (BUY) or pure swing highs (SELL), 63 candidates in a 7-day replay. |
 | EURUSD | `minimum_key_touches: 3`, `require_reaction_sweep: true` | 6 Nov 2026 owner decision: 51 live trades, 55% full stops, -6.64 R on the 23 with a net R. Not measured on FX: replay 461 -> 165 setups, stop rate 38% -> 42%, no measured gain. `require_explicit_role` is not used: every EURUSD setup carries `m5_key_level_role_ambiguous`, so it would disable the strategy on the pair. Review after about 100 trades. |
+
+## KL14 attribution (25 Nov 2026, read-only)
+
+What broke XAU Key Level after 9 Nov and why v13 is near-silent: [key_level-kl14-attribution.md](key_level-kl14-attribution.md). Result R4 (no single
+component reproduces the drop on bars) and R5 keep (v13's sparsity is selection: most dropped v12 levels are not in the major book at all).
