@@ -14,6 +14,13 @@ from aiogram.types import Message
 from app.signals.chart_analysis import analyse_chart_image
 from app.autotrade.delivery import auto_trade_status_text, set_auto_trade_paused
 from app.autotrade.funnel_diagnostics import auto_trade_funnel_text
+from app.autotrade.strategy_funnel import (
+  MAX_DAYS as STRATEGY_FUNNEL_MAX_DAYS,
+  fetch_strategy_funnel,
+  format_strategy_funnel,
+  parse_args as parse_strategy_funnel_args,
+  period_window as strategy_funnel_window,
+)
 from app.autotrade.setups_report import current_market_setups_text
 from app.signals.manual_execution import (
   list_open_algo_auto_positions,
@@ -114,6 +121,7 @@ Daily <code>#N</code> is per symbol.
 <code>/trade_map [SYMBOL]</code>
 <code>/algo_status</code>
 <code>/algo_setups [SYMBOL]</code> — current actionable setups vs structural memory
+<code>/strategy_funnel [SYMBOL] [week|month|last week|last month|days]</code> — setups → trades → net R per strategy
 <code>/scan_report [SYMBOL] [hours]</code>
 <code>/algo_pause</code>
 <code>/algo_resume</code>
@@ -268,6 +276,40 @@ async def handle_algo_funnel(msg: Message) -> None:
   if len(text) > 4000:
     text = text[:3990] + "\n… (truncated)"
   await msg.answer(text)
+
+
+@router.message(Command("strategy_funnel"), F.chat.type == "private")
+async def handle_strategy_funnel(msg: Message) -> None:
+  if not _is_owner(msg):
+    return
+  usage = (
+    "Usage: <code>/strategy_funnel [SYMBOL] [week|month|last week|last month|days]</code>\n"
+    f"Default this week. Days 1-{STRATEGY_FUNNEL_MAX_DAYS}. Example: <code>/strategy_funnel XAU last month</code>"
+  )
+  parsed = parse_strategy_funnel_args(_command_args(msg))
+  if parsed is None:
+    await msg.answer(usage)
+    return
+  period, remainder = parsed
+  symbol, rest = _take_symbol(remainder, default=None)
+  if rest.strip():
+    await msg.answer(usage)
+    return
+  now = datetime.now(ZoneInfo(runtime_config.telegram.presentation.seq_reset_tz))
+  window = strategy_funnel_window(period, now)
+  try:
+    rows = await fetch_strategy_funnel(window.start, window.end, symbol)
+    previous = None
+    if window.previous is not None:
+      previous = await fetch_strategy_funnel(window.previous.start, window.previous.end, symbol)
+  except Exception:
+    log.exception("strategy_funnel failed symbol=%s period=%s", symbol, period)
+    await msg.answer(
+      "⚠️ <b>Strategy funnel unavailable</b>\n"
+      "Could not read the database — check bot logs."
+    )
+    return
+  await msg.answer(format_strategy_funnel(rows, window, symbol, previous))
 
 
 @router.message(Command("algo_setups", "setups"), F.chat.type == "private")
