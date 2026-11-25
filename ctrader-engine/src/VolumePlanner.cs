@@ -235,6 +235,76 @@ public static class VolumePlanner
   }
 
   /// <summary>
+  /// The share of the filled remainder the CURRENT target books (owner 25 Nov 2026: every TP level books a partial). <paramref name="remainingRatios"/> are the
+  /// declared close ratios of the targets still ahead, the current one first. The remainder, in broker steps, is apportioned across those targets by their ratios
+  /// with the largest-remainder rule (no step is lost to rounding; a tie goes to the later target), then every target that got less than the broker minimum is lifted
+  /// to it by taking steps from the largest allocation, while the volume allows a minimum for each. When the volume cannot give every remaining target the
+  /// minimum, the earliest targets book first, but a minimum is always left for the final target: the current target books the minimum only when at least two
+  /// minimums remain, and books nothing otherwise (the final target closes what is left). The final target always closes everything.
+  /// </summary>
+  public static long PlanTargetShare(
+    long remainingVolume,
+    IReadOnlyList<decimal> remainingRatios,
+    SymbolInfo symbol
+  )
+  {
+    if (remainingVolume <= 0 || remainingRatios.Count == 0)
+    {
+      return 0;
+    }
+    if (remainingRatios.Count == 1)
+    {
+      return remainingVolume;
+    }
+    var step = Math.Max(1L, symbol.StepVolume);
+    var minimumSteps = symbol.MinVolume > 0 ? (symbol.MinVolume + step - 1) / step : 1L;
+    var steps = remainingVolume / step;
+    var count = remainingRatios.Count;
+    if (steps < minimumSteps * count)
+    {
+      return steps >= 2 * minimumSteps ? minimumSteps * step : 0;
+    }
+    var ratios = remainingRatios.Select(r => r > 0 ? r : 0m).ToArray();
+    var ratioSum = ratios.Sum();
+    if (ratioSum <= 0)
+    {
+      ratios = Enumerable.Repeat(1m, count).ToArray();
+      ratioSum = count;
+    }
+    var allocation = new long[count];
+    var remainders = new decimal[count];
+    var given = 0L;
+    for (var i = 0; i < count; i++)
+    {
+      var quota = steps * ratios[i] / ratioSum;
+      allocation[i] = (long)decimal.Floor(quota);
+      remainders[i] = quota - allocation[i];
+      given += allocation[i];
+    }
+    // Largest remainder first; on a tie the later target (the trade keeps more volume running).
+    var order = Enumerable.Range(0, count).OrderByDescending(i => remainders[i]).ThenByDescending(i => i).ToArray();
+    for (var k = 0; given < steps; k = (k + 1) % count)
+    {
+      allocation[order[k]]++;
+      given++;
+    }
+    for (var i = 0; i < count; i++)
+    {
+      while (allocation[i] < minimumSteps)
+      {
+        var donor = Enumerable.Range(0, count).Where(j => allocation[j] > minimumSteps).OrderByDescending(j => allocation[j]).ThenByDescending(j => j).FirstOrDefault(-1);
+        if (donor < 0)
+        {
+          break;
+        }
+        allocation[donor]--;
+        allocation[i]++;
+      }
+    }
+    return allocation[0] * step;
+  }
+
+  /// <summary>
   /// Choose a broker-valid close volume for a partial TP against the
   /// currently remaining filled volume (after cancelled unfilled legs are
   /// removed). Desired size is snapped down to StepVolume. When a valid

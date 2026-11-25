@@ -69,12 +69,9 @@ execution:
   xau_ladder:
     min_leg_spacing_pips: 10
     spread_across_zone: false
-    # X3 (owner 23 Nov 2026, PR-X0 rule D4 = Vc): the AUTO Algo non-scalp ladder weights its volume toward the deep legs, 20/20/60 over three prices and 40/60 over two.
-    # Prices, spacing and spread_across_zone are unchanged. Manual /algo, scalps, FX and Trendline single-price keep their own splits (60/20/20, 60/40 for the manual ladder).
-    # PR-X0 replay of 13 zone trades: V0 -0.25 R_v0, Vc +0.37 (+0.05 per trade); re-measure at about 40 post-deploy zone trades. Rollback: delete this key.
-    auto_ratios:
-      "3": [0.2, 0.2, 0.6]
-      "2": [0.4, 0.6]
+    # auto_ratios (X3, 23 Nov 2026: 20/20/60 for the Auto Algo ladder) was REMOVED by the owner on 25 Nov 2026: the Auto Algo XAU ladder is 60/20/20 again (60/40 over
+    # two prices), the same split as Manual /algo. Adding the key back (e.g. "3": [0.2, 0.2, 0.6] and "2": [0.4, 0.6]) re-enables the deep-weighted split; do not
+    # change it without the owner's sign-off.
 
   scaling:
     add:

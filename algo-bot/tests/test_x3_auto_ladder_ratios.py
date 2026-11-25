@@ -1,4 +1,6 @@
-"""X3: the Auto Algo XAU non-scalp ladder splits its volume 20/20/60 (40/60 over two prices); everything else keeps its split.
+"""X3: the Auto Algo XAU non-scalp ladder splits its volume 20/20/60 (40/60 over two prices) when ``execution.xau_ladder.auto_ratios`` declares it; everything else
+keeps its split. Owner 25 Nov 2026: the key is removed from the shipped config, so production is back on 60/20/20; the Vc cases below run with the key opted in
+(``opt_in_vc``) to keep the opt-in path working.
 
 Run from ``algo-bot``:  ``python -m unittest tests.test_x3_auto_ladder_ratios``.
 PR-X0 rule D4 picked Vc (the owner's 23 Nov decision): prices, spacing and ``spread_across_zone`` are unchanged, only the volume weights move toward the deep legs. The
@@ -21,7 +23,6 @@ from app.autotrade import xau_ladder  # noqa: E402
 from app.autotrade.execution_route import resolve_execution_route_plan  # noqa: E402
 from app.autotrade.trade_plan import TradePlanEntryLeg  # noqa: E402
 from app.autotrade.trade_plan_builder import build_trade_plan_from_strategy_match, fit_entry_legs_to_volume  # noqa: E402
-from app.core import instrument_geometry  # noqa: E402
 from app.core.config import ConfigurationError, load_runtime_config, runtime_config  # noqa: E402
 from tests.test_fx1_sizing import EURUSD_ENVELOPE  # noqa: E402
 from tests.test_kl12_strategy_targeting import PIP, XAU, kl_match  # noqa: E402
@@ -29,6 +30,14 @@ from tests.test_kl12_strategy_targeting import PIP, XAU, kl_match  # noqa: E402
 VC = xau_ladder.LadderSettings(auto_ratios=xau_ladder.parse_auto_ratios({3: [0.2, 0.2, 0.6], 2: [0.4, 0.6]}))
 DEFAULT = xau_ladder.LadderSettings()
 SPEC_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "contracts", "autotrade", "xau-ladder-spec.json")
+
+
+def opt_in_vc(test):
+  """Run ``test`` as if ``auto_ratios`` were configured (the shipped config no longer declares it)."""
+  for target in ("app.autotrade.execution_policy.ladder_settings", "app.autotrade.trade_plan_builder.ladder_settings"):
+    patcher = mock.patch(target, lambda cfg: VC)
+    patcher.start()
+    test.addCleanup(patcher.stop)
 
 
 def route(direction, quote, low, high, *, strategy="Demand", preference="limit", settings=VC):
@@ -45,9 +54,10 @@ def plan_of(match, spot, **kwargs):
 
 
 class ConfigTests(unittest.TestCase):
-  def test_the_shipped_config_declares_vc(self):
+  def test_the_shipped_config_is_back_on_60_20_20(self):
+    # Owner 25 Nov 2026: auto_ratios removed, the Auto Algo ladder uses the default 60/20/20 again; the Vc split stays available through the key (VC below).
     settings = xau_ladder.ladder_settings(runtime_config)
-    self.assertEqual(settings.auto_ratio_table(), {2: (0.4, 0.6), 3: (0.2, 0.2, 0.6)})
+    self.assertIsNone(settings.auto_ratio_table())
     self.assertEqual((settings.min_spacing_pips, settings.spread_across_zone), (Decimal("10"), False))  # prices and spacing are untouched
 
   def test_the_default_split_is_still_60_20_20(self):
@@ -156,7 +166,13 @@ class RouteTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
+  def test_the_shipped_auto_xau_plan_is_60_20_20(self):
+    match, spot = kl_match()
+    plan = plan_of(match, spot)
+    self.assertEqual([str(leg.volume_ratio) for leg in plan.entry.legs], ["0.6", "0.2", "0.2"])
+
   def test_an_auto_xau_three_leg_plan_carries_20_20_60(self):
+    opt_in_vc(self)
     match, spot = kl_match()
     plan = plan_of(match, spot)
     self.assertEqual([str(leg.volume_ratio) for leg in plan.entry.legs], ["0.2", "0.2", "0.6"])
@@ -165,7 +181,8 @@ class PlanTests(unittest.TestCase):
 
   def test_only_the_ratios_differ_from_the_default_plan(self):
     match, spot = kl_match()
-    vc = plan_of(match, spot).to_dict()
+    with mock.patch("app.autotrade.execution_policy.ladder_settings", lambda cfg: VC), mock.patch("app.autotrade.trade_plan_builder.ladder_settings", lambda cfg: VC):
+      vc = plan_of(match, spot).to_dict()
     with mock.patch("app.autotrade.execution_policy.ladder_settings", lambda cfg: DEFAULT), mock.patch("app.autotrade.trade_plan_builder.ladder_settings", lambda cfg: DEFAULT):
       default = plan_of(match, spot).to_dict()
     self.assertEqual([leg["price"] for leg in vc["entry"]["legs"]], [leg["price"] for leg in default["entry"]["legs"]])
@@ -198,10 +215,9 @@ class PlanTests(unittest.TestCase):
   def test_the_manual_algo_ladder_keeps_its_own_ratios(self):
     from app.signals import manual_plan
 
-    effective = instrument_geometry.instrument_runtime("XAU")
-    settings = xau_ladder.ladder_settings(effective)
-    self.assertIsNotNone(settings.auto_ratio_table())  # the Auto split is configured ...
-    prices, ratios = xau_ladder.price_ladder("BUY", 4303.0, 4300.0, settings=settings)  # ... and the manual path calls price_ladder without it
+    settings = VC
+    self.assertIsNotNone(settings.auto_ratio_table())  # with the Auto split configured ...
+    prices, ratios = xau_ladder.price_ladder("BUY", 4303.0, 4300.0, settings=settings)  # ... the manual path calls price_ladder without it
     self.assertEqual(ratios, (0.6, 0.2, 0.2))
     self.assertEqual(manual_plan.MANUAL_LADDER_RATIOS, (Decimal("0.8"), Decimal("0.2")))
     import inspect
@@ -211,6 +227,9 @@ class PlanTests(unittest.TestCase):
 
 
 class VolumeFitTests(unittest.TestCase):
+  def setUp(self):
+    opt_in_vc(self)
+
   def entry(self, kind="market_with_limit_scale", ratios=("0.2", "0.2", "0.6")):
     from app.autotrade.trade_plan import TradePlanEntry
 
@@ -283,10 +302,13 @@ class ProfileTests(unittest.TestCase):
     self.assertEqual(profile(symbol="EURUSD", strategy="Key Level", ratios=(0.2, 0.2, 0.6), settings=VC), "default")
     self.assertEqual(profile(symbol="XAU", strategy="Supply Demand", ratios=(0.2, 0.2, 0.6), settings=DEFAULT), "default")
 
-  def test_a_real_xau_policy_evaluation_measures_auto_vc(self):
+  def test_a_real_xau_policy_evaluation_measures_the_profile(self):
     from app.autotrade.execution_policy import evaluate_execution_policy
 
     match, spot = kl_match()
+    shipped = evaluate_execution_policy(match, spot_price=spot, regime="trend", pip_size=0.1, cfg=runtime_config, executable_quote=spot)
+    self.assertEqual(shipped.measured.get("planned_ladder_ratio_profile"), "default")
+    opt_in_vc(self)
     result = evaluate_execution_policy(match, spot_price=spot, regime="trend", pip_size=0.1, cfg=runtime_config, executable_quote=spot)
     self.assertEqual(result.measured.get("planned_ladder_ratio_profile"), "auto_vc")
 
