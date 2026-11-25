@@ -227,6 +227,12 @@ func (w *SymbolWorker) ApplyWithResult(event marketdata.BarEvent) (AnalysisSnaps
 			w.telemetry.CountStrategyRefusal(symbolLabel, string(id), string(refusal.Timeframe), refusal.Reason, n)
 		}
 	}
+	// Features a strategy measured in its own evaluation (Key Level v13: kl_major_levels_in_book{source}, summed over evaluations).
+	for id, taken := range evaluation.Features {
+		for feature, n := range taken {
+			w.telemetry.CountStrategyFeature(symbolLabel, string(id), string(feature.Timeframe), feature.Name, feature.Value, n)
+		}
+	}
 
 	doneOpp := w.telemetry.Time(telemetry.PhaseOpportunity, symbolLabel, tfLabel)
 	// Invalidation is evaluated before this bar's strategy observations so a
