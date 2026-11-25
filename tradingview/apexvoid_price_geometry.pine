@@ -1,0 +1,513 @@
+//@version=6
+indicator("ApexVoid | Price Geometry v1.0", "AV PG v1.0", overlay = true, max_bars_back = 1000, max_lines_count = 40, max_labels_count = 40)
+
+// APEXVOID PRICE GEOMETRY
+// Repository: apexvoid-trading-bot/tradingview/apexvoid_price_geometry.pine
+// Major trendlines (ascending support, descending resistance) and parallel price channels, drawn through actual confirmed swing reactions.
+// Companion to apexvoid_price_action.pine: no structure, zones, liquidity, key levels or volume here, and no signals.
+// Every state change (swing, line publication, touch, break, channel) needs a CLOSED chart bar; nothing reads a later bar.
+// The rules are mirrored by an offline reference model, tradingview/tests/price_geometry_ref.py, with fixtures in tradingview/tests.
+// Documentation: tradingview/README.md.
+
+const string G1 = "01  Swing Geometry"
+const string G2 = "02  Trendlines"
+const string G3 = "03  Channels"
+const string G4 = "04  Appearance"
+const string G5 = "05  Performance"
+
+string sensitivity = input.string("Auto", "Swing sensitivity", options = ["Auto", "Manual"], group = G1, tooltip = "Auto pivot length by chart timeframe: up to M15 6, M30 7, H1 and H4 8, above 10 bars on each side.")
+int manualPivot = input.int(6, "Manual pivot length (bars each side)", minval = 2, maxval = 30, group = G1)
+float minSwingATR = input.float(1.5, "Minimum swing displacement (ATR)", minval = 0.25, maxval = 6.0, step = 0.05, group = G1, tooltip = "A swing of the other side is kept only when price moved this far (ATR at the pivot bar) from the previous swing. A same-side pivot replaces the previous swing only when it is more extreme.")
+int maxSwings = input.int(24, "Maximum retained swings", minval = 8, maxval = 60, group = G1)
+
+bool showSupport = input.bool(true, "Show ascending support", group = G2)
+bool showResistance = input.bool(true, "Show descending resistance", group = G2)
+int minSep = input.int(10, "Minimum anchor separation (bars)", minval = 3, maxval = 200, group = G2, tooltip = "Also the minimum distance between two independent touches.")
+float touchTolATR = input.float(0.20, "Touch tolerance (ATR)", minval = 0.02, maxval = 1.0, step = 0.01, group = G2)
+float minDepartureATR = input.float(1.0, "Minimum departure between touches (ATR)", minval = 0.1, maxval = 5.0, step = 0.05, group = G2)
+float breakTolATR = input.float(0.15, "Break tolerance (ATR)", minval = 0.0, maxval = 1.0, step = 0.01, group = G2)
+int breakCloses = input.int(1, "Break confirmation closes", minval = 1, maxval = 2, group = G2)
+int maxAge = input.int(600, "Retire a line untouched for (bars)", minval = 50, maxval = 900, group = G2)
+
+bool showChannels = input.bool(true, "Show price channels", group = G3)
+bool showMid = input.bool(false, "Show channel midpoint", group = G3)
+bool showFill = input.bool(false, "Show channel fill", group = G3)
+float chanMinWidthATR = input.float(2.0, "Minimum channel width (ATR)", minval = 0.5, maxval = 10.0, step = 0.1, group = G3)
+
+color bullColor = input.color(#00C7AE, "Support colour", group = G4)
+color bearColor = input.color(#F26B85, "Resistance colour", group = G4)
+color chanColor = input.color(#8A93A6, "Channel colour", group = G4)
+int lineWidth = input.int(1, "Line width", minval = 1, maxval = 2, group = G4)
+bool showMarkers = input.bool(false, "Show touch markers", group = G4)
+bool showCaptions = input.bool(false, "Show endpoint captions", group = G4)
+bool showBroken = input.bool(false, "Show broken geometry", group = G4)
+
+int maxLookback = input.int(250, "Maximum candidate lookback (bars)", minval = 50, maxval = 500, group = G5)
+int maxHistory = input.int(4, "Maximum retained historical drawings", minval = 0, maxval = 10, group = G5)
+
+// Internal constants (deliberately not settings).
+const float MAX_WICK_ATR = 0.5      // before publication, a wick deeper than this beyond the line rejects a candidate
+const float MIN_RISE_ATR = 0.5      // the two anchors must differ by at least this much, else the line is effectively horizontal
+const float MAX_DIST_ATR = 20.0     // a line farther than this from the close is irrelevant (rejected / retired); wider than the widest channel
+const float CH_MAX_WIDTH_ATR = 15.0 // a wider channel is not a channel of the current move
+const int RECENT_ANCHORS = 3        // second anchors tried per search: the most recent swings of the side
+const int EARLIER_ANCHORS = 6       // first anchors tried per second anchor
+const int RAW_MAX = 64              // retained raw pivots (touch reactions) per side
+const int EXT_BARS = 10             // forward projection drawn beyond the last bar
+const int MARKER_MAX = 30
+
+int chartSecs = nz(timeframe.in_seconds(), 900)
+int pivotLen = sensitivity == "Manual" ? manualPivot : chartSecs <= 900 ? 6 : chartSecs <= 1800 ? 7 : chartSecs <= 14400 ? 8 : 10
+float atr = ta.atr(14)
+
+// ---------------------------------------------------------------- types
+type TL
+    bool support
+    int b1
+    float p1
+    int b2
+    float p2
+    int published
+    int touches = 2
+    int lastTouch
+    int breakCount = 0
+    string state = "active"
+    int ended
+    line ln
+    label cap
+
+type CH
+    TL primary
+    int oBar
+    float oPrice
+    float offset
+    int published
+    string state = "active"
+    int breakCount = 0
+    line ln
+    line mid
+    linefill fill
+    label cap
+
+method priceAt(TL this, int t) =>
+    this.p1 + (this.p2 - this.p1) / (this.b2 - this.b1) * (t - this.b1)
+
+// ---------------------------------------------------------------- history access (closed bars only; k is a bar index <= bar_index)
+f_h(int k) => high[bar_index - k]
+f_l(int k) => low[bar_index - k]
+f_c(int k) => close[bar_index - k]
+f_atr(int k) =>
+    float a = atr[bar_index - k]
+    na(a) or a <= 0 ? na : a
+
+// A pivot n bars back: strictly beyond each of the n bars before it, at least as extreme as each of the n bars after it (ties keep the first bar).
+f_isPivot(bool isHigh, int n) =>
+    bool ok = bar_index >= 2 * n
+    if ok
+        float v = isHigh ? high[n] : low[n]
+        for j = 1 to n
+            float lv = isHigh ? high[n + j] : low[n + j]
+            float rv = isHigh ? high[n - j] : low[n - j]
+            if isHigh ? (lv >= v or rv > v) : (lv <= v or rv < v)
+                ok := false
+                break
+    ok
+
+bool rawPivotHigh = f_isPivot(true, pivotLen)
+bool rawPivotLow = f_isPivot(false, pivotLen)
+
+// ---------------------------------------------------------------- state
+var int[] swBar = array.new<int>()
+var float[] swPrice = array.new<float>()
+var bool[] swHigh = array.new<bool>()
+var float[] swAtr = array.new<float>()
+var int[] rawLows = array.new<int>()
+var int[] rawHighs = array.new<int>()
+var TL sup = na
+var TL res = na
+var CH chan = na
+var line[] histLines = array.new<line>()
+var label[] markers = array.new<label>()
+
+// The alternating list of significant swings (see the Swing displacement tooltip). Returns true when the list changed on this side.
+f_acceptSwing(bool isHigh, int k) =>
+    float price = isHigh ? f_h(k) : f_l(k)
+    float a = f_atr(k)
+    bool changed = false
+    if not na(a)
+        int n = array.size(swBar)
+        if n == 0
+            array.push(swBar, k), array.push(swPrice, price), array.push(swHigh, isHigh), array.push(swAtr, a)
+            changed := true
+        else if array.get(swHigh, n - 1) == isHigh
+            float last = array.get(swPrice, n - 1)
+            if isHigh ? price > last : price < last
+                array.set(swBar, n - 1, k), array.set(swPrice, n - 1, price), array.set(swAtr, n - 1, a)
+                changed := true
+        else if math.abs(price - array.get(swPrice, n - 1)) >= minSwingATR * a
+            array.push(swBar, k), array.push(swPrice, price), array.push(swHigh, isHigh), array.push(swAtr, a)
+            if array.size(swBar) > maxSwings
+                array.shift(swBar), array.shift(swPrice), array.shift(swHigh), array.shift(swAtr)
+            changed := true
+    changed
+
+f_excursion(TL ln, int k) =>
+    float a = f_atr(k)
+    na(a) ? 0.0 : ln.support ? (f_h(k) - ln.priceAt(k)) / a : (ln.priceAt(k) - f_l(k)) / a
+
+f_near(TL ln, int k) =>
+    float a = f_atr(k)
+    na(a) ? false : math.abs((ln.support ? f_l(k) : f_h(k)) - ln.priceAt(k)) <= touchTolATR * a
+
+// A close beyond the line (or the parallel at offset): below a support / above a resistance, or, with opposing, beyond the channel's opposing boundary.
+f_closeBeyond(TL ln, int k, float offset, bool opposing) =>
+    float a = f_atr(k)
+    bool out = false
+    if not na(a)
+        float level = ln.priceAt(k) + offset
+        float tol = breakTolATR * a
+        bool below = f_c(k) < level - tol
+        bool above = f_c(k) > level + tol
+        out := opposing ? (ln.support ? above : below) : (ln.support ? below : above)
+    out
+
+// A two-anchor candidate as of this closed bar: returns [line or na, displacement between the anchors (ATR), distance to the close (ATR)].
+f_validate(bool support, int aBar, float aPrice, int bBar, float bPrice, float bAtr) =>
+    int t = bar_index
+    TL result = na
+    float anchorExc = 0.0
+    float distance = na
+    float rise = support ? bPrice - aPrice : aPrice - bPrice
+    // Cheap rejections first: separation, lookback, slope sign, flatness.
+    if bBar - aBar >= minSep and aBar >= t - maxLookback and rise > 0 and rise >= MIN_RISE_ATR * bAtr
+        TL ln = TL.new(support, aBar, aPrice, bBar, bPrice, t, 2, aBar)
+        int[] raw = support ? rawLows : rawHighs
+        int rawN = array.size(raw)
+        int ri = 0
+        while ri < rawN and array.get(raw, ri) <= aBar
+            ri += 1
+        int touches = 1
+        int lastTouch = aBar
+        float exc = 0.0
+        int closesBeyond = 0
+        bool ok = true
+        for k = aBar + 1 to t
+            float ak = f_atr(k)
+            if na(ak)
+                ok := false
+                break
+            float lk = ln.priceAt(k)
+            if f_closeBeyond(ln, k, 0.0, false)
+                closesBeyond += 1
+                if closesBeyond >= breakCloses
+                    ok := false
+                    break
+            else
+                closesBeyond := 0
+            float wick = support ? lk - f_l(k) : f_h(k) - lk
+            if wick > MAX_WICK_ATR * ak
+                ok := false
+                break
+            bool isRaw = false
+            while ri < rawN and array.get(raw, ri) < k
+                ri += 1
+            if ri < rawN and array.get(raw, ri) == k
+                isRaw := true
+            if k == bBar
+                if anchorExc < minSwingATR
+                    ok := false
+                    break
+                touches += 1
+                lastTouch := k
+                exc := 0.0
+                continue
+            if isRaw and f_near(ln, k) and k - lastTouch >= minSep and exc >= minDepartureATR and (k > bBar or bBar - k >= minSep)
+                touches += 1
+                lastTouch := k
+                exc := 0.0
+                continue
+            float e = f_excursion(ln, k)
+            exc := math.max(exc, e)
+            if k < bBar
+                anchorExc := math.max(anchorExc, e)
+        float atrT = f_atr(t)
+        if ok and not na(atrT)
+            distance := math.abs(close - ln.priceAt(t)) / atrT
+            if distance <= MAX_DIST_ATR
+                ln.touches := touches
+                ln.lastTouch := lastTouch
+                result := ln
+    [result, anchorExc, distance]
+
+// Lexicographic preference (no weighted score): more touches (3 or more alike), larger anchor displacement in whole ATRs (capped at 4), longer span,
+// the line nearer the close, then the later second and first anchors. Returns true when candidate A is preferred over candidate B.
+f_better(TL a, float aExc, float aDist, TL b, float bExc, float bDist) =>
+    int ta = math.min(a.touches, 3)
+    int tb = math.min(b.touches, 3)
+    int ea = math.min(int(math.floor(aExc)), 4)
+    int eb = math.min(int(math.floor(bExc)), 4)
+    int sa = a.b2 - a.b1
+    int sb = b.b2 - b.b1
+    ta != tb ? ta > tb : ea != eb ? ea > eb : sa != sb ? sa > sb : aDist != bDist ? aDist < bDist : a.b2 != b.b2 ? a.b2 > b.b2 : a.b1 > b.b1
+
+// The best valid candidate of one side: second anchors among the most recent RECENT_ANCHORS swings of the side, first anchors among the EARLIER_ANCHORS before it.
+f_search(bool support) =>
+    int[] idx = array.new<int>()
+    if array.size(swBar) > 0
+        for i = 0 to array.size(swBar) - 1
+            if array.get(swHigh, i) != support
+                array.push(idx, i)
+    TL best = na
+    float bestExc = 0.0
+    float bestDist = 0.0
+    int m = array.size(idx)
+    if m >= 2
+        int bStop = math.max(1, m - RECENT_ANCHORS)
+        for bi = m - 1 to bStop
+            int bj = array.get(idx, bi)
+            int aStop = math.max(0, bi - EARLIER_ANCHORS)
+            for ai = bi - 1 to aStop
+                int aj = array.get(idx, ai)
+                [cand, exc, dist] = f_validate(support, array.get(swBar, aj), array.get(swPrice, aj), array.get(swBar, bj), array.get(swPrice, bj), array.get(swAtr, bj))
+                if not na(cand)
+                    if na(best) or f_better(cand, exc, dist, best, bestExc, bestDist)
+                        best := cand
+                        bestExc := exc
+                        bestDist := dist
+    best
+
+// One channel on a line: the opposing confirmed swing with the largest offset beyond the line (the later one on a tie), between the minimum width and
+// CH_MAX_WIDTH_ATR, with no confirmed close beyond the opposing boundary since the first anchor. Built once; never widened.
+f_buildChannel(TL ln) =>
+    int t = bar_index
+    CH result = na
+    int oBar = na
+    float oPrice = na
+    float d = na
+    int n = array.size(swBar)
+    if n > 0
+        for i = 0 to n - 1
+            int sb = array.get(swBar, i)
+            if array.get(swHigh, i) == ln.support and sb > ln.b1
+                float off = array.get(swPrice, i) - ln.priceAt(sb)
+                if (off > 0) == ln.support and off != 0
+                    if na(d) or math.abs(off) > math.abs(d) or (math.abs(off) == math.abs(d) and sb > oBar)
+                        d := off
+                        oBar := sb
+                        oPrice := array.get(swPrice, i)
+    float atrT = f_atr(t)
+    if not na(d) and not na(atrT) and math.abs(d) >= chanMinWidthATR * atrT and math.abs(d) <= CH_MAX_WIDTH_ATR * atrT
+        int closesBeyond = 0
+        bool ok = true
+        // Containment over the bounded window: from the first anchor, at most maxLookback bars back.
+        for k = math.max(ln.b1 + 1, t - maxLookback) to t
+            if f_closeBeyond(ln, k, d, true)
+                closesBeyond += 1
+                if closesBeyond >= breakCloses
+                    ok := false
+                    break
+            else
+                closesBeyond := 0
+        if ok
+            result := CH.new(ln, oBar, oPrice, d, t)
+    result
+
+// ---------------------------------------------------------------- drawing
+f_lineColor(TL ln) => ln.support ? bullColor : bearColor
+
+f_drawLine(TL ln) =>
+    int x2 = bar_index + EXT_BARS
+    ln.ln := line.new(ln.b1, ln.p1, x2, ln.priceAt(x2), xloc = xloc.bar_index, color = f_lineColor(ln), width = lineWidth, style = ln.touches >= 3 ? line.style_solid : line.style_dashed)
+    if showCaptions
+        ln.cap := label.new(x2, ln.priceAt(x2), ln.support ? "Support TL" : "Resistance TL", xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.black, 100), textcolor = f_lineColor(ln), size = size.tiny)
+
+// A line that stops being active: kept (faded, ending at its break or retirement bar) only when broken geometry is shown, within maxHistory.
+f_endLine(TL ln) =>
+    if not na(ln.cap)
+        label.delete(ln.cap)
+    if not na(ln.ln)
+        if showBroken and ln.state == "broken" and maxHistory > 0
+            line.set_xy2(ln.ln, ln.ended, ln.priceAt(ln.ended))
+            line.set_color(ln.ln, color.new(f_lineColor(ln), 65))
+            line.set_style(ln.ln, line.style_dotted)
+            array.push(histLines, ln.ln)
+            if array.size(histLines) > maxHistory
+                line.delete(array.shift(histLines))
+        else
+            line.delete(ln.ln)
+
+f_endChannel(CH ch) =>
+    if not na(ch.fill)
+        linefill.delete(ch.fill)
+    if not na(ch.ln)
+        line.delete(ch.ln)
+    if not na(ch.mid)
+        line.delete(ch.mid)
+    if not na(ch.cap)
+        label.delete(ch.cap)
+
+f_drawChannel(CH ch) =>
+    int x2 = bar_index + EXT_BARS
+    TL p = ch.primary
+    int x1 = math.max(p.b1, bar_index - 5000)
+    ch.ln := line.new(x1, p.priceAt(x1) + ch.offset, x2, p.priceAt(x2) + ch.offset, xloc = xloc.bar_index, color = chanColor, width = lineWidth, style = line.style_solid)
+    if showMid
+        ch.mid := line.new(x1, p.priceAt(x1) + ch.offset / 2, x2, p.priceAt(x2) + ch.offset / 2, xloc = xloc.bar_index, color = color.new(chanColor, 50), width = 1, style = line.style_dotted)
+    if showFill and not na(p.ln)
+        ch.fill := linefill.new(p.ln, ch.ln, color.new(chanColor, 94))
+    if showCaptions
+        ch.cap := label.new(x2, p.priceAt(x2) + ch.offset, p.support ? "Channel High" : "Channel Low", xloc = xloc.bar_index, style = label.style_label_left, color = color.new(color.black, 100), textcolor = chanColor, size = size.tiny)
+
+f_marker(TL ln, int k) =>
+    if showMarkers
+        float y = ln.support ? f_l(k) : f_h(k)
+        array.push(markers, label.new(k, y, "", xloc = xloc.bar_index, style = label.style_circle, color = color.new(f_lineColor(ln), 20), size = size.tiny))
+        if array.size(markers) > MARKER_MAX
+            label.delete(array.shift(markers))
+
+// ---------------------------------------------------------------- per closed bar
+// The lifecycle of an active line on this closed bar: a break (breakCloses consecutive closes beyond the break tolerance), an independent touch at a pivot
+// confirmed on this bar, or retirement (untouched for maxAge bars, or farther than MAX_DIST_ATR from the close). A wick alone never breaks a line.
+f_updateLine(TL ln, bool pivotConfirmed) =>
+    int t = bar_index
+    float atrT = f_atr(t)
+    if not na(atrT)
+        if f_closeBeyond(ln, t, 0.0, false)
+            ln.breakCount += 1
+            if ln.breakCount >= breakCloses
+                ln.state := "broken"
+                ln.ended := t
+        else
+            ln.breakCount := 0
+        if ln.state == "active"
+            int k = t - pivotLen
+            if pivotConfirmed and k > ln.b2 and f_near(ln, k) and k - ln.lastTouch >= minSep
+                float exc = 0.0
+                if k - 1 >= ln.lastTouch + 1
+                    for j = ln.lastTouch + 1 to k - 1
+                        exc := math.max(exc, f_excursion(ln, j))
+                if exc >= minDepartureATR
+                    ln.touches += 1
+                    ln.lastTouch := k
+                    f_marker(ln, k)
+            if t - ln.lastTouch > maxAge or math.abs(close - ln.priceAt(t)) > MAX_DIST_ATR * atrT
+                ln.state := "retired"
+                ln.ended := t
+
+if barstate.isconfirmed
+    int t = bar_index
+    int k = t - pivotLen
+    bool lowsChanged = false
+    bool highsChanged = false
+    bool pivotLowNow = false
+    bool pivotHighNow = false
+    if k >= pivotLen
+        pivotLowNow := rawPivotLow
+        pivotHighNow := rawPivotHigh
+        if rawPivotLow
+            array.push(rawLows, k)
+            if array.size(rawLows) > RAW_MAX
+                array.shift(rawLows)
+        if rawPivotHigh
+            array.push(rawHighs, k)
+            if array.size(rawHighs) > RAW_MAX
+                array.shift(rawHighs)
+        bool lastIsHigh = array.size(swHigh) > 0 ? array.get(swHigh, array.size(swHigh) - 1) : false
+        if rawPivotHigh and rawPivotLow
+            if lastIsHigh
+                lowsChanged := f_acceptSwing(false, k) or lowsChanged
+                highsChanged := f_acceptSwing(true, k) or highsChanged
+            else
+                highsChanged := f_acceptSwing(true, k) or highsChanged
+                lowsChanged := f_acceptSwing(false, k) or lowsChanged
+        else if rawPivotHigh
+            highsChanged := f_acceptSwing(true, k)
+        else if rawPivotLow
+            lowsChanged := f_acceptSwing(false, k)
+
+    // Support side, then resistance side: lifecycle of the active line, then a search when its swings changed or it ended.
+    if showSupport
+        if not na(sup)
+            f_updateLine(sup, pivotLowNow)
+            if sup.state != "active"
+                lowsChanged := true
+                f_endLine(sup)
+                sup := na
+        if lowsChanged
+            TL best = f_search(true)
+            if not na(best)
+                if na(sup) or ((best.b1 != sup.b1 or best.b2 != sup.b2) and math.min(best.touches, 3) > math.min(sup.touches, 3) and best.b2 > sup.b2)
+                    if not na(sup)
+                        sup.state := "retired"
+                        sup.ended := t
+                        f_endLine(sup)
+                    best.published := t
+                    sup := best
+                    f_drawLine(sup)
+    if showResistance
+        if not na(res)
+            f_updateLine(res, pivotHighNow)
+            if res.state != "active"
+                highsChanged := true
+                f_endLine(res)
+                res := na
+        if highsChanged
+            TL best = f_search(false)
+            if not na(best)
+                if na(res) or ((best.b1 != res.b1 or best.b2 != res.b2) and math.min(best.touches, 3) > math.min(res.touches, 3) and best.b2 > res.b2)
+                    if not na(res)
+                        res.state := "retired"
+                        res.ended := t
+                        f_endLine(res)
+                    best.published := t
+                    res := best
+                    f_drawLine(res)
+
+    // Channel: ends with its primary line; a confirmed close beyond the opposing boundary is a breach (drawn dotted), never a wider channel.
+    bool channelEnded = not na(chan) and (na(chan.primary) or chan.primary.state != "active")
+    if not na(chan)
+        if channelEnded
+            f_endChannel(chan)
+            chan := na
+        else if chan.state == "active"
+            if f_closeBeyond(chan.primary, t, chan.offset, true)
+                chan.breakCount += 1
+                if chan.breakCount >= breakCloses
+                    chan.state := "breached"
+                    line.set_style(chan.ln, line.style_dotted)
+                    line.set_color(chan.ln, color.new(chanColor, 40))
+            else
+                chan.breakCount := 0
+    if showChannels and na(chan)
+        TL primary = na
+        if not na(sup) and (na(res) or sup.b2 >= res.b2)
+            primary := sup
+        else if not na(res)
+            primary := res
+        if not na(primary)
+            bool oppositeChanged = primary.support ? highsChanged : lowsChanged
+            if primary.published == t or oppositeChanged or channelEnded
+                CH built = f_buildChannel(primary)
+                if not na(built)
+                    chan := built
+                    f_drawChannel(chan)
+
+// ---------------------------------------------------------------- forward projection (every update; visual only, no state)
+f_extend(TL ln) =>
+    if not na(ln) and not na(ln.ln)
+        int x2 = bar_index + EXT_BARS
+        line.set_xy2(ln.ln, x2, ln.priceAt(x2))
+        line.set_style(ln.ln, ln.touches >= 3 ? line.style_solid : line.style_dashed)
+        if not na(ln.cap)
+            label.set_xy(ln.cap, x2, ln.priceAt(x2))
+
+f_extend(sup)
+f_extend(res)
+if not na(chan) and not na(chan.primary)
+    int x2 = bar_index + EXT_BARS
+    TL p = chan.primary
+    line.set_xy2(chan.ln, x2, p.priceAt(x2) + chan.offset)
+    if not na(chan.mid)
+        line.set_xy2(chan.mid, x2, p.priceAt(x2) + chan.offset / 2)
+    if not na(chan.cap)
+        label.set_xy(chan.cap, x2, p.priceAt(x2) + chan.offset)

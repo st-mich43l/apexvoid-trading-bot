@@ -7,6 +7,8 @@ loaded by the Go analysis engine and cannot place orders through the bot.
 | Path | Purpose |
 | --- | --- |
 | `apexvoid_price_action.pine` | The indicator (Pine Script v6, v2.26). |
+| `apexvoid_price_geometry.pine` | Price Geometry v1.0: major trendlines and parallel price channels (Pine Script v6), a companion to Price Action. |
+| `tests/` | Offline reference model of the Price Geometry rules and its fixtures (`python -m unittest discover -s tradingview/tests`). |
 
 ## ApexVoid Price Action
 
@@ -246,3 +248,101 @@ All fire on bar close. Create them from the indicator's alert dialog.
 | 2.20 | Volume profile inside the main indicator (tick volume): POC, value area, naked POCs, polylines, `request.security_lower_tf` of the plain high / low / volume, period and intrabar timeframe follow the chart timeframe (`Auto`). Right-column captions get a category `volume` (listed together, appended next to other labels). New group `08 Volume Profile`, `max_polylines_count` 20. Display only; no measured edge. |
 | 2.19 | The Market Intelligence panel (the table) and the state that only fed it are removed. |
 | 2.18 | The trade plan (inputs, paper tracker, `Trades` row, four alerts) is removed. |
+
+## ApexVoid Price Geometry (v1.0)
+
+A companion to Price Action: it draws only **major trendlines** (ascending support, descending resistance) and **parallel price channels**, through
+actual confirmed swing reactions. It adds no structure, zones, liquidity, key levels, volume, oscillators, signals, entries, stops, targets or scores.
+Horizontal levels are Price Action's. A line or channel is a geometric reference, not guaranteed support or resistance; the number of touches is
+evidence of geometry, not a probability.
+
+**Status: written without a TradingView compiler.** The Pine source has not been compiled, run or replayed in TradingView in this repository; compile
+it there first. Its rules are mirrored by an offline reference model (`tests/price_geometry_ref.py`) with fixtures (`tests/test_price_geometry.py`);
+those fixtures check the mathematics of the rules, not the Pine source.
+
+### Install
+
+Pine Editor → paste `apexvoid_price_geometry.pine` → Save → Add to chart. It is independent of Price Action; both can be on the chart together
+(both draw on the price scale). Start with XAUUSD M5 or M15 and the defaults.
+
+### Swings
+
+- A **raw pivot** n bars back is a high strictly above each of the n bars before it and at least as high as each of the n bars after it (lows mirrored); it
+  is known only when the n right-hand bars have closed. n is the pivot length: `Auto` = 6 up to M15, 7 on M30, 8 on H1 and H4, 10 above (Price Action's
+  external swings use 12/16/20; these are major reactions for line anchors, finer than external structure, coarser than internal); `Manual` sets it.
+- **Significant swings** alternate high / low: a pivot on the same side as the last swing replaces it only when more extreme; a pivot on the other side is
+  kept only when price moved `Minimum swing displacement` × ATR(14) at the pivot bar from the last swing. At most `Maximum retained swings` are kept.
+- Raw pivots (the last 64 per side) are the reactions that can be independent touches; significant swings are the only line and channel anchors.
+
+### Trendline mathematics
+
+Anchors (B1, P1) and (B2, P2), both significant swings of the same side (lows for support, highs for resistance), wick prices:
+`m = (P2 − P1) / (B2 − B1)`, `L(t) = P1 + m·(t − B1)` (arithmetic; it reproduces both anchors exactly). ATR is only a tolerance and a significance
+unit, always the ATR **of the bar being judged**.
+
+A candidate (searched only when a swing of the side changes or the active line ends: the 3 most recent swings as B2, the 6 before each as B1, at most
+18 pairs) is published only if, scanning every closed bar from B1 + 1 to now:
+
+1. B2 − B1 ≥ `Minimum anchor separation`, B1 within `Maximum candidate lookback`;
+2. the slope points the right way (support rises, resistance falls) by at least 0.5 ATR between the anchors (else effectively horizontal);
+3. no `Break confirmation closes` consecutive closes beyond L(t) by more than `Break tolerance` × ATR(t) (a candidate already broken before
+   publication is rejected);
+4. no wick beyond L(t) by more than 0.5 ATR(t) (smaller wick penetrations are tolerated);
+5. between the anchors price moved at least `Minimum swing displacement` ATR away from the line (on the side it holds);
+6. the line is within 20 ATR of the last close.
+
+**Selection** among valid candidates, lexicographic (no weighted score): more independent touches (3 or more count alike); larger displacement between
+the anchors in whole ATRs (capped at 4); longer span B2 − B1; the line nearer the close; the later B2, then the later B1.
+
+**Independent touches.** The two anchors are touches 1 and 2. Another touch is a raw pivot of the side whose wick lies within `Touch tolerance` ×
+ATR of L(t), at least `Minimum anchor separation` bars after the previous touch (and before B2 by as much, for a touch between the anchors), after price
+moved at least `Minimum departure between touches` ATR away from the line since the previous touch. Bars resting on the line are one pivot, so one touch;
+an anchor is never counted twice. Touches before publication count toward the style; touches after publication are counted when their pivot is confirmed
+(optional markers, off by default, mark only those).
+
+### Lifecycle
+
+`Candidate → Active → Broken / Retired`. An active line keeps its anchors and slope and is extended `10` bars past the last bar; it is never refitted.
+
+- **Broken**: `Break confirmation closes` (1 by default, or 2 consecutive) closed bars beyond L(t) by more than `Break tolerance` × ATR(t). A wick alone
+  never breaks a line. A break is a geometric event, not a BOS, CHoCH or reversal.
+- **Retired**: untouched for `Retire a line untouched for` bars, farther than 20 ATR from the close, or replaced.
+- **Replacement**: an active line is replaced only by a candidate with more touches (counted up to 3) whose B2 is later; a new pivot alone never moves it.
+  After a break or retirement the best candidate of the side is published at once if one is valid.
+- Broken lines are deleted, or, with `Show broken geometry`, kept faded and dotted, ending at the break bar (at most `Maximum retained historical drawings`).
+
+### Channels
+
+On the active line with the later second anchor (support on a tie): the opposing significant swing after B1 (a swing high above a support, a swing low
+below a resistance) with the largest offset `d = Q − L(O)` (the later swing on a tie). The opposing boundary is `C(t) = L(t) + d`, the midpoint
+`M(t) = L(t) + d/2`: same slope, constant width, through the opposing reaction exactly. It is built once, from swings confirmed by then (when the line is
+published, when an opposing swing is confirmed, or when the previous channel ended), and only if `Minimum channel width` ≤ |d| / ATR ≤ 15 and no close
+went beyond C(t) by more than the break tolerance since B1 (within the lookback). It is never widened: a later confirmed close beyond the opposing boundary
+is a **breach** (the boundary turns dotted); the channel ends with its primary line. One channel at a time; the primary line is reused, never drawn twice.
+
+### Repainting and publication
+
+Swings, publication, touches, breaks, retirement, channels and breaches are processed on closed bars only and read no later bar. A line is drawn from its
+first anchor, but it exists only from its **publication bar** (the bar on which the second anchor's pivot was confirmed and the candidate passed): the
+anchor-to-anchor segment is the geometric construction, not a line that was known at the first anchor. The forming bar only moves the forward projection.
+With the same history and settings the result is the same after a refresh; a different amount of loaded history can change the first swings.
+
+### Performance
+
+No `request.*` calls; chart OHLC only. Ordinary bars do constant work (two pivot tests, two line updates). Candidate searches (at most 18 pairs, each a
+bounded scan with early exit) run only when a swing changes or a line ends. Objects: normally 2-3 lines, captions and markers bounded
+(`max_lines_count = 40`, `max_labels_count = 40`), `max_bars_back = 1000`. Not measured in TradingView, so no claim about `RE10110`.
+
+### Defaults (engineering starting points, not optimised)
+
+Auto pivots; swing displacement 1.5 ATR; 24 swings; anchor separation 10 bars; touch tolerance 0.20 ATR; departure 1.0 ATR; break tolerance 0.15 ATR,
+1 close; retire after 600 untouched bars; channel minimum width 2.0 ATR; lookback 250 bars; support, resistance and channels on; midpoint, fill, markers,
+captions and broken geometry off.
+
+### Limits
+
+- **Arithmetic geometry only.** On a logarithmic chart TradingView draws the line straight in log space between its two drawn points, so between them it
+  departs from L(t); the rules (touches, breaks) always use the arithmetic L(t).
+- Sideways markets usually get no line, by design. Converging patterns, wedges and triangles are out of scope.
+- Every threshold is a hypothesis chosen from geometry, not fitted to results; retune per instrument and timeframe.
+- Not compiled or replayed in TradingView here; the fixtures check the reference model only.
