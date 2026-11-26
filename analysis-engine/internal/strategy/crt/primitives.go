@@ -12,7 +12,6 @@ import (
 
 const (
 	m5Seconds = int64(300)
-	h1Seconds = int64(3600)
 	epsilon   = 1e-12
 )
 

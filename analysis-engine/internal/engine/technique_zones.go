@@ -192,8 +192,11 @@ func crtMinimumH1RangeATR(settings Settings, fallback float64) float64 {
 		if cfg.ID != "crt" {
 			continue
 		}
-		if value, ok := cfg.Parameters["minimum_h1_range_atr"].(float64); ok && value > 0 {
-			return value
+		// CRT v4 names it minimum_range_atr; minimum_h1_range_atr is its alias for one release.
+		for _, key := range []string{"minimum_range_atr", "minimum_h1_range_atr"} {
+			if value, ok := cfg.Parameters[key].(float64); ok && value > 0 {
+				return value
+			}
 		}
 	}
 	return fallback

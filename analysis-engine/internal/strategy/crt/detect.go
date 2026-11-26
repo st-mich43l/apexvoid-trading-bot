@@ -3,17 +3,26 @@ package crt
 import (
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/indicator"
 	"github.com/st-mich43l/apexvoid-trading-bot/analysis-engine/internal/market"
 )
 
 // Input is the closed-candle data one evaluation reads. Both slices are
-// oldest first. H1 and M5 are related only by candle time; a position in one
-// slice is never used to index the other.
+// oldest first. The anchor frame (H1 in v3; M15 or H1 in v4) and M5 are related only by candle
+// time; a position in one slice is never used to index the other. AnchorTF empty means H1.
 type Input struct {
-	H1 []market.Candle
-	M5 []market.Candle
+	H1       []market.Candle // the anchor frame's candles (named H1 for v3 callers)
+	AnchorTF market.Timeframe
+	M5       []market.Candle
+}
+
+func (in Input) anchorTF() market.Timeframe {
+	if in.AnchorTF == "" {
+		return market.H1
+	}
+	return in.AnchorTF
 }
 
 // Detect evaluates the CRT thesis as of the last M5 candle: the most recent
@@ -43,16 +52,19 @@ func detectAsOf(cfg Config, in Input, asOf int) Analysis {
 	evalClose := m5[asOf].Time + m5Seconds
 	out.EvaluatedAt = evalClose
 
-	// Only H1 candles that have fully closed by the evaluated M5 close exist.
+	// Only anchor candles that have fully closed by the evaluated M5 close exist.
+	anchorTF := in.anchorTF()
+	minutes, _ := anchorTF.Minutes()
+	anchorSec := int64(minutes) * 60
 	h1 := in.H1
-	h1 = h1[:sort.Search(len(h1), func(i int) bool { return h1[i].Time+h1Seconds > evalClose })]
+	h1 = h1[:sort.Search(len(h1), func(i int) bool { return h1[i].Time+anchorSec > evalClose })]
 	if !validSeries(h1) || !validSeries(m5) {
 		out.Rejections = append(out.Rejections, Rejection{Reason: ReasonInvalidCandles})
 		return out
 	}
 	h1ATR, m5ATR := newATRWindow(h1, cfg.ATRLength, cfg.ATRWindowBars), newATRWindow(m5, cfg.ATRLength, cfg.ATRWindowBars)
 	if !h1ATR.Enough() {
-		out.Rejections = append(out.Rejections, Rejection{Reason: ReasonInsufficientH1History})
+		out.Rejections = append(out.Rejections, Rejection{Timeframe: anchorTF, Reason: ReasonInsufficientH1History})
 		return out
 	}
 	if !m5ATR.Enough() {
@@ -61,7 +73,7 @@ func detectAsOf(cfg Config, in Input, asOf int) Analysis {
 	}
 
 	for _, dir := range []market.Direction{market.Buy, market.Sell} {
-		d := &detector{cfg: cfg, dir: dir, sign: 1, h1: h1, m5: m5, h1ATR: h1ATR, m5ATR: m5ATR, asOf: asOf, evalClose: evalClose, out: &out}
+		d := &detector{cfg: cfg, dir: dir, sign: 1, h1: h1, m5: m5, h1ATR: h1ATR, m5ATR: m5ATR, asOf: asOf, evalClose: evalClose, out: &out, tf: anchorTF, anchorSec: anchorSec}
 		if dir == market.Sell {
 			d.sign, d.h1, d.m5 = -1, mirror(h1), mirror(m5)
 		}
@@ -96,13 +108,15 @@ type detector struct {
 	asOf      int
 	evalClose int64
 	out       *Analysis
+	tf        market.Timeframe // the anchor frame (h1, h1ATR hold ITS candles and ATR)
+	anchorSec int64
 }
 
 func (d *detector) scan() {
-	horizon := int64(d.cfg.SweepWindowH1Periods)*h1Seconds +
+	horizon := int64(d.cfg.SweepWindowPeriods)*d.anchorSec +
 		int64(d.cfg.ReclaimMaxBars+d.cfg.MSSMaxBars+d.cfg.ConfirmationMaxAgeBars+1)*m5Seconds
 	for a := len(d.h1) - 1; a >= 0; a-- {
-		closeTime := d.h1[a].Time + h1Seconds
+		closeTime := d.h1[a].Time + d.anchorSec
 		if closeTime+horizon <= d.evalClose {
 			break // older anchors cannot yield a fresh confirmation any more
 		}
@@ -126,12 +140,12 @@ func (d *detector) anchorAt(a int) (Anchor, bool) {
 		return Anchor{}, false
 	}
 	c := d.h1[a]
-	anchor := Anchor{OpenTime: c.Time, CloseTime: c.Time + h1Seconds, High: c.High, Low: c.Low, ATR: atr}
+	anchor := Anchor{Timeframe: d.tf, OpenTime: c.Time, CloseTime: c.Time + d.anchorSec, High: c.High, Low: c.Low, ATR: atr}
 	width := anchor.Width()
 	if width > 0 {
 		anchor.RangeATR = width / atr
 	}
-	if width <= 0 || anchor.RangeATR < d.cfg.MinimumH1RangeATR {
+	if width <= 0 || anchor.RangeATR < d.cfg.MinimumRangeATR {
 		if s0 := d.firstRaid(anchor, firstAtOrAfter(d.m5, anchor.CloseTime)); s0 >= 0 {
 			d.reject(ReasonH1RangeBelowMinimum, anchor, s0)
 		}
@@ -159,7 +173,7 @@ func (d *detector) reclaimBuffer(i int) (float64, bool) {
 // firstRaid is the first M5 candle at or after from, inside the sweep window,
 // whose low is beyond the anchor's low by the sweep threshold; -1 if none.
 func (d *detector) firstRaid(anchor Anchor, from int) int {
-	windowEnd := anchor.CloseTime + int64(d.cfg.SweepWindowH1Periods)*h1Seconds
+	windowEnd := anchor.CloseTime + int64(d.cfg.SweepWindowPeriods)*d.anchorSec
 	for i := from; i <= d.asOf && d.m5[i].Time < windowEnd; i++ {
 		if thr, ok := d.sweepThreshold(i); ok && d.m5[i].Low < anchor.Low-thr {
 			return i
@@ -169,7 +183,7 @@ func (d *detector) firstRaid(anchor Anchor, from int) int {
 }
 
 func (d *detector) reject(reason string, anchor Anchor, sweepIndex int) {
-	r := Rejection{Reason: reason, Direction: d.dir, AnchorTime: anchor.OpenTime}
+	r := Rejection{Timeframe: d.tf, Reason: reason, Direction: d.dir, AnchorTime: anchor.OpenTime}
 	if sweepIndex >= 0 && sweepIndex < len(d.m5) {
 		r.SweepTime = d.m5[sweepIndex].Time
 	}
@@ -198,7 +212,7 @@ type episode struct {
 
 func (d *detector) scanAnchor(anchor Anchor) {
 	i0 := firstAtOrAfter(d.m5, anchor.CloseTime)
-	windowEnd := anchor.CloseTime + int64(d.cfg.SweepWindowH1Periods)*h1Seconds
+	windowEnd := anchor.CloseTime + int64(d.cfg.SweepWindowPeriods)*d.anchorSec
 	var best *Setup
 	for i := i0; i <= d.asOf && d.m5[i].Time < windowEnd; {
 		thr, ok := d.sweepThreshold(i)
@@ -421,45 +435,55 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 		}
 	}
 	pip := cfg.PipSize
-
-	depth := math.Max(pip, cfg.EntryDepthATR*atr)
-	tolerance := math.Max(pip, cfg.EntryToleranceATR*atr)
-	var lower, upper float64
-	switch cfg.EntryModel {
-	case EntryMSSRetest:
-		lower, upper = math.Max(ep.level-depth, anchor.Low), ep.level+tolerance
-	default: // EntryReclaimRetest: a band centred on the reclaimed edge
-		lower, upper = anchor.Low-tolerance, anchor.Low+tolerance
-	}
-	if upper-lower > cfg.EntryMaxWidthPrice {
-		lower = upper - cfg.EntryMaxWidthPrice
-	}
-	if !(upper > lower) {
-		return nil, ReasonDegenerateEntryBand
-	}
-	if last := d.m5[d.asOf].Close; last < lower || last >= anchor.High {
-		if last >= anchor.High {
-			return nil, ReasonTargetAlreadyReached
+	var lower, upper, stop, target, riskPips, rewardPips, rr float64
+	var targetKind string
+	leg := legGeometry{}
+	if cfg.v4() {
+		var reason string
+		if leg, reason = d.reclaimLeg(anchor, m, atr, extreme); reason != "" {
+			return nil, reason
 		}
-		return nil, ReasonPriceThroughEntry
-	}
+		lower, upper, stop, target, targetKind = leg.lower, leg.upper, leg.stop, leg.target, leg.targetKind
+		riskPips, rewardPips, rr = leg.riskPips, leg.rewardPips, leg.rr
+	} else {
+		depth := math.Max(pip, cfg.EntryDepthATR*atr)
+		tolerance := math.Max(pip, cfg.EntryToleranceATR*atr)
+		switch cfg.EntryModel {
+		case EntryMSSRetest:
+			lower, upper = math.Max(ep.level-depth, anchor.Low), ep.level+tolerance
+		default: // EntryReclaimRetest: a band centred on the reclaimed edge
+			lower, upper = anchor.Low-tolerance, anchor.Low+tolerance
+		}
+		if upper-lower > cfg.EntryMaxWidthPrice {
+			lower = upper - cfg.EntryMaxWidthPrice
+		}
+		if !(upper > lower) {
+			return nil, ReasonDegenerateEntryBand
+		}
+		if last := d.m5[d.asOf].Close; last < lower || last >= anchor.High {
+			if last >= anchor.High {
+				return nil, ReasonTargetAlreadyReached
+			}
+			return nil, ReasonPriceThroughEntry
+		}
 
-	stop := extreme - math.Max(pip, cfg.InvalidationBufferATR*atr)
-	if !(stop < extreme) || !(stop < lower) {
-		return nil, ReasonInvalidStopGeometry
-	}
-	target, targetKind := d.target(anchor, upper)
-	reward, risk := target-upper, upper-stop
-	if !(reward > 0) || reward < cfg.MinimumTargetRoomATR*atr {
-		return nil, ReasonInsufficientTargetRoom
-	}
-	riskPips, rewardPips := risk/pip, reward/pip
-	if cfg.ExecutionStopMaxPips > 0 && riskPips > cfg.ExecutionStopMaxPips {
-		return nil, ReasonRiskExceedsEnvelope
-	}
-	rr := reward / risk
-	if rr < cfg.MinimumRewardRisk {
-		return nil, ReasonRewardRiskBelowMinimum
+		stop = extreme - math.Max(pip, cfg.InvalidationBufferATR*atr)
+		if !(stop < extreme) || !(stop < lower) {
+			return nil, ReasonInvalidStopGeometry
+		}
+		target, targetKind = d.target(anchor, upper)
+		reward, risk := target-upper, upper-stop
+		if !(reward > 0) || reward < cfg.MinimumTargetRoomATR*atr {
+			return nil, ReasonInsufficientTargetRoom
+		}
+		riskPips, rewardPips = risk/pip, reward/pip
+		if cfg.ExecutionStopMaxPips > 0 && riskPips > cfg.ExecutionStopMaxPips {
+			return nil, ReasonRiskExceedsEnvelope
+		}
+		rr = reward / risk
+		if rr < cfg.MinimumRewardRisk {
+			return nil, ReasonRewardRiskBelowMinimum
+		}
 	}
 
 	wick := false
@@ -483,6 +507,8 @@ func (d *detector) finalize(anchor Anchor, i0 int, ep episode) (*Setup, string) 
 		Shift: ep.shift, ConfirmedAt: d.m5[m].Time, ConfirmationAge: d.barsBetween(m, d.asOf), DoubleRaidResolved: resolved,
 		EntryLow: lower, EntryHigh: upper, Stop: stop, Target: target, TargetKind: targetKind, M5ATR: atr,
 		RiskPips: riskPips, RewardPips: rewardPips, TechnicalRR: rr, WickRejection: wick,
+		Candle2Close: leg.candle2Close, Candle2ClosedInside: leg.candle2Inside, EffectiveRiskPips: leg.effectiveRiskPips,
+		StopBudgetCode: leg.budgetCode, NearestObstacle: leg.obstacle, HasObstacle: leg.hasObstacle,
 	}
 	if thr, ok := d.sweepThreshold(s0); ok {
 		setup.Sweep.Threshold = thr
@@ -528,6 +554,97 @@ func (d *detector) target(anchor Anchor, entryTop float64) (float64, string) {
 	return anchor.High, TargetOppositeRange
 }
 
+// legGeometry is the v4 (reclaim_leg) entry, stop and objective of one confirmed episode, in the bullish orientation.
+type legGeometry struct {
+	lower, upper, stop, target float64
+	targetKind                 string
+	riskPips, rewardPips, rr   float64
+	effectiveRiskPips          float64
+	budgetCode                 string
+	obstacle                   float64
+	hasObstacle                bool
+	candle2Close               int64
+	candle2Inside              bool
+}
+
+// reclaimLeg builds the v4 geometry (docs/strategies/crt.md, PR-CRT4). The entry zone is the reclaim leg: from the swept edge up to the close of the
+// structure-shift candle (the proximal edge). The stop is the manipulation extreme less the ATR buffer, as in v3, and never moves: a stop wider than the
+// instrument cap from the proximal edge cuts the band toward the stop (strategyutil.StopBudget.Fit, deep entry), and a cut band under the deep-entry minimum is
+// refused; then the band is cut to entry_max_width_price from its proximal edge. A zone thinner than the instrument's minimum entry zone is refused here, never stretched. The objective is
+// always the opposite edge of the anchor range, judged on the effective risk (the structural risk from the proximal edge, or the instrument floor when larger);
+// the nearest unswept swing on the way is published as evidence only. Candle 2 (the anchor frame's next candle) closing beyond the swept edge is a failed CRT.
+func (d *detector) reclaimLeg(anchor Anchor, m int, atr, extreme float64) (legGeometry, string) {
+	cfg := d.cfg
+	pip := cfg.PipSize
+	g := legGeometry{candle2Close: anchor.CloseTime + d.anchorSec}
+	// Candle 2: if it has closed by now, its close must be back inside the range (beyond the swept edge is a failed CRT; beyond the opposite edge the target
+	// was reached, which the M5 check above already refuses).
+	if g.candle2Close <= d.evalClose {
+		c2 := sort.Search(len(d.h1), func(i int) bool { return d.h1[i].Time >= anchor.CloseTime })
+		if c2 < len(d.h1) && d.h1[c2].Time == anchor.CloseTime {
+			if d.h1[c2].Close < anchor.Low {
+				return g, ReasonCandle2ClosedOutside
+			}
+			g.candle2Inside = d.h1[c2].Close <= anchor.High
+		}
+	}
+	lower, upper := anchor.Low, d.m5[m].Close
+	if !(upper > lower) {
+		return g, ReasonDegenerateEntryBand
+	}
+	if last := d.m5[d.asOf].Close; last < lower || last >= anchor.High {
+		if last >= anchor.High {
+			return g, ReasonTargetAlreadyReached
+		}
+		return g, ReasonPriceThroughEntry
+	}
+	stop := extreme - math.Max(pip, cfg.InvalidationBufferATR*atr)
+	if !(stop < extreme) || !(stop < lower) {
+		return g, ReasonInvalidStopGeometry
+	}
+	budget := cfg.StopBudget
+	budget.Refusals = nil
+	if budget.Active() {
+		var ok bool
+		if lower, upper, g.budgetCode, ok = budget.Fit(market.Buy, lower, upper, stop); !ok {
+			return g, ReasonRiskExceedsEnvelope
+		}
+	} else if cfg.ExecutionStopMaxPips > 0 && (upper-stop)/pip > cfg.ExecutionStopMaxPips {
+		return g, ReasonRiskExceedsEnvelope
+	}
+	// entry_max_width_price after the budget fit, from the (possibly deeper) proximal edge: cutting the width first would keep the top of the leg and the fit
+	// would then cut that same top away, leaving a sliver of the middle.
+	if upper-lower > cfg.EntryMaxWidthPrice {
+		lower = upper - cfg.EntryMaxWidthPrice
+	}
+	if min := cfg.EntryZoneMinimumWidthPips; min > 0 {
+		if width := (upper - lower) / cfg.budgetPip(); math.Round(width*1000)/1000 < min {
+			return g, ReasonEntryZoneBelowMinimumWidth
+		}
+	}
+	target := anchor.High
+	reward := target - upper
+	if !(reward > 0) || reward < cfg.MinimumTargetRoomATR*atr {
+		return g, ReasonInsufficientTargetRoom
+	}
+	risk := upper - stop
+	effective := budget.EffectiveRisk(upper, stop)
+	if !(effective > 0) {
+		effective = risk
+	}
+	rr := reward / effective
+	if rr < cfg.MinimumRewardRisk {
+		return g, ReasonRewardRiskBelowMinimum
+	}
+	if obstacle, kind := d.target(anchor, upper); kind == TargetNearestSwingHigh {
+		g.obstacle, g.hasObstacle = obstacle, true
+	}
+	g.lower, g.upper, g.stop, g.target = lower, upper, stop, target
+	g.targetKind = "opposite_" + strings.ToLower(string(anchor.Timeframe)) + "_range"
+	g.riskPips, g.rewardPips, g.rr, g.effectiveRiskPips = risk/pip, reward/pip, rr, effective/pip
+	return g, ""
+}
+
 // toOriginal reflects a setup built in the bullish orientation back to the
 // direction that was asked for. Magnitudes (depths, ATR multiples, pips) are
 // reflection-invariant; absolute prices are not.
@@ -545,6 +662,9 @@ func (d *detector) toOriginal(s Setup) Setup {
 	}
 	s.EntryLow, s.EntryHigh = -s.EntryHigh, -s.EntryLow
 	s.Stop, s.Target = -s.Stop, -s.Target
+	if s.HasObstacle {
+		s.NearestObstacle = -s.NearestObstacle
+	}
 	return s
 }
 
@@ -568,9 +688,9 @@ func resolveOpposing(a *Analysis) {
 		}
 		switch {
 		case tied:
-			a.Rejections = append(a.Rejections, Rejection{Reason: ReasonBothExtremesRaided, Direction: s.Direction, AnchorTime: s.Anchor.OpenTime, SweepTime: s.Sweep.BarTime})
+			a.Rejections = append(a.Rejections, Rejection{Timeframe: s.Anchor.Timeframe, Reason: ReasonBothExtremesRaided, Direction: s.Direction, AnchorTime: s.Anchor.OpenTime, SweepTime: s.Sweep.BarTime})
 		case superseded:
-			a.Rejections = append(a.Rejections, Rejection{Reason: ReasonSupersededByOpposite, Direction: s.Direction, AnchorTime: s.Anchor.OpenTime, SweepTime: s.Sweep.BarTime})
+			a.Rejections = append(a.Rejections, Rejection{Timeframe: s.Anchor.Timeframe, Reason: ReasonSupersededByOpposite, Direction: s.Direction, AnchorTime: s.Anchor.OpenTime, SweepTime: s.Sweep.BarTime})
 		default:
 			keep = append(keep, s)
 		}

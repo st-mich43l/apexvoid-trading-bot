@@ -1,4 +1,4 @@
-# CRT Strategy V3
+# CRT Strategy (v4; the v3 specification below still holds for everything v4 does not change)
 
 
 `crt` is Candle Range Theory as an independent Go strategy. A **fully closed H1
@@ -15,6 +15,59 @@ changed and why, and the evidence. The numeric thresholds are **tunable
 parameters with explicit defaults in `config/analysis.yml`**, checked against the
 committed captures; they are not claimed to be universal constants or to be
 profitable.
+
+## v4 (PR-CRT4, owner 26 Nov 2026): a reachable entry zone, the CRT objective, candle 2's close, M15 + H1 anchors
+
+**Why.** 22 Oct - 25 Nov: 23 CRT setups published, all FX, 0 plans, 0 on XAU. Traced in code:
+
+1. **XAU could never publish.** `reclaim_retest` built the band as the swept edge +/- `entry_tolerance_atr` (0.1 M5 ATR): 0.2 M5 ATR wide, 4-8 XAU pips, always under the
+   30-pip XAU minimum entry zone (`engine/entry_zone_width.go`).
+2. **The entry rested at the far end of the displacement** (the exact swept edge, after an M5 structure shift with real displacement).
+3. **The target was the nearest M5 swing inside the range**, not the CRT objective, and room / RR were judged against it.
+4. **Candle 2's close was never checked.**
+5. **H1 anchors only** (owner rule 23 Nov: setups on M5, M15 and H1; M1 is execution only).
+
+**What v4 changes** (`Version = "v4"`; `entry_model: reclaim_leg` carries the v4 contract):
+
+| | v3 | v4 (`reclaim_leg`) |
+|---|---|---|
+| anchor (candle 1) | closed H1 candle | closed M15 or H1 candle (`structure_timeframes: [M15, H1]`); candle 2 is the next candle of the same frame (`sweep_window_periods: 1`); `minimum_range_atr` in that frame's ATR |
+| entry zone | swept edge +/- 0.1 M5 ATR | the reclaim leg: swept edge (distal) to the structure-shift close (proximal); fitted with the instrument stop budget (`strategyutil.StopBudget.Fit`: a stop wider than the cap cuts the band toward the stop, the stop never moves, a cut band under `deep_entry_minimum_width_pips` is refused), then cut to `entry_max_width_price` from its proximal edge; under the instrument's minimum entry zone it is refused by CRT itself (`entry_zone_below_minimum_width`), never stretched |
+| objective | nearest unswept M5 swing inside the range, else the opposite edge | always the opposite edge of the anchor range; room and RR judged on the effective risk (the structural risk from the proximal edge, or `execution_stop_min_pips` when larger: the FVG/OB v12 rule); the 50% (`crt_range_midpoint`) and the nearest unswept swing (`crt_nearest_obstacle`) are published as evidence and quality only |
+| candle 2 | not checked | closed beyond the swept edge before publication: refused (`candle2_closed_outside`); after publication the anchor range is the published `Structure` on the anchor frame with `structure_close_buffer_atr: 0.0`, so the engine's structure-close rule withdraws the opportunity on a close of that frame beyond the swept edge (`STRUCTURE_CLOSED_THROUGH`) |
+| expiry | 4 h | at most `expiry_hours` (4 h) after the confirmation and never later than `expiry_after_candle2_periods` periods of the anchor frame after candle 2 closes (M15: 45 min, H1: 3 h); a window already past at publication is refused (`expired_before_publication`) |
+| one thesis | per anchor | across frames, the same direction confirmed by the same M5 structure shift is one thesis: the higher timeframe is kept (`strategyutil.PreferHigherTimeframe`), the other is counted `duplicate_thesis` |
+
+Unchanged: the causal reading, the sweep threshold and the reclaim window, the double-raid rule, the structure-shift definition and thresholds, the stop (manipulation
+extreme less `invalidation_buffer_atr` x M5 ATR), `confirmation_max_age_bars`, the confluence floor. Evidence added under `reclaim_leg`: `crt_anchor_tf_m15|h1`,
+`crt_entry_reclaim_leg`, `crt_candle2_closed_inside`, `crt_range_midpoint`, `crt_nearest_obstacle`, the stop-budget code. An M15 anchor publishes `m15_impulse_range`
+(an H1 anchor keeps `h1_impulse_range` and its v3 structural id). Not enforced: a close beyond the opposite edge after publication (the target was reached) is not a
+withdrawal; there is no engine mechanism for it and the brief adds none.
+
+**Rollback.** `entry_model: reclaim_retest` + `structure_timeframes: [H1]` is v3: replayed byte-identical to master on all ten bar sets below (ids and fingerprint aside).
+
+**Replay (informational).** CRT alone, v3 (master) vs v4, the four KL14 XAU sets and production dumps of 25 Nov (M5 from 17 Nov) for every FX pair:
+
+| symbol | set | v3 setups | v4 setups |
+|---|---|---|---|
+| XAU | 14-21 Sep | 0 | 5 (3 H1, 2 M15) |
+| XAU | 13 Nov | 0 | 0 |
+| XAU | 17 Nov | 0 | 2 |
+| XAU | 16-25 Nov dump | 0 | 2 |
+| EURUSD | 17-25 Nov dump | 9 | 0 |
+| EURUSD | 19 Nov capture | 3 | 0 |
+| GBPUSD | 17-25 Nov dump | 8 | 1 |
+| USDJPY | 17-25 Nov dump | 13 | 0 |
+| GBPJPY | 17-25 Nov dump | 4 | 3 |
+
+- **XAU publishes** for the first time: 9 setups, zones 31.7-50.0 pips, every stop 70.0 pips (the leg is fitted to the cap). Labelled (n small): 5 of 9 filled within
+  expiry; live geometry -0.63 R per filled setup (5), labeller default -0.39 R (5).
+- **FX almost stops.** With H1 anchors only, v4 turns v3's FX setups (9 / 13 / 8 / 4) mostly into `reward_risk_below_minimum` (8 / 10 / 7 / 3) and a few
+  `candle2_closed_outside`: the leg's proximal edge is the structure-shift close, near the middle of a small FX range, and the RR is judged on the FX stop floor
+  (12-22 pips) instead of the 4-9 pip structural stop. The 4 FX v4 setups: 4 filled, labeller default +0.47 R (4).
+- **The FX premise of the brief does not hold in production.** Of the 26 FX CRT opportunities published since 17 Nov (the dump window), the v3 entry band was traded
+  into before expiry or invalidation in **19**, often within 15-30 minutes; all 26 were `match_written` by the Algo Bot adapter, and the Algo Bot logged no execution
+  check, build or refusal for any of them. The FX blocker is in the Algo Bot's handling of CRT matches, which v4 (Analysis Engine only) does not touch.
 
 ## Conventions and what is, and is not, established
 
