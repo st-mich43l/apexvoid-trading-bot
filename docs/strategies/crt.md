@@ -66,8 +66,7 @@ withdrawal; there is no engine mechanism for it and the brief adds none.
   `candle2_closed_outside`: the leg's proximal edge is the structure-shift close, near the middle of a small FX range, and the RR is judged on the FX stop floor
   (12-22 pips) instead of the 4-9 pip structural stop. The 4 FX v4 setups: 4 filled, labeller default +0.47 R (4).
 - **The FX premise of the brief does not hold in production.** Of the 26 FX CRT opportunities published since 17 Nov (the dump window), the v3 entry band was traded
-  into before expiry or invalidation in **19**, often within 15-30 minutes; all 26 were `match_written` by the Algo Bot adapter, and the Algo Bot logged no execution
-  check, build or refusal for any of them. The FX blocker is in the Algo Bot's handling of CRT matches, which v4 (Analysis Engine only) does not touch.
+  into before expiry or invalidation in **19**, often within 15-30 minutes. All 26 were `match_written` by the Algo Bot adapter, but none became a plan. Per the Algo Bot logs: **2** reached the entry trigger and were refused at plan build by owner rules (`opposing_entry_contained`, an M15 demand zone under a SELL; `fx_opposite_position_not_allowed`); **10** were only ever `suppressed` by the per-symbol opportunity arbitration (another setup won the symbol); **10** were arbitration winners at times but left no execution-check line; **6** have no arbitration record. The FX blocker is downstream, in the Algo Bot (arbitration and admission), which v4 (Analysis Engine only) does not touch.
 
 ## Conventions and what is, and is not, established
 
