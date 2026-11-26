@@ -579,20 +579,26 @@ analysis:
       # the opposite H1 edge. Everything is read from closed candles and related
       # across timeframes by TIME. These are tunable parameters whose defaults were
       # checked against the committed captures, not universal constants.
-      version: v3
+      # v4 (docs/strategies/crt.md, PR-CRT4, owner 26 Nov 2026): CRT never executed (23 FX setups 22 Oct - 25 Nov, 0 plans, 0 on XAU). The anchor (candle 1) is a
+      # closed M15 or H1 candle and candle 2 the next one of the same frame; the entry zone is the reclaim leg (swept edge to the structure-shift close), fitted with
+      # the instrument stop budget and never stretched; the objective is the opposite edge on the effective risk; the anchor range is the published structure, so a
+      # close of the anchor frame beyond the swept edge withdraws it (candle 2's close rule). Rollback: entry_model reclaim_retest + structure_timeframes [H1] = v3.
+      version: v4
       enabled: true
+      structure_timeframes: [M15, H1]
       # Anchor. Baseline kept from v2. ATR is Wilder ATR(atr_length) computed over a
       # fixed trailing window so the result cannot depend on how much history loaded.
       # RUN-1: H1 anchor range minimum 1.0 ATR (was 1.5; 306 of 3 symbols' weekly anchors were refused h1_range_below_minimum).
-      minimum_h1_range_atr: 1.0
+      # v4: in ATRs of the anchor's own frame (minimum_h1_range_atr is still read as an alias for one release).
+      minimum_range_atr: 1.0
       # RUN-1 (docs/strategies/crt.md): the star floor CRT is held to. 2 is the shared detector floor; a CRT earns at most the HTF, wick and structure-shift stars, and with the
       # 1.5 ATR H1 range minimum only 1 CRT was published since 5 Nov (261 in the week of 28 Sep). Replay on 3 symbols: 0 -> 7 candidates a week with a 1.0 ATR range and floor 1.
       confluence_floor: 1
       atr_length: 14
       atr_window_bars: 140
-      # The sweep must start inside this many H1 periods after the anchor closes (1 =
-      # the next H1 candle, the CRT "manipulation" candle). A wider window is explicit.
-      sweep_window_h1_periods: 1
+      # The sweep must start inside this many periods of the anchor frame after the anchor closes (1 = candle 2, the CRT "manipulation" candle). A wider
+      # window is explicit. (sweep_window_h1_periods is still read as an alias for one release.)
+      sweep_window_periods: 1
       # Sweep threshold = max(pips x instrument pip size, ATR(M5) multiple); reclaim
       # buffer likewise. Prices are never compared in another instrument's pips.
       minimum_sweep_pips: 2.0
@@ -623,7 +629,9 @@ analysis:
       # and mss_retest risk was 134-210 pips on every confirmed XAU episode against a
       # 70 pip cap (docs/strategies/crt.md). The structure shift is the confirmation,
       # not the entry location. entry_depth_atr only shapes mss_retest.
-      entry_model: reclaim_retest
+      # v4: reclaim_leg (the default), the reclaim leg itself from the swept edge to the structure-shift close. reclaim_retest's band was 0.2 M5 ATR wide (4-8
+      # XAU pips, always under the 30-pip XAU minimum) and rested at the far end of the displacement (23 of 23 FX setups expired or were invalidated unfilled).
+      entry_model: reclaim_leg
       entry_depth_atr: 0.5
       entry_tolerance_atr: 0.1
       # Stop = manipulation extreme - this ATR buffer (never tightened into the wick).
@@ -634,6 +642,11 @@ analysis:
       minimum_target_room_atr: 0.55
       minimum_reward_risk: 1.15
       expiry_hours: 4.0
+      # v4 (reclaim_leg): candle 2's close rule, any close of the anchor frame beyond the swept edge withdraws the opportunity (STRUCTURE_CLOSED_THROUGH).
+      structure_close_buffer_atr: 0.0
+      # v4 (reclaim_leg): the expiry is at most expiry_hours after the confirmation and never later than this many periods of the anchor frame after candle 2
+      # closes (M15: 45 minutes, H1: 3 hours).
+      expiry_after_candle2_periods: {M15: 3, H1: 3}
     flip_zone:
       # v6 (docs/strategies/flip_zone.md, Q3): owner rule 23 Nov 2026, setups are found on M5, M15 and H1 and M1 is execution only. The flip level, the break and its
       # acceptance (breakout_accept_bars) and the zone are read on each frame of structure_timeframes; the retest rejection, the stop and the entry are read on M5.

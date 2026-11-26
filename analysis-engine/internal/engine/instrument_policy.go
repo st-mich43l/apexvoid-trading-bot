@@ -118,6 +118,17 @@ func applyCRTGeometry(settings *Settings) {
 		if settings.InstrumentStopMinPips > 0 {
 			params["execution_stop_min_pips"] = settings.InstrumentStopMinPips
 		}
+		// PR-CRT4 (v4 reclaim_leg): the leg is fitted with the instrument stop budget (strategyutil.StopBudget.Fit needs the pip size it measures in and the
+		// deep-entry minimum width) and refused below the instrument's minimum entry zone by CRT itself, before the engine's own check would.
+		if settings.Geometry.PipSize > 0 && (settings.InstrumentStopMaxPips > 0 || settings.InstrumentStopMinPips > 0) {
+			params["execution_pip_size"] = settings.Geometry.PipSize
+		}
+		if settings.InstrumentDeepEntryMinimumWidthPips > 0 {
+			params["deep_entry_minimum_width_pips"] = settings.InstrumentDeepEntryMinimumWidthPips
+		}
+		if settings.InstrumentEntryZoneMinimumWidthPips > 0 {
+			params["entry_zone_minimum_width_pips"] = settings.InstrumentEntryZoneMinimumWidthPips
+		}
 		params["reaction_lookback_bars"] = 3.0
 		params["engulfing_minimum_range_atr"] = 0.5
 		settings.Strategies[i].Parameters = params
